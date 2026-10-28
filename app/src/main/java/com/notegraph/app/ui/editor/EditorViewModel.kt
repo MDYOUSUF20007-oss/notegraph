@@ -58,7 +58,7 @@ class EditorViewModel @Inject constructor(
     }
 
     private suspend fun parseAndSaveWikiLinks(noteId: String, content: String) {
-        val regex = "\[\[(.*?)]]".toRegex()
+        val regex = """\[\[(.*?)]]""".toRegex()
         val matches = regex.findAll(content)
         val links = matches.map { match ->
             val targetTitle = match.groupValues[1]
