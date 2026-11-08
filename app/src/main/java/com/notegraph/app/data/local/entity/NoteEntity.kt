@@ -16,5 +16,6 @@ data class NoteEntity(
     val trashTimestamp: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val templateType: String = "BLANK"
+    val templateType: String = "BLANK",
+    val blocksJson: String = "[]"
 )
