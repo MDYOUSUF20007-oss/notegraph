@@ -24,7 +24,8 @@ fun HomeScreen(
     onNavigateSearch: () -> Unit,
     onNavigateGraph: () -> Unit,
     onNavigateTags: () -> Unit,
-    onNavigateSettings: () -> Unit
+    onNavigateSettings: () -> Unit,
+    onNavigateReader: () -> Unit = {}
 ) {
     val notes by viewModel.notes.collectAsState()
     var showMenuForNote by remember { mutableStateOf<NoteEntity?>(null) }
@@ -34,6 +35,7 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("NoteGraph") },
                 actions = {
+                    IconButton(onClick = onNavigateReader) { Icon(Icons.Default.MenuBook, "Book Reading Mode") }
                     IconButton(onClick = onNavigateSearch) { Icon(Icons.Default.Search, "Search") }
                     IconButton(onClick = onNavigateGraph) { Icon(Icons.Default.Share, "Graph") }
                     IconButton(onClick = onNavigateTags) { Icon(Icons.Default.List, "Tags") }

@@ -3,17 +3,26 @@ package com.notegraph.app.ui.settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.theme.AppThemeMode
+import com.notegraph.app.ui.theme.NoteGraphColors
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -32,7 +41,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var isAmoled by remember { mutableStateOf(ThemeManager.isAmoledMode) }
+    var selectedTheme by remember { mutableStateOf(ThemeManager.currentTheme) }
     var isBackingUp by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
 
@@ -124,51 +133,79 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            // Appearance Section
+            Spacer(Modifier.height(12.dp))
+
+            // ─── Theme Section (3 Luxury Themes) ───
             Text(
-                text = "Display & Appearance",
+                text = "Color Theme System",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Choose your reading and editing aesthetic:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Spacer(Modifier.height(12.dp))
+
+            // 1. Deep Purple AMOLED
+            ThemeOptionCard(
+                title = "Deep Purple AMOLED",
+                description = "True OLED Black (0xFF000000), Electric Violet accent (0xFF8B5CF6) & purple-tinted borders.",
+                previewBg = NoteGraphColors.DeepPurpleAmoledBackground,
+                previewAccent = NoteGraphColors.DeepPurpleAmoledAccent,
+                previewBorder = NoteGraphColors.DeepPurpleAmoledCardBorder,
+                previewText = NoteGraphColors.DeepPurpleAmoledText,
+                isSelected = selectedTheme == AppThemeMode.DEEP_PURPLE_AMOLED,
+                onClick = {
+                    selectedTheme = AppThemeMode.DEEP_PURPLE_AMOLED
+                    ThemeManager.currentTheme = AppThemeMode.DEEP_PURPLE_AMOLED
+                }
+            )
+
             Spacer(Modifier.height(8.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("AMOLED Pure Black", style = MaterialTheme.typography.titleSmall)
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            "#000000 background for battery savings and high contrast",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                    Switch(
-                        checked = isAmoled,
-                        onCheckedChange = {
-                            isAmoled = it
-                            ThemeManager.isAmoledMode = it
-                        }
-                    )
+            // 2. Kindle Parchment
+            ThemeOptionCard(
+                title = "Kindle Parchment",
+                description = "Warm paper background (0xFFF4F1EA), Charcoal text (0xFF2C2C2C), Sepia divider (0xFFDCD6CD) & leather accent.",
+                previewBg = NoteGraphColors.KindleParchmentBackground,
+                previewAccent = NoteGraphColors.KindleParchmentAccent,
+                previewBorder = NoteGraphColors.KindleParchmentSepiaDivider,
+                previewText = NoteGraphColors.KindleParchmentCharcoalText,
+                isSelected = selectedTheme == AppThemeMode.KINDLE_PARCHMENT,
+                onClick = {
+                    selectedTheme = AppThemeMode.KINDLE_PARCHMENT
+                    ThemeManager.currentTheme = AppThemeMode.KINDLE_PARCHMENT
                 }
-            }
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            // 3. Matte Studio
+            ThemeOptionCard(
+                title = "Matte Studio",
+                description = "Subtle Slate (0xFF1E2229), Card Surface (0xFF262B35) & Nord Grid Border (0xFF3B4252).",
+                previewBg = NoteGraphColors.MatteStudioBackground,
+                previewAccent = NoteGraphColors.MatteStudioAccent,
+                previewBorder = NoteGraphColors.MatteStudioGridBorder,
+                previewText = NoteGraphColors.MatteStudioText,
+                isSelected = selectedTheme == AppThemeMode.MATTE_STUDIO,
+                onClick = {
+                    selectedTheme = AppThemeMode.MATTE_STUDIO
+                    ThemeManager.currentTheme = AppThemeMode.MATTE_STUDIO
+                }
+            )
 
             Spacer(Modifier.height(24.dp))
             HorizontalDivider()
             Spacer(Modifier.height(16.dp))
 
-            // Vault Backup & Restore Section
+            // ─── Vault Backup & Restore Section ───
             Text(
                 text = "Backup & Restore Vault",
                 style = MaterialTheme.typography.titleMedium,
@@ -182,7 +219,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "Export all notes, block structures, drawings, and OCR content into an open, portable .zip archive.",
+                        "Export all notes, block structures, ink strokes, and OCR content into an open, portable .zip archive.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -212,21 +249,94 @@ fun SettingsScreen(
             HorizontalDivider()
             Spacer(Modifier.height(16.dp))
 
-            // About
+            // ─── About Section ───
             Text(
                 text = "About",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.height(6.dp))
-            Text("NoteGraph Phase 3 (Final Phase)", style = MaterialTheme.typography.bodyMedium)
-            Text("Version 1.2 • Build 3", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Offline-first, bidirectional wiki-linking, multimedia blocks, on-device ML Kit OCR, force-directed graph, and OpenXML export.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
-            )
+            Text("NoteGraph Luxury Edition", style = MaterialTheme.typography.bodyMedium)
+            Text("Version 1.3 • Rainbow Icon & Vanishing Pen • 3D Book Page-Curl Mode", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun ThemeOptionCard(
+    title: String,
+    description: String,
+    previewBg: Color,
+    previewAccent: Color,
+    previewBorder: Color,
+    previewText: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .then(
+                if (isSelected) Modifier.border(2.dp, previewAccent, RoundedCornerShape(12.dp))
+                else Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            ),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Palette swatch preview circle
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .border(2.dp, previewBorder, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    color = previewBg,
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Surface(
+                            color = previewAccent,
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.size(16.dp)
+                        ) {}
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+
+            if (isSelected) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = previewAccent,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }

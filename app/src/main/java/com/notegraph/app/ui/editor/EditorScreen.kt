@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,7 +28,8 @@ import kotlinx.serialization.json.Json
 @Composable
 fun EditorScreen(
     viewModel: EditorViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateReader: (String?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val note by viewModel.note.collectAsState()
@@ -274,6 +276,13 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    // Book Reading Mode
+                    IconButton(onClick = {
+                        viewModel.saveNow()
+                        onNavigateReader(note?.id)
+                    }) {
+                        Icon(Icons.Default.MenuBook, contentDescription = "Read in Book Mode")
+                    }
                     // Visible Save Button
                     IconButton(onClick = { viewModel.saveNow(showEvent = true) }) {
                         Icon(Icons.Default.Check, contentDescription = "Save Note")

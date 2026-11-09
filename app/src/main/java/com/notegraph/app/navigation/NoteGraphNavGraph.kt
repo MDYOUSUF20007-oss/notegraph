@@ -12,6 +12,8 @@ import com.notegraph.app.ui.editor.EditorViewModel
 import com.notegraph.app.ui.graph.GraphScreen
 import com.notegraph.app.ui.home.HomeScreen
 import com.notegraph.app.ui.home.HomeViewModel
+import com.notegraph.app.ui.reader.ReaderScreen
+import com.notegraph.app.ui.reader.ReaderViewModel
 import com.notegraph.app.ui.search.SearchScreen
 import com.notegraph.app.ui.settings.SettingsScreen
 import com.notegraph.app.ui.tags.TagsScreen
@@ -29,7 +31,8 @@ fun NoteGraphNavGraph() {
                 onNavigateSearch = { navController.navigate("search") },
                 onNavigateGraph = { navController.navigate("graph") },
                 onNavigateTags = { navController.navigate("tags") },
-                onNavigateSettings = { navController.navigate("settings") }
+                onNavigateSettings = { navController.navigate("settings") },
+                onNavigateReader = { navController.navigate("reader") }
             )
         }
         composable(
@@ -39,7 +42,11 @@ fun NoteGraphNavGraph() {
             val viewModel: EditorViewModel = hiltViewModel()
             EditorScreen(
                 viewModel = viewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onNavigateReader = { id ->
+                    if (id != null) navController.navigate("reader?noteId=$id")
+                    else navController.navigate("reader")
+                }
             )
         }
         composable("graph") {
@@ -62,6 +69,30 @@ fun NoteGraphNavGraph() {
         }
         composable("settings") {
             SettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(
+            route = "reader?noteId={noteId}",
+            arguments = listOf(navArgument("noteId") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { backStackEntry ->
+            val noteId = backStackEntry.arguments?.getString("noteId")
+            val viewModel: ReaderViewModel = hiltViewModel()
+            ReaderScreen(
+                onBack = { navController.popBackStack() },
+                initialNoteId = noteId,
+                viewModel = viewModel
+            )
+        }
+        composable("reader") {
+            val viewModel: ReaderViewModel = hiltViewModel()
+            ReaderScreen(
+                onBack = { navController.popBackStack() },
+                initialNoteId = null,
+                viewModel = viewModel
+            )
         }
     }
 }
