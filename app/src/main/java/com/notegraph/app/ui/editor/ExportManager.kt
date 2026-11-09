@@ -137,10 +137,25 @@ object ExportManager {
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    if (strokes.isNotEmpty()) {
-                        ensureSpace(220f)
+                    val allPoints = strokes.flatMap { it.points }
+                    if (allPoints.isNotEmpty()) {
+                        val minX = allPoints.minOf { it.x }
+                        val maxX = allPoints.maxOf { it.x }
+                        val minY = allPoints.minOf { it.y }
+                        val maxY = allPoints.maxOf { it.y }
+
+                        val rawW = (maxX - minX).coerceAtLeast(10f)
+                        val rawH = (maxY - minY).coerceAtLeast(10f)
+
+                        // Fit bounded drawing within PDF usable width
+                        val scale = (usableWidth / rawW).coerceAtMost(0.55f)
+                        val scaledW = rawW * scale
+                        val scaledH = rawH * scale
+                        val xOffset = margin + (usableWidth - scaledW) / 2f
+
+                        ensureSpace(scaledH + 30f)
                         canvas.drawText("[Drawing / Ink]", margin, yPos, labelPaint)
-                        yPos += 14f
+                        yPos += 16f
 
                         val inkPaint = Paint().apply {
                             style = Paint.Style.STROKE
@@ -148,8 +163,7 @@ object ExportManager {
                             strokeJoin = Paint.Join.ROUND
                             isAntiAlias = true
                         }
-                        // Scale strokes from screen coordinates (~1080px) to usable PDF width
-                        val scale = (usableWidth / 1000f).coerceIn(0.2f, 1f)
+
                         for (stroke in strokes) {
                             if (stroke.points.size < 2) continue
                             inkPaint.strokeWidth = (stroke.strokeWidth * scale).coerceAtLeast(1f)
@@ -161,18 +175,18 @@ object ExportManager {
                             }
                             val path = android.graphics.Path()
                             path.moveTo(
-                                margin + stroke.points[0].x * scale,
-                                yPos + stroke.points[0].y * scale
+                                xOffset + (stroke.points[0].x - minX) * scale,
+                                yPos + (stroke.points[0].y - minY) * scale
                             )
                             for (i in 1 until stroke.points.size) {
                                 path.lineTo(
-                                    margin + stroke.points[i].x * scale,
-                                    yPos + stroke.points[i].y * scale
+                                    xOffset + (stroke.points[i].x - minX) * scale,
+                                    yPos + (stroke.points[i].y - minY) * scale
                                 )
                             }
                             canvas.drawPath(path, inkPaint)
                         }
-                        yPos += (block.heightDp * scale) + 16f
+                        yPos += scaledH + 16f
                     }
                 }
                 is NoteBlock.AudioBlock -> {
@@ -287,36 +301,61 @@ object ExportManager {
         zos.close()
     }
 
-    // ─── 3. PPTX Export (Valid OpenXML via ZipOutputStream) ───────
+    // ─── 3. PPTX Export (Valid OpenXML Presentation) ─────────────
 
     fun exportPptx(note: NoteEntity, outputStream: OutputStream) {
         val blocks = parseBlocks(note)
         val zos = ZipOutputStream(outputStream)
 
-        data class SlideData(val title: String, val body: String)
+        data class SlideData(val title: String, val bodyLines: List<String>)
         val slides = mutableListOf<SlideData>()
-        slides.add(SlideData(note.title.ifEmpty { "Note" }, note.content.take(800)))
 
-        for (block in blocks) {
+        // Slide 1: Title & Overview
+        val firstBody = if (note.content.isNotBlank()) {
+            note.content.lines().take(12)
+        } else {
+            val firstTextBlock = blocks.filterIsInstance<NoteBlock.TextBlock>().firstOrNull()?.text
+            if (!firstTextBlock.isNullOrBlank()) {
+                firstTextBlock.lines().take(12)
+            } else {
+                listOf("NoteGraph Knowledge Vault", "Created: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(note.updatedAt))}")
+            }
+        }
+        slides.add(SlideData(note.title.ifBlank { "Untitled Note" }, firstBody))
+
+        // Create a slide for each multimedia block
+        for ((idx, block) in blocks.withIndex()) {
             when (block) {
                 is NoteBlock.TextBlock -> {
                     if (block.text.isNotBlank()) {
-                        slides.add(SlideData("Text Block", block.text))
+                        slides.add(SlideData("Section ${idx + 1}: Notes", block.text.lines()))
                     }
                 }
                 is NoteBlock.InkBlock -> {
-                    slides.add(SlideData("Ink Canvas", "Drawing / Handwritten ink note"))
+                    val strokes = try {
+                        json.decodeFromString<List<InkStroke>>(block.strokesJson)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    slides.add(SlideData(
+                        "Drawing / Ink Canvas",
+                        listOf("Handwritten Ink Drawing", "Captured Strokes: ${strokes.size}", "Height: ${block.heightDp} dp")
+                    ))
                 }
                 is NoteBlock.AudioBlock -> {
-                    slides.add(SlideData("Voice Recording", "Audio duration: ${block.durationMs / 1000}s"))
+                    slides.add(SlideData(
+                        "Voice Recording",
+                        listOf("Audio Recording Attached", "Duration: ${block.durationMs / 1000} seconds", "Format: MPEG-4 (.m4a)")
+                    ))
                 }
                 is NoteBlock.ImageBlock -> {
-                    val desc = if (!block.extractedOcrText.isNullOrBlank()) {
-                        "OCR Extracted Text:\n${block.extractedOcrText}"
-                    } else {
-                        "Embedded Image"
+                    val lines = mutableListOf<String>()
+                    lines.add("Embedded Image Attachment")
+                    if (!block.extractedOcrText.isNullOrBlank()) {
+                        lines.add("Extracted Text (ML Kit OCR):")
+                        lines.addAll(block.extractedOcrText.lines())
                     }
-                    slides.add(SlideData("Image Block", desc))
+                    slides.add(SlideData("Image & OCR", lines))
                 }
             }
         }
@@ -370,24 +409,99 @@ object ExportManager {
         zos.write(presRelsSb.toString().toByteArray(Charsets.UTF_8))
         zos.closeEntry()
 
-        // Slide XMLs
-        for (i in slides.indices) {
-            val slide = slides[i]
+        // Slide XML files with standard TextBoxes and geometry
+        for ((i, slide) in slides.withIndex()) {
+            val bodyParagraphsSb = StringBuilder()
+            for (line in slide.bodyLines) {
+                val cleanLine = line.trim()
+                if (cleanLine.isNotEmpty()) {
+                    bodyParagraphsSb.append("""
+<a:p>
+  <a:pPr algn="l"/>
+  <a:r>
+    <a:rPr lang="en-US" sz="2000" dirty="0">
+      <a:solidFill><a:srgbClr val="333333"/></a:solidFill>
+    </a:rPr>
+    <a:t>${escapeXml(cleanLine)}</a:t>
+  </a:r>
+</a:p>""")
+                }
+            }
+
+            if (bodyParagraphsSb.isEmpty()) {
+                bodyParagraphsSb.append("""
+<a:p>
+  <a:pPr algn="l"/>
+  <a:r>
+    <a:rPr lang="en-US" sz="2000" dirty="0">
+      <a:solidFill><a:srgbClr val="777777"/></a:solidFill>
+    </a:rPr>
+    <a:t>(No additional notes)</a:t>
+  </a:r>
+</a:p>""")
+            }
+
             val slideXml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <p:cSld>
+<p:bg>
+  <p:bgPr>
+    <a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>
+    <a:effectLst/>
+  </p:bgPr>
+</p:bg>
 <p:spTree>
 <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
 <p:grpSpPr/>
+<!-- Title Box -->
 <p:sp>
-<p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="457200" y="274638"/><a:ext cx="8229600" cy="1143000"/></a:xfrm></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" dirty="0"/><a:t>${escapeXml(slide.title)}</a:t></a:r></a:p></p:txBody>
+  <p:nvSpPr>
+    <p:cNvPr id="2" name="Title Box"/>
+    <p:cNvSpPr txBox="1"/>
+    <p:nvPr/>
+  </p:nvSpPr>
+  <p:spPr>
+    <a:xfrm>
+      <a:off x="685800" y="457200"/>
+      <a:ext cx="7772400" cy="1143000"/>
+    </a:xfrm>
+    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+    <a:noFill/>
+  </p:spPr>
+  <p:txBody>
+    <a:bodyPr wrap="square" rtlCol="0"><a:spAutoFit/></a:bodyPr>
+    <a:lstStyle/>
+    <a:p>
+      <a:pPr algn="l"/>
+      <a:r>
+        <a:rPr lang="en-US" sz="3200" b="1" dirty="0">
+          <a:solidFill><a:srgbClr val="1A237E"/></a:solidFill>
+        </a:rPr>
+        <a:t>${escapeXml(slide.title)}</a:t>
+      </a:r>
+    </a:p>
+  </p:txBody>
 </p:sp>
+<!-- Body Box -->
 <p:sp>
-<p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph idx="1"/></p:nvPr></p:nvSpPr>
-<p:spPr><a:xfrm><a:off x="457200" y="1600200"/><a:ext cx="8229600" cy="4525963"/></a:xfrm></p:spPr>
-<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" dirty="0"/><a:t>${escapeXml(slide.body)}</a:t></a:r></a:p></p:txBody>
+  <p:nvSpPr>
+    <p:cNvPr id="3" name="Content Box"/>
+    <p:cNvSpPr txBox="1"/>
+    <p:nvPr/>
+  </p:nvSpPr>
+  <p:spPr>
+    <a:xfrm>
+      <a:off x="685800" y="1828800"/>
+      <a:ext cx="7772400" cy="4389120"/>
+    </a:xfrm>
+    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+    <a:noFill/>
+  </p:spPr>
+  <p:txBody>
+    <a:bodyPr wrap="square" rtlCol="0"><a:spAutoFit/></a:bodyPr>
+    <a:lstStyle/>
+    $bodyParagraphsSb
+  </p:txBody>
 </p:sp>
 </p:spTree>
 </p:cSld>
@@ -405,30 +519,51 @@ object ExportManager {
     fun exportPng(context: Context, note: NoteEntity, outputStream: OutputStream) {
         val blocks = parseBlocks(note)
         val width = 1080
-        var estimatedHeight = 180
+        val margin = 50f
+        val usableWidth = width - (2 * margin)
 
+        // Measure exact heights of all blocks to allocate proper bitmap dimensions
+        var calculatedHeight = 160f
         if (note.content.isNotBlank()) {
-            estimatedHeight += ((note.content.length / 45) + 2) * 32
+            calculatedHeight += ((note.content.length / 40) + 2) * 36f
         }
 
         for (block in blocks) {
-            estimatedHeight += when (block) {
-                is NoteBlock.TextBlock -> ((block.text.length / 45) + 2) * 30 + 16
-                is NoteBlock.InkBlock -> block.heightDp.toInt() + 40
-                is NoteBlock.AudioBlock -> 60
-                is NoteBlock.ImageBlock -> 120 + if (!block.extractedOcrText.isNullOrBlank()) {
-                    ((block.extractedOcrText.length / 45) + 2) * 28
-                } else 0
+            calculatedHeight += when (block) {
+                is NoteBlock.TextBlock -> ((block.text.length / 40) + 2) * 34f + 20f
+                is NoteBlock.InkBlock -> {
+                    val strokes = try {
+                        json.decodeFromString<List<InkStroke>>(block.strokesJson)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val allPts = strokes.flatMap { it.points }
+                    if (allPts.isNotEmpty()) {
+                        val rawW = (allPts.maxOf { it.x } - allPts.minOf { it.x }).coerceAtLeast(10f)
+                        val rawH = (allPts.maxOf { it.y } - allPts.minOf { it.y }).coerceAtLeast(10f)
+                        val scale = (usableWidth / rawW).coerceAtMost(1.0f)
+                        (rawH * scale) + 60f
+                    } else {
+                        60f
+                    }
+                }
+                is NoteBlock.AudioBlock -> 70f
+                is NoteBlock.ImageBlock -> {
+                    var h = 80f
+                    if (block.uriString.isNotBlank()) h += 360f
+                    if (!block.extractedOcrText.isNullOrBlank()) {
+                        h += ((block.extractedOcrText.length / 40) + 2) * 30f
+                    }
+                    h
+                }
             }
         }
-        val totalHeight = estimatedHeight.coerceIn(400, 10000)
 
+        val totalHeight = calculatedHeight.toInt().coerceIn(400, 15000)
         val bitmap = Bitmap.createBitmap(width, totalHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
 
-        val margin = 50f
-        val usableWidth = width - (2 * margin)
         var yPos = 70f
 
         val titlePaint = Paint().apply {
@@ -477,23 +612,23 @@ object ExportManager {
             }
         }
 
-        // Draw title
+        // Draw Title
         drawTextWrapped(note.title.ifEmpty { "Untitled" }, titlePaint, 12f)
         yPos += 16f
 
-        // Draw content
+        // Draw Content
         if (note.content.isNotBlank()) {
             drawTextWrapped(note.content, bodyPaint, 8f)
-            yPos += 14f
+            yPos += 16f
         }
 
-        // Draw blocks
+        // Draw Blocks
         for (block in blocks) {
             when (block) {
                 is NoteBlock.TextBlock -> {
                     if (block.text.isNotBlank()) {
                         drawTextWrapped(block.text, bodyPaint, 8f)
-                        yPos += 10f
+                        yPos += 12f
                     }
                 }
                 is NoteBlock.InkBlock -> {
@@ -502,18 +637,36 @@ object ExportManager {
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    if (strokes.isNotEmpty()) {
-                        canvas.drawText("[Drawing]", margin, yPos, labelPaint)
-                        yPos += 24f
+                    val allPoints = strokes.flatMap { it.points }
+                    if (allPoints.isNotEmpty()) {
+                        canvas.drawText("[Drawing / Ink]", margin, yPos, labelPaint)
+                        yPos += 26f
+
+                        val minX = allPoints.minOf { it.x }
+                        val maxX = allPoints.maxOf { it.x }
+                        val minY = allPoints.minOf { it.y }
+                        val maxY = allPoints.maxOf { it.y }
+
+                        val rawW = (maxX - minX).coerceAtLeast(10f)
+                        val rawH = (maxY - minY).coerceAtLeast(10f)
+
+                        // Fit completely inside usable width without ever exceeding the right margin
+                        val scale = (usableWidth / rawW).coerceAtMost(1.0f)
+                        val scaledW = rawW * scale
+                        val scaledH = rawH * scale
+                        // Center horizontally
+                        val xOffset = margin + (usableWidth - scaledW) / 2f
+
                         val inkPaint = Paint().apply {
                             style = Paint.Style.STROKE
                             strokeCap = Paint.Cap.ROUND
                             strokeJoin = Paint.Join.ROUND
                             isAntiAlias = true
                         }
+
                         for (stroke in strokes) {
                             if (stroke.points.size < 2) continue
-                            inkPaint.strokeWidth = stroke.strokeWidth
+                            inkPaint.strokeWidth = (stroke.strokeWidth * scale).coerceAtLeast(2f)
                             inkPaint.alpha = if (stroke.isHighlighter) 110 else 255
                             inkPaint.color = try {
                                 Color.parseColor(stroke.colorHex)
@@ -521,13 +674,20 @@ object ExportManager {
                                 Color.BLACK
                             }
                             val path = android.graphics.Path()
-                            path.moveTo(margin + stroke.points[0].x, yPos + stroke.points[0].y)
+                            path.moveTo(
+                                xOffset + (stroke.points[0].x - minX) * scale,
+                                yPos + (stroke.points[0].y - minY) * scale
+                            )
                             for (i in 1 until stroke.points.size) {
-                                path.lineTo(margin + stroke.points[i].x, yPos + stroke.points[i].y)
+                                path.lineTo(
+                                    xOffset + (stroke.points[i].x - minX) * scale,
+                                    yPos + (stroke.points[i].y - minY) * scale
+                                )
                             }
                             canvas.drawPath(path, inkPaint)
                         }
-                        yPos += block.heightDp + 20f
+                        // Advance yPos by exactly the scaled height of the drawing
+                        yPos += scaledH + 30f
                     }
                 }
                 is NoteBlock.AudioBlock -> {
@@ -537,6 +697,22 @@ object ExportManager {
                 is NoteBlock.ImageBlock -> {
                     canvas.drawText("🖼 Embedded Image", margin, yPos, labelPaint)
                     yPos += 26f
+                    if (block.uriString.isNotBlank()) {
+                        try {
+                            val uri = Uri.parse(block.uriString)
+                            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                val bmp = BitmapFactory.decodeStream(inputStream)
+                                if (bmp != null) {
+                                    val imgWidth = usableWidth
+                                    val imgHeight = ((bmp.height.toFloat() / bmp.width) * imgWidth).coerceAtMost(450f)
+                                    val dest = RectF(margin, yPos, margin + imgWidth, yPos + imgHeight)
+                                    canvas.drawBitmap(bmp, null, dest, null)
+                                    yPos += imgHeight + 16f
+                                    bmp.recycle()
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
                     if (!block.extractedOcrText.isNullOrBlank()) {
                         drawTextWrapped("OCR: ${block.extractedOcrText}", labelPaint, 6f)
                         yPos += 10f

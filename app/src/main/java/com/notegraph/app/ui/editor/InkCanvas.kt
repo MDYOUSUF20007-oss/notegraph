@@ -6,21 +6,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.StrokePoint
@@ -35,7 +30,7 @@ enum class InkMode { PEN, HIGHLIGHTER, ERASER }
  */
 val InkPresetColors = listOf(
     Color.White,
-    Color.Red,
+    Color(0xFFFF5252),   // vibrant red
     Color(0xFF4FC3F7),   // light blue
     Color(0xFF81C784),   // green
     Color(0xFFFFD54F)    // yellow
@@ -43,7 +38,7 @@ val InkPresetColors = listOf(
 
 private val InkPresetColorHex = listOf(
     "#FFFFFF",
-    "#FF0000",
+    "#FF5252",
     "#4FC3F7",
     "#81C784",
     "#FFD54F"
@@ -51,11 +46,7 @@ private val InkPresetColorHex = listOf(
 
 /**
  * A composable ink drawing canvas supporting pen, highlighter and eraser
- * with undo/redo, 5 preset colours and adjustable stroke thickness.
- *
- * @param strokes   current list of strokes persisted in the parent.
- * @param heightDp  canvas height in dp.
- * @param onStrokesChanged callback whenever the committed stroke list changes.
+ * with prominent Undo/Redo buttons, 5 preset colors and adjustable stroke thickness.
  */
 @Composable
 fun InkCanvas(
@@ -74,102 +65,126 @@ fun InkCanvas(
     // The stroke currently being drawn
     var currentPoints by remember { mutableStateOf(listOf<StrokePoint>()) }
 
-    val density = LocalDensity.current
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
     ) {
-        // --------------- toolbar ---------------
+        // ─── Toolbar Row 1: Mode selector and Color dots ───
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Mode buttons
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FilterChip(
+                    selected = mode == InkMode.PEN,
+                    onClick = { mode = InkMode.PEN },
+                    label = { Text("Pen") }
+                )
+                FilterChip(
+                    selected = mode == InkMode.HIGHLIGHTER,
+                    onClick = { mode = InkMode.HIGHLIGHTER },
+                    label = { Text("Hi-lite") }
+                )
+                FilterChip(
+                    selected = mode == InkMode.ERASER,
+                    onClick = { mode = InkMode.ERASER },
+                    label = { Text("Eraser") }
+                )
+            }
+
+            // Color dots
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                InkPresetColors.forEachIndexed { idx, color ->
+                    IconButton(
+                        onClick = { selectedColorIndex = idx },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (idx == selectedColorIndex) 22.dp else 16.dp)
+                                .background(color, CircleShape)
+                                .then(
+                                    if (idx == selectedColorIndex)
+                                        Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                    else Modifier
+                                )
+                        )
+                    }
+                }
+            }
+        }
+
+        // ─── Toolbar Row 2: Stroke width slider & Prominent Undo / Redo Buttons ───
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Mode buttons
-            FilterChip(
-                selected = mode == InkMode.PEN,
-                onClick = { mode = InkMode.PEN },
-                label = { Text("Pen") }
-            )
-            FilterChip(
-                selected = mode == InkMode.HIGHLIGHTER,
-                onClick = { mode = InkMode.HIGHLIGHTER },
-                label = { Text("Hi-lite") }
-            )
-            FilterChip(
-                selected = mode == InkMode.ERASER,
-                onClick = { mode = InkMode.ERASER },
-                label = { Text("Eraser") }
-            )
-
-            Spacer(Modifier.width(4.dp))
-
-            // Colour dots
-            InkPresetColors.forEachIndexed { idx, color ->
-                IconButton(
-                    onClick = { selectedColorIndex = idx },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (idx == selectedColorIndex) 22.dp else 16.dp)
-                            .background(color, CircleShape)
-                            .then(
-                                if (idx == selectedColorIndex)
-                                    Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                else Modifier
-                            )
-                    )
-                }
-            }
-        }
-
-        // Stroke width slider
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Width", style = MaterialTheme.typography.labelSmall)
-            Slider(
-                value = strokeWidth,
-                onValueChange = { strokeWidth = it },
-                valueRange = 1f..24f,
+            // Stroke width
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
-            )
-            // Undo
-            IconButton(onClick = {
-                if (committedStrokes.isNotEmpty()) {
-                    redoStack = redoStack + committedStrokes.last()
-                    committedStrokes = committedStrokes.dropLast(1)
-                    onStrokesChanged(committedStrokes)
-                }
-            }) {
-                Icon(Icons.Default.Edit, contentDescription = "Undo")
+            ) {
+                Text("Width", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.width(4.dp))
+                Slider(
+                    value = strokeWidth,
+                    onValueChange = { strokeWidth = it },
+                    valueRange = 1f..24f,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
             }
-            // Redo
-            IconButton(onClick = {
-                if (redoStack.isNotEmpty()) {
-                    committedStrokes = committedStrokes + redoStack.last()
-                    redoStack = redoStack.dropLast(1)
-                    onStrokesChanged(committedStrokes)
+
+            // Prominent, clearly labeled Undo and Redo buttons
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (committedStrokes.isNotEmpty()) {
+                            val last = committedStrokes.last()
+                            redoStack = redoStack + last
+                            committedStrokes = committedStrokes.dropLast(1)
+                            onStrokesChanged(committedStrokes)
+                        }
+                    },
+                    enabled = committedStrokes.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("↶ Undo", style = MaterialTheme.typography.labelMedium)
                 }
-            }) {
-                Icon(Icons.Default.Delete, contentDescription = "Redo")
+
+                OutlinedButton(
+                    onClick = {
+                        if (redoStack.isNotEmpty()) {
+                            val next = redoStack.last()
+                            redoStack = redoStack.dropLast(1)
+                            committedStrokes = committedStrokes + next
+                            onStrokesChanged(committedStrokes)
+                        }
+                    },
+                    enabled = redoStack.isNotEmpty(),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(36.dp)
+                ) {
+                    Text("↷ Redo", style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
 
-        // --------------- canvas ---------------
+        // ─── Drawing Canvas ───
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(heightDp.dp)
-                .background(Color(0xFF1A1A1A), RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
+                .background(Color(0xFF1E1E1E), RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
                 .pointerInput(mode, selectedColorIndex, strokeWidth) {
                     awaitPointerEventScope {
                         while (true) {
@@ -185,10 +200,8 @@ fun InkCanvas(
                                 currentPoints.isNotEmpty() -> {
                                     // Pointer lifted – commit stroke
                                     if (mode == InkMode.ERASER) {
-                                        // Simple eraser: remove strokes that have any point
-                                        // within 20px of any eraser point
                                         val eraserPts = currentPoints
-                                        val threshold = 20f * 20f
+                                        val threshold = 24f * 24f
                                         committedStrokes = committedStrokes.filter { stroke ->
                                             stroke.points.none { sp ->
                                                 eraserPts.any { ep ->
@@ -218,34 +231,30 @@ fun InkCanvas(
                 }
         ) {
             // Draw committed strokes
-            fun drawStrokeList(list: List<InkStroke>) {
-                for (stroke in list) {
-                    if (stroke.points.size < 2) continue
-                    val path = Path().apply {
-                        moveTo(stroke.points[0].x, stroke.points[0].y)
-                        for (i in 1 until stroke.points.size) {
-                            lineTo(stroke.points[i].x, stroke.points[i].y)
-                        }
+            for (stroke in committedStrokes) {
+                if (stroke.points.size < 2) continue
+                val path = Path().apply {
+                    moveTo(stroke.points[0].x, stroke.points[0].y)
+                    for (i in 1 until stroke.points.size) {
+                        lineTo(stroke.points[i].x, stroke.points[i].y)
                     }
-                    val alpha = if (stroke.isHighlighter) 0.4f else 1f
-                    val color = try {
-                        Color(android.graphics.Color.parseColor(stroke.colorHex)).copy(alpha = alpha)
-                    } catch (_: Exception) {
-                        Color.White.copy(alpha = alpha)
-                    }
-                    drawPath(
-                        path = path,
-                        color = color,
-                        style = Stroke(
-                            width = stroke.strokeWidth,
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
-                    )
                 }
+                val alpha = if (stroke.isHighlighter) 0.4f else 1f
+                val color = try {
+                    Color(android.graphics.Color.parseColor(stroke.colorHex)).copy(alpha = alpha)
+                } catch (_: Exception) {
+                    Color.White.copy(alpha = alpha)
+                }
+                drawPath(
+                    path = path,
+                    color = color,
+                    style = Stroke(
+                        width = stroke.strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
             }
-
-            drawStrokeList(committedStrokes)
 
             // Draw current in-progress stroke
             if (currentPoints.size >= 2 && mode != InkMode.ERASER) {
