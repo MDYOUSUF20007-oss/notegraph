@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,8 +30,22 @@ jobs:
 
     - name: Build with Gradle
       run: gradle build
+
+    - name: Rename APK to notegraph.apk
+      run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/notegraph.apk
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: NoteGraph-APK
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: app/build/outputs/apk/debug/notegraph.apk
+
+    - name: Publish to GitHub Releases
+      if: github.event_name == 'push'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        name: "NoteGraph Latest"
+        body: "Automated build of notegraph.apk from the latest commit."
+        files: app/build/outputs/apk/debug/notegraph.apk
+        prerelease: false
