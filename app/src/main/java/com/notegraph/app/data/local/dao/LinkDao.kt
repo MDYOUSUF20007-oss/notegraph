@@ -9,7 +9,7 @@ interface LinkDao {
     @Query("SELECT * FROM links WHERE sourceNoteId = :noteId")
     fun getLinksForNote(noteId: String): Flow<List<LinkEntity>>
 
-    @Query("SELECT * FROM links WHERE targetNoteTitle = :title COLLATE NOCASE OR targetNoteId = :noteId")
+    @Query("SELECT * FROM links WHERE LOWER(targetNoteTitle) = LOWER(:title) OR targetNoteId = :noteId")
     fun getBacklinksForNote(noteId: String, title: String): Flow<List<LinkEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

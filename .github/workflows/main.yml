@@ -29,7 +29,7 @@ jobs:
         gradle-version: '8.7'
 
     - name: Build with Gradle
-      run: gradle build
+      run: gradle assembleDebug --stacktrace
 
     - name: Rename APK to notegraph.apk
       run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/notegraph.apk

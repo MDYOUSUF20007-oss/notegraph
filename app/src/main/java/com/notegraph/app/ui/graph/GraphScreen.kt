@@ -267,8 +267,8 @@ fun GraphScreen(
                                 } else {
                                     // Single-finger movement
                                     val pointer = activePointers.first()
-                                    val moveDist = (pointer.position - downPos).getDistance()
-                                    if (moveDist > 12f) {
+                                    val diff = pointer.position - downPos
+                                    if (diff.x * diff.x + diff.y * diff.y > 144f) {
                                         isTransforming = true
                                     }
                                     if (isTransforming) {
