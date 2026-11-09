@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import kotlinx.coroutines.flow.collectLatest
@@ -29,7 +32,8 @@ import kotlinx.serialization.json.Json
 fun EditorScreen(
     viewModel: EditorViewModel,
     onBack: () -> Unit,
-    onNavigateReader: (String?) -> Unit = {}
+    onNavigateReader: (String?) -> Unit = {},
+    onNoteClick: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val note by viewModel.note.collectAsState()
@@ -458,16 +462,32 @@ fun EditorScreen(
             Spacer(modifier = Modifier.height(8.dp))
             if (backlinks.isEmpty()) {
                 Text(
-                    "No backlinks found.",
+                    "No backlinks found. Mention this note's title in other notes to connect them.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
             } else {
-                Column {
-                    backlinks.forEach { link ->
-                        Text(
-                            "• Linked from Note ID: ${link.sourceNoteId}",
-                            style = MaterialTheme.typography.bodyMedium
+                Text(
+                    "Referenced by:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(backlinks) { item ->
+                        InputChip(
+                            selected = false,
+                            onClick = {
+                                viewModel.saveNow()
+                                onNoteClick(item.sourceNoteId)
+                            },
+                            label = { Text(item.sourceNoteTitle) },
+                            leadingIcon = {
+                                Text("🔗", fontSize = 12.sp)
+                            }
                         )
                     }
                 }

@@ -46,7 +46,8 @@ fun NoteGraphNavGraph() {
                 onNavigateReader = { id ->
                     if (id != null) navController.navigate("reader?noteId=$id")
                     else navController.navigate("reader")
-                }
+                },
+                onNoteClick = { targetId -> navController.navigate("editor/$targetId") }
             )
         }
         composable("graph") {
