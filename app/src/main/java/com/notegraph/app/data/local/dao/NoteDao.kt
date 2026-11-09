@@ -9,6 +9,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE isTrash = 0 ORDER BY isPinned DESC, updatedAt DESC")
     fun getAllNotes(): Flow<List<NoteEntity>>
 
+    @Query("SELECT * FROM notes WHERE isTrash = 0 ORDER BY isPinned DESC, updatedAt DESC")
+    suspend fun getAllNotesOnce(): List<NoteEntity>
+
     @Query("SELECT * FROM notes WHERE id = :noteId")
     suspend fun getNoteById(noteId: String): NoteEntity?
 
@@ -29,4 +32,7 @@ interface NoteDao {
     
     @Query("SELECT * FROM notes WHERE title LIKE '%' || :query || '%' OR content LIKE '%' || :query || '%'")
     fun searchNotes(query: String): Flow<List<NoteEntity>>
+
+    @Query("SELECT * FROM notes WHERE isTrash = 0 AND (title LIKE '%' || :query || '%' OR content LIKE '%' || :query || '%' OR blocksJson LIKE '%' || :query || '%') ORDER BY isPinned DESC, updatedAt DESC")
+    fun searchNotesWithBlocks(query: String): Flow<List<NoteEntity>>
 }

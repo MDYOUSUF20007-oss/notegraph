@@ -12,11 +12,12 @@ import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 
@@ -30,18 +31,22 @@ class EditorViewModel @Inject constructor(
 
     private val noteId: String = checkNotNull(savedStateHandle["noteId"])
 
-    private val json = Json { ignoreUnknownKeys = true }
+    val json = Json { ignoreUnknownKeys = true }
 
     private val _note = MutableStateFlow<NoteEntity?>(null)
     val note: StateFlow<NoteEntity?> = _note.asStateFlow()
 
-    /** Parsed multimedia blocks derived from the note's blocksJson. */
     private val _blocks = MutableStateFlow<List<NoteBlock>>(emptyList())
     val blocks: StateFlow<List<NoteBlock>> = _blocks.asStateFlow()
 
-    /** Timestamp (System.currentTimeMillis) when an audio recording was started. */
     private val _audioRecordStartMs = MutableStateFlow(0L)
     val audioRecordStartMs: StateFlow<Long> = _audioRecordStartMs.asStateFlow()
+
+    /** One-shot event flow for showing "Note saved" Snackbar or Toast. */
+    private val _saveEvent = MutableSharedFlow<String>()
+    val saveEvent: SharedFlow<String> = _saveEvent.asSharedFlow()
+
+    private var debouncedSaveJob: Job? = null
 
     val backlinks: StateFlow<List<LinkEntity>> = _note.flatMapLatest { currentNote ->
         if (currentNote != null) {
@@ -65,57 +70,53 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    // ─── Public Note Editing Actions ─────────────────────────────
+
     fun updateTitle(newTitle: String) {
         _note.value?.let { current ->
-            val updated = current.copy(title = newTitle, updatedAt = System.currentTimeMillis())
-            _note.value = updated
-            viewModelScope.launch { noteDao.updateNote(updated) }
+            _note.value = current.copy(title = newTitle, updatedAt = System.currentTimeMillis())
+            scheduleDebouncedSave()
         }
     }
 
     fun updateContent(newContent: String) {
         _note.value?.let { current ->
-            val updated = current.copy(content = newContent, updatedAt = System.currentTimeMillis())
-            _note.value = updated
-            viewModelScope.launch {
-                noteDao.updateNote(updated)
-                parseAndSaveWikiLinks(current.id, newContent)
-            }
+            _note.value = current.copy(content = newContent, updatedAt = System.currentTimeMillis())
+            scheduleDebouncedSave()
+            viewModelScope.launch { parseAndSaveWikiLinks(noteId, newContent) }
         }
     }
 
-    // ─── Block manipulation ──────────────────────────────────────
+    // ─── Block Manipulation ──────────────────────────────────────
 
     fun addTextBlock() {
-        val newBlock = NoteBlock.TextBlock(id = UUID.randomUUID().toString())
-        appendBlock(newBlock)
+        appendBlock(NoteBlock.TextBlock(id = UUID.randomUUID().toString()))
     }
 
     fun addInkBlock() {
-        val newBlock = NoteBlock.InkBlock(id = UUID.randomUUID().toString())
-        appendBlock(newBlock)
+        appendBlock(NoteBlock.InkBlock(id = UUID.randomUUID().toString()))
     }
 
     fun addAudioBlock() {
         val blockId = UUID.randomUUID().toString()
         val filePath = generateAudioFilePath(appContext, blockId)
-        val newBlock = NoteBlock.AudioBlock(id = blockId, filePath = filePath)
-        appendBlock(newBlock)
+        appendBlock(NoteBlock.AudioBlock(id = blockId, filePath = filePath))
     }
 
     fun addImageBlock() {
-        val newBlock = NoteBlock.ImageBlock(id = UUID.randomUUID().toString())
-        appendBlock(newBlock)
+        appendBlock(NoteBlock.ImageBlock(id = UUID.randomUUID().toString()))
     }
 
     fun updateBlock(updated: NoteBlock) {
         _blocks.value = _blocks.value.map { if (it.id == updated.id) updated else it }
-        persistBlocks()
+        syncBlocksToNote()
+        scheduleDebouncedSave()
     }
 
     fun removeBlock(blockId: String) {
         _blocks.value = _blocks.value.filter { it.id != blockId }
-        persistBlocks()
+        syncBlocksToNote()
+        scheduleDebouncedSave()
     }
 
     fun onAudioRecordingStarted(startMs: Long) {
@@ -126,10 +127,6 @@ class EditorViewModel @Inject constructor(
         _audioRecordStartMs.value = 0L
     }
 
-    /**
-     * Captures the timestamp-offset for a text block recorded while audio is playing.
-     * Called from EditorScreen when the user types inside a text block during recording.
-     */
     fun stampTextBlockWithAudioTime(blockId: String) {
         val startMs = _audioRecordStartMs.value
         if (startMs <= 0L) return
@@ -148,22 +145,49 @@ class EditorViewModel @Inject constructor(
         }
     }
 
-    // ─── Private helpers ──────────────────────────────────────
+    /**
+     * Immediately persists note and blocks to Room.
+     * Used by explicit Save button and onBack navigation (DisposableEffect/BackHandler).
+     */
+    fun saveNow(showEvent: Boolean = false) {
+        debouncedSaveJob?.cancel()
+        syncBlocksToNote()
+        val currentNote = _note.value ?: return
+        viewModelScope.launch {
+            noteDao.updateNote(currentNote)
+            parseAndSaveWikiLinks(currentNote.id, currentNote.content)
+            if (showEvent) {
+                _saveEvent.emit("Note saved")
+            }
+        }
+    }
+
+    // ─── Private Helpers ─────────────────────────────────────────
 
     private fun appendBlock(block: NoteBlock) {
         _blocks.value = _blocks.value + block
-        persistBlocks()
+        syncBlocksToNote()
+        scheduleDebouncedSave()
     }
 
-    private fun persistBlocks() {
+    private fun syncBlocksToNote() {
         _note.value?.let { current ->
             val blocksJsonStr = json.encodeToString(_blocks.value)
-            val updated = current.copy(
+            _note.value = current.copy(
                 blocksJson = blocksJsonStr,
                 updatedAt = System.currentTimeMillis()
             )
-            _note.value = updated
-            viewModelScope.launch { noteDao.updateNote(updated) }
+        }
+    }
+
+    private fun scheduleDebouncedSave() {
+        debouncedSaveJob?.cancel()
+        debouncedSaveJob = viewModelScope.launch {
+            delay(500L)
+            syncBlocksToNote()
+            _note.value?.let { note ->
+                noteDao.updateNote(note)
+            }
         }
     }
 

@@ -25,7 +25,7 @@ fun NoteGraphNavGraph() {
             val viewModel: HomeViewModel = hiltViewModel()
             HomeScreen(
                 viewModel = viewModel,
-                onNoteClick = { noteId -> navController.navigate("editor/\$noteId") },
+                onNoteClick = { noteId -> navController.navigate("editor/$noteId") },
                 onNavigateSearch = { navController.navigate("search") },
                 onNavigateGraph = { navController.navigate("graph") },
                 onNavigateTags = { navController.navigate("tags") },
@@ -43,16 +43,22 @@ fun NoteGraphNavGraph() {
             )
         }
         composable("graph") {
-            GraphScreen(onBack = { navController.popBackStack() })
+            GraphScreen(
+                onBack = { navController.popBackStack() },
+                onNoteClick = { noteId -> navController.navigate("editor/$noteId") }
+            )
         }
         composable("search") {
             SearchScreen(
                 onBack = { navController.popBackStack() },
-                onNoteClick = { noteId -> navController.navigate("editor/\$noteId") }
+                onNoteClick = { noteId -> navController.navigate("editor/$noteId") }
             )
         }
         composable("tags") {
-            TagsScreen(onBack = { navController.popBackStack() })
+            TagsScreen(
+                onBack = { navController.popBackStack() },
+                onNoteClick = { noteId -> navController.navigate("editor/$noteId") }
+            )
         }
         composable("settings") {
             SettingsScreen(onBack = { navController.popBackStack() })
