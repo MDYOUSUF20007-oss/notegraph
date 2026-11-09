@@ -401,7 +401,7 @@ fun EditorScreen(
                                     val strokes: List<InkStroke> = remember(block.strokesJson) {
                                         try {
                                             json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                                        } catch (_: Exception) {
+                                        } catch (e: Exception) {
                                             emptyList()
                                         }
                                     }

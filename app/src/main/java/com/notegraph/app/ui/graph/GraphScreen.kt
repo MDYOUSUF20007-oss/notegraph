@@ -3,7 +3,6 @@ package com.notegraph.app.ui.graph
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.*
@@ -12,10 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -253,7 +249,15 @@ fun GraphScreen(
                                     isTransforming = true
                                     val zoom = event.calculateZoom()
                                     val pan = event.calculatePan()
-                                    val centroid = event.calculateCentroid(useCurrent = false)
+
+                                    // Compute centroid of active touch pointers
+                                    var sumX = 0f
+                                    var sumY = 0f
+                                    for (p in activePointers) {
+                                        sumX += p.position.x
+                                        sumY += p.position.y
+                                    }
+                                    val centroid = Offset(sumX / activePointers.size, sumY / activePointers.size)
 
                                     val newScale = (scale * zoom).coerceIn(0.2f, 5.0f)
                                     val scaleFactor = newScale / scale
@@ -322,19 +326,13 @@ fun GraphScreen(
                             center = Offset(node.x, node.y)
                         )
 
-                        // Node title label centered beneath the node
+                        // Node title label
                         val label = if (node.title.length > 15) node.title.take(14) + "…" else node.title
-                        val textLayoutResult = textMeasurer.measure(
-                            text = label,
-                            style = TextStyle(
-                                color = labelColor,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        )
                         drawText(
-                            textLayoutResult = textLayoutResult,
-                            topLeft = Offset(node.x - textLayoutResult.size.width / 2f, node.y + 26f)
+                            textMeasurer = textMeasurer,
+                            text = label,
+                            topLeft = Offset(node.x - 36f, node.y + 26f),
+                            style = TextStyle(color = labelColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         )
                     }
                 }
@@ -352,14 +350,14 @@ fun GraphScreen(
                     onClick = { scale = (scale * 1.3f).coerceIn(0.2f, 5.0f) },
                     shape = CircleShape
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Zoom In")
+                    Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
 
                 FilledTonalIconButton(
                     onClick = { scale = (scale / 1.3f).coerceIn(0.2f, 5.0f) },
                     shape = CircleShape
                 ) {
-                    Icon(Icons.Default.Remove, contentDescription = "Zoom Out")
+                    Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
 
                 FilledTonalIconButton(
@@ -369,7 +367,7 @@ fun GraphScreen(
                     },
                     shape = CircleShape
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Center View")
+                    Text("⟲", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Surface(

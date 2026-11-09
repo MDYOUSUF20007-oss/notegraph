@@ -26,6 +26,7 @@ data class BacklinkItem(
     val sourceNoteTitle: String
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class EditorViewModel @Inject constructor(
     private val noteDao: NoteDao,
@@ -105,7 +106,7 @@ class EditorViewModel @Inject constructor(
                 resultList
             }
         } else {
-            flowOf(emptyList())
+            flowOf(emptyList<BacklinkItem>())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -116,7 +117,7 @@ class EditorViewModel @Inject constructor(
             loaded?.let {
                 _blocks.value = try {
                     json.decodeFromString<List<NoteBlock>>(it.blocksJson)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
                     emptyList()
                 }
                 parseAndSaveLinks(it.id)
