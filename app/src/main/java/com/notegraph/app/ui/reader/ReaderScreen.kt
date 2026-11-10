@@ -1,10 +1,16 @@
 package com.notegraph.app.ui.reader
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -35,6 +41,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -74,6 +81,12 @@ private enum class FoldCorner {
     TOP_RIGHT,
     BOTTOM_LEFT,
     TOP_LEFT
+}
+
+private enum class ReaderGestureMode {
+    NONE,
+    BOOK_TURN,
+    THROW_UP
 }
 
 private data class CornerFoldGeometry(
@@ -119,11 +132,16 @@ fun ReaderScreen(
         }
     }
 
-    // Touch-driven animation state
+    // Touch-driven animation state (horizontal book turn + upward throw-away toss)
     val curlProgress = remember { Animatable(0f) }
     var dragDirection by remember { mutableIntStateOf(0) } // -1 = next, +1 = prev
     var activeCorner by remember { mutableStateOf(FoldCorner.BOTTOM_RIGHT) }
     var isDraggingFinger by remember { mutableStateOf(false) }
+
+    val throwProgress = remember { Animatable(0f) }
+    var isThrowingPage by remember { mutableStateOf(false) }
+    var throwDriftX by remember { mutableFloatStateOf(0f) }
+    var showEndToastPill by remember { mutableStateOf(false) }
 
     // Normalized corner tip position (relative to page container size) during free corner drag
     var dragTipNorm by remember { mutableStateOf(Offset(1f, 1f)) }
@@ -133,9 +151,22 @@ fun ReaderScreen(
 
     val currentNote = notes.getOrNull(currentPageIndex)
     val totalPages = notes.size.coerceAtLeast(1)
+    val currentScrollState = rememberScrollState()
+
+    LaunchedEffect(currentPageIndex) {
+        currentScrollState.scrollTo(0)
+    }
+
+    LaunchedEffect(showEndToastPill) {
+        if (showEndToastPill) {
+            kotlinx.coroutines.delay(1500L)
+            showEndToastPill = false
+        }
+    }
 
     fun triggerTurnNext() {
         if (currentPageIndex >= notes.size - 1) return
+        if (isThrowingPage || curlProgress.isRunning || throwProgress.isRunning) return
         scope.launch {
             isDraggingFinger = false
             dragDirection = -1
@@ -154,6 +185,7 @@ fun ReaderScreen(
 
     fun triggerTurnPrev() {
         if (currentPageIndex <= 0) return
+        if (isThrowingPage || curlProgress.isRunning || throwProgress.isRunning) return
         scope.launch {
             isDraggingFinger = false
             dragDirection = 1
@@ -253,7 +285,7 @@ fun ReaderScreen(
                                 fontFamily = FontFamily.Serif
                             )
                             Text(
-                                text = "Swipe corner or edge to fold",
+                                text = "Turn edge/corner • Swipe up to toss page",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -278,7 +310,10 @@ fun ReaderScreen(
             ) {
             if (notes.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No notes found in vault to read.", color = Color.White)
+                    Text(
+                        "No notes found in vault to read.",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             } else if (currentNote != null) {
                 val curPageIdxState by rememberUpdatedState(currentPageIndex)
@@ -290,7 +325,10 @@ fun ReaderScreen(
                         .onSizeChanged { containerSize = it }
                         .pointerInput(turnStyle) {
                             awaitEachGesture {
-                                val down = awaitFirstDown(requireUnconsumed = false)
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                if (isThrowingPage || throwProgress.isRunning || curlProgress.isRunning) {
+                                    return@awaitEachGesture
+                                }
                                 val w = size.width.toFloat().coerceAtLeast(1f)
                                 val h = size.height.toFloat().coerceAtLeast(1f)
                                 val downPos = down.position
@@ -299,16 +337,21 @@ fun ReaderScreen(
                                     (downPos.y > h * 0.65f || downPos.y < h * 0.35f)
                                 val inLeftCorner = downPos.x < w * 0.28f &&
                                     (downPos.y > h * 0.65f || downPos.y < h * 0.35f)
+                                val inBottomThrowZone = downPos.y > h * 0.70f
 
-                                var gestureLocked = false
+                                var gestureMode = ReaderGestureMode.NONE
                                 var activeDir = 0
+                                var lastY = downPos.y
+                                var lastFrameDy = 0f
+                                var lastTotalDx = 0f
+                                var lastTotalDy = 0f
 
                                 while (true) {
-                                    val event = awaitPointerEvent()
+                                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
                                     val active = event.changes.filter { it.pressed }
 
                                     if (active.isEmpty()) {
-                                        if (gestureLocked && activeDir != 0) {
+                                        if (gestureMode == ReaderGestureMode.BOOK_TURN && activeDir != 0) {
                                             val curTip = dragTipNorm
                                             val curProg = curlProgress.value
                                             isDraggingFinger = false
@@ -344,50 +387,104 @@ fun ReaderScreen(
                                                 }
                                                 dragDirection = 0
                                             }
+                                        } else if (gestureMode == ReaderGestureMode.THROW_UP) {
+                                            val curThrow = throwProgress.value
+                                            val velocityThrow = lastFrameDy < -14f && lastTotalDy < -36f
+                                            val canAdvance = curPageIdxState < notesSizeState - 1
+                                            val capturedDrift = lastTotalDx * 0.65f
+
+                                            scope.launch {
+                                                if (canAdvance && (curThrow > 0.22f || velocityThrow)) {
+                                                    throwDriftX = capturedDrift
+                                                    throwProgress.animateTo(
+                                                        1f,
+                                                        tween(260, easing = CubicBezierEasing(0.18f, 0f, 0.22f, 1f))
+                                                    )
+                                                    if (currentPageIndex < notes.size - 1) {
+                                                        currentPageIndex++
+                                                    }
+                                                    throwProgress.snapTo(0f)
+                                                    throwDriftX = 0f
+                                                    isThrowingPage = false
+                                                } else {
+                                                    if (!canAdvance && curThrow > 0.08f) {
+                                                        showEndToastPill = true
+                                                    }
+                                                    throwProgress.animateTo(
+                                                        0f,
+                                                        spring(dampingRatio = 0.72f, stiffness = 420f)
+                                                    )
+                                                    throwDriftX = 0f
+                                                    isThrowingPage = false
+                                                }
+                                            }
                                         }
                                         break
                                     }
 
                                     val pointer = active.first()
+                                    lastFrameDy = pointer.position.y - lastY
+                                    lastY = pointer.position.y
                                     val totalDx = pointer.position.x - downPos.x
                                     val totalDy = pointer.position.y - downPos.y
+                                    lastTotalDx = totalDx
+                                    lastTotalDy = totalDy
 
-                                    if (!gestureLocked) {
+                                    if (gestureMode == ReaderGestureMode.NONE) {
                                         val movedDist = sqrt(totalDx * totalDx + totalDy * totalDy)
-                                        val isHorizontalSwipe = abs(totalDx) > 14f && abs(totalDx) > abs(totalDy) * 1.15f
-                                        val isCornerDrag = (inRightCorner || inLeftCorner) && movedDist > 8f
+                                        if (movedDist < 10f) continue
 
-                                        if (!isHorizontalSwipe && !isCornerDrag) {
-                                            // If user scrolls steeply vertically in middle of page, yield to verticalScroll
-                                            if (abs(totalDy) > 24f && !inRightCorner && !inLeftCorner) {
-                                                break
+                                        val isPredominantlyUpward = totalDy < -18f && abs(totalDy) > abs(totalDx) * 1.25f
+                                        val canThrowFromPosition = !currentScrollState.canScrollForward || inBottomThrowZone
+                                        val isHorizontalSwipe = abs(totalDx) > 14f && abs(totalDx) > abs(totalDy) * 1.15f
+                                        val isCornerDrag = (inRightCorner || inLeftCorner) &&
+                                            movedDist > 8f &&
+                                            abs(totalDx) >= abs(totalDy) * 0.65f
+
+                                        if (isPredominantlyUpward && canThrowFromPosition) {
+                                            gestureMode = ReaderGestureMode.THROW_UP
+                                            isThrowingPage = true
+                                        } else if (isHorizontalSwipe || isCornerDrag) {
+                                            val desiredDir = when {
+                                                inRightCorner && totalDx <= -2f -> -1
+                                                inLeftCorner && totalDx >= 2f -> 1
+                                                totalDx < 0 -> -1
+                                                totalDx > 0 -> 1
+                                                else -> 0
                                             }
+
+                                            if (desiredDir == -1 && curPageIdxState >= notesSizeState - 1) break
+                                            if (desiredDir == 1 && curPageIdxState <= 0) break
+                                            if (desiredDir == 0) continue
+
+                                            activeDir = desiredDir
+                                            dragDirection = desiredDir
+                                            activeCorner = when (desiredDir) {
+                                                -1 -> if (downPos.y < h * 0.40f) FoldCorner.TOP_RIGHT else FoldCorner.BOTTOM_RIGHT
+                                                else -> if (downPos.y < h * 0.40f) FoldCorner.TOP_LEFT else FoldCorner.BOTTOM_LEFT
+                                            }
+                                            gestureMode = ReaderGestureMode.BOOK_TURN
+                                            isDraggingFinger = true
+                                        } else if (abs(totalDy) > 22f) {
+                                            // Yield vertical drag to inner page scrollState
+                                            break
+                                        } else {
                                             continue
                                         }
-
-                                        val desiredDir = when {
-                                            inRightCorner && totalDx <= -2f -> -1
-                                            inLeftCorner && totalDx >= 2f -> 1
-                                            totalDx < 0 -> -1
-                                            totalDx > 0 -> 1
-                                            else -> 0
-                                        }
-
-                                        if (desiredDir == -1 && curPageIdxState >= notesSizeState - 1) break
-                                        if (desiredDir == 1 && curPageIdxState <= 0) break
-                                        if (desiredDir == 0) continue
-
-                                        activeDir = desiredDir
-                                        dragDirection = desiredDir
-                                        activeCorner = when (desiredDir) {
-                                            -1 -> if (downPos.y < h * 0.40f) FoldCorner.TOP_RIGHT else FoldCorner.BOTTOM_RIGHT
-                                            else -> if (downPos.y < h * 0.40f) FoldCorner.TOP_LEFT else FoldCorner.BOTTOM_LEFT
-                                        }
-                                        gestureLocked = true
-                                        isDraggingFinger = true
                                     }
 
                                     pointer.consume()
+
+                                    if (gestureMode == ReaderGestureMode.THROW_UP) {
+                                        throwDriftX = totalDx * 0.65f
+                                        val rawLift = if (curPageIdxState < notesSizeState - 1) {
+                                            (-totalDy / (h * 0.46f)).coerceIn(0f, 1.15f)
+                                        } else {
+                                            (-totalDy / (h * 1.45f)).coerceIn(0f, 0.24f)
+                                        }
+                                        scope.launch { throwProgress.snapTo(rawLift) }
+                                        continue
+                                    }
 
                                     // Compute responsive corner tip position from drag vector
                                     val anchorX = when (activeCorner) {
@@ -433,16 +530,21 @@ fun ReaderScreen(
                             }
                         }
                 ) {
-                    val nextNote = if (dragDirection == -1) notes.getOrNull(currentPageIndex + 1)
-                    else if (dragDirection == 1) notes.getOrNull(currentPageIndex - 1)
-                    else null
-
                     val p = curlProgress.value
+                    val tp = throwProgress.value
+                    val isThrowVisualActive = isThrowingPage || tp > 0.002f
+                    val nextNote = when {
+                        isThrowVisualActive -> notes.getOrNull(currentPageIndex + 1)
+                        dragDirection == -1 -> notes.getOrNull(currentPageIndex + 1)
+                        dragDirection == 1 -> notes.getOrNull(currentPageIndex - 1)
+                        else -> null
+                    }
+
                     val wPx = containerSize.width.toFloat().coerceAtLeast(1f)
                     val hPx = containerSize.height.toFloat().coerceAtLeast(1f)
 
                     // Calculate corner fold geometry when CORNER_FOLD is selected and curl is active
-                    val foldGeom: CornerFoldGeometry? = if (turnStyle == PageTurnStyle.CORNER_FOLD && p > 0.002f && dragDirection != 0) {
+                    val foldGeom: CornerFoldGeometry? = if (!isThrowVisualActive && turnStyle == PageTurnStyle.CORNER_FOLD && p > 0.002f && dragDirection != 0) {
                         val anchor = cornerOffset(activeCorner, wPx, hPx)
                         val finishTarget = when (activeCorner) {
                             FoldCorner.BOTTOM_RIGHT -> Offset(-0.98f * wPx, 0.96f * hPx)
@@ -471,11 +573,25 @@ fun ReaderScreen(
                         computeCornerFoldGeometry(wPx, hPx, anchor, tip)
                     } else null
 
-                    // 1. Underneath Next/Prev Page (revealed progressively beneath the lifting corner/curl)
-                    if (nextNote != null && p > 0.002f) {
+                    // 1. Underneath Next/Prev Page (revealed beneath the lifting corner/curl or tossed page)
+                    if (nextNote != null && (p > 0.002f || isThrowVisualActive)) {
+                        val underneathModifier = if (isThrowVisualActive) {
+                            val normTp = tp.coerceIn(0f, 1f)
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val underScale = 0.94f + 0.06f * normTp
+                                    scaleX = underScale
+                                    scaleY = underScale
+                                    translationY = 22f * (1f - normTp)
+                                    alpha = 0.78f + 0.22f * normTp
+                                }
+                        } else {
+                            Modifier.fillMaxSize()
+                        }
                         BookPageSurface(
                             note = nextNote,
-                            pageNumber = if (dragDirection == -1) currentPageIndex + 2 else currentPageIndex,
+                            pageNumber = if (isThrowVisualActive || dragDirection == -1) currentPageIndex + 2 else currentPageIndex,
                             isBookmarked = nextNote.isFavorite,
                             isSessionUnlocked = nextNote.id in unlockedInSession,
                             onUnlockClick = {
@@ -489,12 +605,31 @@ fun ReaderScreen(
                             onDogEarClick = { viewModel.toggleBookmark(nextNote) },
                             onToggleChecklist = { blkId, itemId -> viewModel.toggleChecklistItem(nextNote, blkId, itemId) },
                             showCornerHint = false,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = underneathModifier
                         )
                     }
 
-                    // 2. Foreground Current Page (clipped geometrically so next page peeks right through!)
+                    // 2. Foreground Current Page (book fold/curl OR upward throw-away physics!)
                     val fgModifier = when {
+                        isThrowVisualActive -> {
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val tiltSign = when {
+                                        throwDriftX > 16f -> 1f
+                                        throwDriftX < -16f -> -1f
+                                        else -> -1f
+                                    }
+                                    translationY = -hPx * 1.32f * tp
+                                    translationX = throwDriftX * (1f + tp * 0.72f) + (tiltSign * wPx * 0.06f * tp)
+                                    rotationZ = (tiltSign * 14f * tp) + (throwDriftX / wPx) * 16f
+                                    rotationX = (24f * tp).coerceAtMost(32f)
+                                    scaleX = (1f - 0.16f * tp).coerceAtLeast(0.60f)
+                                    scaleY = (1f - 0.12f * tp).coerceAtLeast(0.65f)
+                                    alpha = (1f - ((tp - 0.58f).coerceAtLeast(0f) / 0.42f)).coerceIn(0f, 1f)
+                                    cameraDistance = 14f * density
+                                }
+                        }
                         turnStyle == PageTurnStyle.CORNER_FOLD && foldGeom != null && foldGeom.isActive -> {
                             Modifier
                                 .fillMaxSize()
@@ -559,6 +694,7 @@ fun ReaderScreen(
                         pageNumber = currentPageIndex + 1,
                         isBookmarked = currentNote.isFavorite,
                         isSessionUnlocked = currentNote.id in unlockedInSession,
+                        scrollState = currentScrollState,
                         onUnlockClick = {
                             if (NoteSecurityManager.hasPin(context)) {
                                 pendingPinNote = currentNote
@@ -569,22 +705,44 @@ fun ReaderScreen(
                         },
                         onDogEarClick = { viewModel.toggleBookmark(currentNote) },
                         onToggleChecklist = { blkId, itemId -> viewModel.toggleChecklistItem(currentNote, blkId, itemId) },
-                        showCornerHint = (currentPageIndex < notes.size - 1) && p <= 0.002f && turnStyle == PageTurnStyle.CORNER_FOLD,
+                        showCornerHint = (currentPageIndex < notes.size - 1) && !isThrowVisualActive && p <= 0.002f && turnStyle == PageTurnStyle.CORNER_FOLD,
                         modifier = fgModifier
                     )
 
                     // 3. Tactile Shadow & Reflected Backside Flap Overlay
-                    if (turnStyle == PageTurnStyle.CORNER_FOLD && foldGeom != null && foldGeom.isActive) {
+                    if (!isThrowVisualActive && turnStyle == PageTurnStyle.CORNER_FOLD && foldGeom != null && foldGeom.isActive) {
                         ReMarkableCornerFoldOverlay(
                             geometry = foldGeom,
                             modifier = Modifier.fillMaxSize()
                         )
-                    } else if (turnStyle == PageTurnStyle.SPINE_CURL && p > 0.005f) {
+                    } else if (!isThrowVisualActive && turnStyle == PageTurnStyle.SPINE_CURL && p > 0.005f) {
                         SpineCurlOverlay(
                             progress = p,
                             isNext = dragDirection == -1,
                             modifier = Modifier.fillMaxSize()
                         )
+                    }
+
+                    // Transient pill when user tries to toss the final page of the notebook
+                    AnimatedVisibility(
+                        visible = showEndToastPill,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 18.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f),
+                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                        ) {
+                            Text(
+                                text = if (notes.size <= 1) "Only 1 page in notebook" else "Last page reached",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -824,6 +982,7 @@ private fun BookPageSurface(
     pageNumber: Int,
     isBookmarked: Boolean,
     isSessionUnlocked: Boolean = false,
+    scrollState: ScrollState = rememberScrollState(),
     onUnlockClick: () -> Unit = {},
     onDogEarClick: () -> Unit,
     onToggleChecklist: (blockId: String, itemId: String) -> Unit,
@@ -862,7 +1021,7 @@ private fun BookPageSurface(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(start = 28.dp, end = 20.dp, top = 20.dp, bottom = 16.dp)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
             ) {
                 Text(
                     text = dateFormat.format(Date(note.updatedAt)).uppercase(),

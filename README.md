@@ -36,11 +36,11 @@ Built for online classes, derivations, and freeform boards:
 - `F11` fullscreen Zen mode, class stopwatch / 25-min timer, follow-up reminder dates, `Ctrl+K` quick command palette, and a 2D link graph
 
 ### Android App (`app/`)
-- **PDF import and markup:** Import PDFs in-app (or via Android "Open with -> NoteGraph"), pinch to zoom, draw or highlight right on the pages, toggle Night PDF, enable S-Pen-only mode for palm rejection, and save per-page margin notes
+- **PDF import, markup, and OCR:** Import PDFs in-app (or via Android "Open with -> NoteGraph"), pinch to zoom, draw or highlight right on the pages, toggle Night PDF, enable S-Pen-only mode for palm rejection, keep per-page margin notes, and run offline **PDF OCR** in a dedicated extraction window where you can pick individual blocks, trim text, choose a page range, or extract the whole PDF
 - **Folders and checklists:** Custom folders (editable name, icon, and color) with long-press drag-and-drop sorting, plus checkable to-do lists inside notes and reader mode
 - **Links and graph:** Live `[[Wiki-link]]` autocomplete as you type, backlinks, `#tags`, and a 2D knowledge graph with node dragging and search filtering
-- **Book reading mode:** Geometric corner-fold page turn animation when dragging from any corner or edge (or switch between Corner Fold, 3D Curl, and Slide Stack)
-- **Privacy and exports:** Voice recording with timestamp jumps, offline image OCR, PIN lock for sensitive notes, Trash recovery, and export to `.pdf`, `.docx`, `.pptx`, `.png`, `.md`, or `.zip`
+- **Book reading mode:** Turn pages like a book with geometric corner-fold physics (`Corner Fold`, `3D Curl`, `Slide Stack`) or swipe up to toss a page away forward
+- **Voice, privacy, and exports:** Real-time theme-matched voice visualizer during live recording & playback scrubbing with timestamp jumps, offline image OCR, PIN lock for sensitive notes, Trash recovery, and rebuilt `.pptx` export compatible with PowerPoint & Keynote (plus `.pdf`, `.docx`, `.png`, `.md`, and `.zip`)
 
 ## Still missing
 

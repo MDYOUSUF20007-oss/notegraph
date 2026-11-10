@@ -10,13 +10,21 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.PdfPageAnnotation
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
+import kotlin.coroutines.resume
 
 data class ImportedPdfInfo(
     val filePath: String,
@@ -193,4 +201,63 @@ object PdfHelper {
             canvas.drawPath(path, inkPaint)
         }
     }
+
+    /**
+     * Runs offline ML Kit text recognition on a single rasterized PDF page.
+     * Renders on [Dispatchers.IO], extracts structured text blocks, and recycles the bitmap.
+     */
+    suspend fun ocrPdfPageBlocks(
+        filePath: String,
+        pageIndex: Int,
+        targetWidthPx: Int = 1500,
+        sharedRecognizer: TextRecognizer? = null
+    ): List<String> {
+        val bitmap = withContext(Dispatchers.IO) {
+            renderPageBitmap(filePath, pageIndex, targetWidthPx)
+        } ?: return emptyList()
+
+        val ownsRecognizer = sharedRecognizer == null
+        val recognizer = sharedRecognizer ?: TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+
+        return try {
+            suspendCancellableCoroutine { cont ->
+                try {
+                    val image = InputImage.fromBitmap(bitmap, 0)
+                    recognizer.process(image)
+                        .addOnSuccessListener { visionText ->
+                            val blocks = visionText.textBlocks
+                                .map { it.text.trim() }
+                                .filter { it.isNotBlank() }
+                            val result = if (blocks.isNotEmpty()) {
+                                blocks
+                            } else {
+                                visionText.text.trim()
+                                    .takeIf { it.isNotBlank() }
+                                    ?.let { listOf(it) }
+                                    ?: emptyList()
+                            }
+                            if (cont.isActive) cont.resume(result)
+                        }
+                        .addOnFailureListener {
+                            if (cont.isActive) cont.resume(emptyList())
+                        }
+                } catch (_: Exception) {
+                    if (cont.isActive) cont.resume(emptyList())
+                }
+            }
+        } finally {
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+            if (ownsRecognizer) {
+                try {
+                    recognizer.close()
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    fun createOcrRecognizer(): TextRecognizer =
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 }

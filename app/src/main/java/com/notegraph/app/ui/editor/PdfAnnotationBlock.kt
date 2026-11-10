@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -109,13 +110,15 @@ private val DarkPdfColorMatrix = ColorMatrix(
 @Composable
 fun PdfAnnotationBlock(
     block: NoteBlock.PdfBlock,
-    onBlockUpdated: (NoteBlock.PdfBlock) -> Unit
+    onBlockUpdated: (NoteBlock.PdfBlock) -> Unit,
+    onExtractTextToNote: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isImporting by remember { mutableStateOf(false) }
     var importError by remember { mutableStateOf<String?>(null) }
     var showFullscreenStudio by remember { mutableStateOf(false) }
+    var showOcrWindow by remember { mutableStateOf(false) }
 
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -180,14 +183,13 @@ fun PdfAnnotationBlock(
             }
         } else {
             // Document Header Bar
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = block.fileName.ifBlank { "Document.pdf" },
                         style = MaterialTheme.typography.titleSmall,
@@ -207,17 +209,34 @@ fun PdfAnnotationBlock(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OutlinedButton(
-                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val activePreset = ThemeManager.currentGradient
+                    FilledTonalButton(
+                        onClick = { showOcrWindow = true },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = activePreset.accentStart.copy(alpha = 0.16f),
+                            contentColor = activePreset.accentStart
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
-                        Text("Replace", style = MaterialTheme.typography.labelSmall)
+                        Icon(
+                            Icons.Rounded.DocumentScanner,
+                            contentDescription = "OCR Extract PDF Text",
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("OCR Text", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                     }
                     FilledTonalButton(
                         onClick = { showFullscreenStudio = true },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
                         Icon(
@@ -227,6 +246,13 @@ fun PdfAnnotationBlock(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text("Focus Studio", style = MaterialTheme.typography.labelSmall)
+                    }
+                    OutlinedButton(
+                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("Replace", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -277,10 +303,20 @@ fun PdfAnnotationBlock(
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
-                            FilledTonalButton(onClick = { showFullscreenStudio = false }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close Studio", modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Done")
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilledTonalButton(
+                                    onClick = { showOcrWindow = true },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Rounded.DocumentScanner, contentDescription = "OCR PDF Text", modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("OCR")
+                                }
+                                FilledTonalButton(onClick = { showFullscreenStudio = false }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close Studio", modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Done")
+                                }
                             }
                         }
                     }
@@ -296,6 +332,31 @@ fun PdfAnnotationBlock(
                 }
             }
         }
+    }
+
+    if (showOcrWindow && block.filePath.isNotBlank()) {
+        PdfOcrWindowDialog(
+            filePath = block.filePath,
+            fileName = block.fileName,
+            pageCount = block.pageCount,
+            currentPage = block.currentPage,
+            onDismiss = { showOcrWindow = false },
+            onInsertIntoNote = { extractedText ->
+                showOcrWindow = false
+                if (onExtractTextToNote != null) {
+                    onExtractTextToNote(extractedText)
+                } else {
+                    val existing = PdfHelper.parseAnnotations(block.annotationsJson)
+                    val curIdx = block.currentPage.coerceIn(0, (block.pageCount - 1).coerceAtLeast(0))
+                    val curAnn = existing.find { it.pageIndex == curIdx } ?: PdfPageAnnotation(curIdx)
+                    val mergedNote = if (curAnn.pageNote.isBlank()) extractedText
+                    else "${curAnn.pageNote}\n$extractedText"
+                    val updated = existing.filter { it.pageIndex != curIdx } +
+                        curAnn.copy(pageNote = mergedNote)
+                    onBlockUpdated(block.copy(annotationsJson = PdfHelper.encodeAnnotations(updated)))
+                }
+            }
+        )
     }
 }
 

@@ -58,7 +58,10 @@ import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +89,7 @@ fun EditorScreen(
     var pendingAudioSeekMs by remember { mutableStateOf<Long?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val json = remember { Json { ignoreUnknownKeys = true } }
     val activePreset = ThemeManager.currentGradient
 
@@ -166,13 +170,19 @@ fun EditorScreen(
     ) { uri: Uri? ->
         uri ?: return@rememberLauncherForActivityResult
         note?.let { n ->
-            try {
-                context.contentResolver.openOutputStream(uri)?.use { os ->
-                    ExportManager.exportPptx(n, os)
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        val os = context.contentResolver.openOutputStream(uri)
+                            ?: throw IllegalStateException("Unable to open output stream")
+                        os.use { stream ->
+                            ExportManager.exportPptx(context, n, stream)
+                        }
+                    }
+                    Toast.makeText(context, "PPTX presentation saved", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "PPTX export failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 }
-                Toast.makeText(context, "PPTX saved successfully", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(context, "PPTX export failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -720,6 +730,23 @@ fun EditorScreen(
                                             block = block,
                                             onBlockUpdated = { updatedPdf ->
                                                 viewModel.updateBlock(updatedPdf)
+                                            },
+                                            onExtractTextToNote = { extracted ->
+                                                val pdfTitle = block.fileName.ifBlank { "PDF" }
+                                                val current = contentField.text
+                                                val appended = if (current.isBlank()) {
+                                                    extracted
+                                                } else {
+                                                    "$current\n\n--- PDF OCR ($pdfTitle) ---\n$extracted"
+                                                }
+                                                contentField = TextFieldValue(appended, TextRange(appended.length))
+                                                viewModel.updateContent(appended)
+                                                viewModel.saveNow(showEvent = true)
+                                                Toast.makeText(
+                                                    context,
+                                                    "Inserted ${extracted.length} chars into note",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             }
                                         )
                                     }
