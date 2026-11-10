@@ -30,7 +30,28 @@ jobs:
           gradle-version: '8.7'
 
       - name: Run Android Unit Tests & Build APK
-        run: gradle testDebugUnitTest assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! gradle testDebugUnitTest assembleDebug --stacktrace 2>&1 | tee android-build.log; then
+            grep -E "^(e: |> Task .* FAILED|.* > .* FAILED|Caused by:|java\.|kotlin\.|org\.junit\.|AssertionError|Execution failed)" android-build.log | head -n 30 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            tail -n 35 android-build.log | grep -v "^$" | head -n 15 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
+
+      - name: Upload Android Failure Diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoteGraph-Android-Failure-Logs
+          path: |
+            android-build.log
+            app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
 
       - name: Rename APK to notegraph.apk
         run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/notegraph.apk
