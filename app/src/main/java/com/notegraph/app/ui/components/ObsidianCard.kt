@@ -81,7 +81,6 @@ object ObsidianTokens {
      * when illuminating dark obsidian borders and glows, while keeping vibrant accents untouched.
      */
     fun resolveAccent(rawAccent: Color): Color {
-        if (ThemeManager.isLuxuryUi) return rawAccent
         return if (rawAccent.luminance() < 0.12f) {
             lerp(rawAccent, Color.White, 0.36f)
         } else {

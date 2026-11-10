@@ -10,6 +10,7 @@ import com.notegraph.app.ui.editor.ExportManager
 import com.notegraph.app.ui.editor.PptxExporter
 import com.notegraph.app.ui.theme.AppThemeMode
 import com.notegraph.app.ui.theme.ThemeManager
+import com.notegraph.app.ui.theme.UiEngineMode
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -154,9 +155,28 @@ class PptxExporterTest {
     @Test
     fun `exportPptx adapts colors to active NoteGraph theme`() {
         val prevTheme = ThemeManager.currentTheme
+        val prevEngine = ThemeManager.uiEngine
         try {
-            ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
             val note = NoteEntity(id = "k", title = "Kindle Deck", content = "Paper tone check", folderId = null)
+
+            // 1. Bespoke Luxury engine curated palette
+            ThemeManager.setUiEngine(UiEngineMode.BESPOKE_LUXURY)
+            ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
+            val luxKindleOut = ByteArrayOutputStream()
+            ExportManager.exportPptx(note, luxKindleOut)
+            val luxKindleSlide = String(unzipEntries(luxKindleOut.toByteArray()).getValue("ppt/slides/slide1.xml"), Charsets.UTF_8)
+            assertTrue(luxKindleSlide.contains("F4F1EA"))
+
+            ThemeManager.setTheme(AppThemeMode.DEEP_PURPLE_AMOLED)
+            val luxAmoledOut = ByteArrayOutputStream()
+            ExportManager.exportPptx(note, luxAmoledOut)
+            val luxAmoledSlide = String(unzipEntries(luxAmoledOut.toByteArray()).getValue("ppt/slides/slide1.xml"), Charsets.UTF_8)
+            assertTrue(luxAmoledSlide.contains("000000"))
+            assertTrue(luxAmoledSlide.contains("8B5CF6"))
+
+            // 2. Classic UI engine gradient palette
+            ThemeManager.setUiEngine(UiEngineMode.CLASSIC)
+            ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
             val kindleOut = ByteArrayOutputStream()
             ExportManager.exportPptx(note, kindleOut)
             val kindleSlide = String(unzipEntries(kindleOut.toByteArray()).getValue("ppt/slides/slide1.xml"), Charsets.UTF_8)
@@ -168,6 +188,7 @@ class PptxExporterTest {
             val amoledSlide = String(unzipEntries(amoledOut.toByteArray()).getValue("ppt/slides/slide1.xml"), Charsets.UTF_8)
             assertTrue(amoledSlide.contains("0B0714"))
         } finally {
+            ThemeManager.setUiEngine(prevEngine)
             ThemeManager.setTheme(prevTheme)
         }
     }
