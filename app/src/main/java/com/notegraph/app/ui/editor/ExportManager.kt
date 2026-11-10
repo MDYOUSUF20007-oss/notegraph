@@ -220,6 +220,20 @@ object ExportManager {
                         yPos += 8f
                     }
                 }
+                is NoteBlock.ChecklistBlock -> {
+                    ensureSpace(28f)
+                    drawWrappedText(block.title.ifBlank { "To-Do Checklist" }, bodyPaint, 6f)
+                    for (item in block.items) {
+                        val prefix = if (item.isChecked) "[✓]" else "[ ]"
+                        val lineText = "$prefix ${item.text.ifBlank { "(empty task)" }}"
+                        val itemPaint = Paint(bodyPaint).apply {
+                            isStrikeThruText = item.isChecked
+                            color = if (item.isChecked) Color.GRAY else Color.DKGRAY
+                        }
+                        drawWrappedText(lineText, itemPaint, 5f)
+                    }
+                    yPos += 10f
+                }
             }
         }
 
@@ -290,6 +304,15 @@ object ExportManager {
                         }
                     }
                 }
+                is NoteBlock.ChecklistBlock -> {
+                    val title = block.title.ifBlank { "To-Do Checklist" }
+                    sb.append("""<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>${escapeXml(title)}</w:t></w:r></w:p>""")
+                    for (item in block.items) {
+                        val prefix = if (item.isChecked) "☑" else "☐"
+                        val strikeTag = if (item.isChecked) """<w:strike/><w:color w:val="777777"/>""" else ""
+                        sb.append("""<w:p><w:r><w:rPr>$strikeTag<w:sz w:val="24"/></w:rPr><w:t>${escapeXml("$prefix ${item.text}")}</w:t></w:r></w:p>""")
+                    }
+                }
             }
         }
 
@@ -356,6 +379,13 @@ object ExportManager {
                         lines.addAll(block.extractedOcrText.lines())
                     }
                     slides.add(SlideData("Image & OCR", lines))
+                }
+                is NoteBlock.ChecklistBlock -> {
+                    val lines = block.items.map { item ->
+                        val prefix = if (item.isChecked) "☑" else "☐"
+                        "$prefix ${item.text.ifBlank { "(task)" }}"
+                    }.ifEmpty { listOf("(No tasks)") }
+                    slides.add(SlideData(block.title.ifBlank { "To-Do Checklist" }, lines))
                 }
             }
         }
@@ -556,6 +586,10 @@ object ExportManager {
                     }
                     h
                 }
+                is NoteBlock.ChecklistBlock -> {
+                    val itemLines = block.items.sumOf { ((it.text.length / 36) + 1) }.coerceAtLeast(1)
+                    60f + (itemLines * 36f)
+                }
             }
         }
 
@@ -718,6 +752,18 @@ object ExportManager {
                         yPos += 10f
                     }
                 }
+                is NoteBlock.ChecklistBlock -> {
+                    drawTextWrapped(block.title.ifBlank { "To-Do Checklist" }, bodyPaint, 8f)
+                    for (item in block.items) {
+                        val prefix = if (item.isChecked) "☑" else "☐"
+                        val itemPaint = Paint(bodyPaint).apply {
+                            isStrikeThruText = item.isChecked
+                            color = if (item.isChecked) Color.GRAY else Color.rgb(33, 33, 33)
+                        }
+                        drawTextWrapped("$prefix ${item.text.ifBlank { "(task)" }}", itemPaint, 8f)
+                    }
+                    yPos += 14f
+                }
             }
         }
 
@@ -759,6 +805,14 @@ object ExportManager {
                     if (!block.extractedOcrText.isNullOrBlank()) {
                         sb.appendLine()
                         sb.appendLine("> OCR Text: ${block.extractedOcrText}")
+                    }
+                    sb.appendLine()
+                }
+                is NoteBlock.ChecklistBlock -> {
+                    sb.appendLine("### ${block.title.ifBlank { "To-Do Checklist" }}")
+                    for (item in block.items) {
+                        val mark = if (item.isChecked) "x" else " "
+                        sb.appendLine("- [$mark] ${item.text}")
                     }
                     sb.appendLine()
                 }

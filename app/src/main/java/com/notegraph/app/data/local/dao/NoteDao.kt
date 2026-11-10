@@ -15,6 +15,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :noteId")
     suspend fun getNoteById(noteId: String): NoteEntity?
 
+    @Query("SELECT * FROM notes WHERE isTrash = 0 AND title = :title LIMIT 1")
+    suspend fun getNoteByTitle(title: String): NoteEntity?
+
     @Query("SELECT * FROM notes WHERE isTrash = 1 ORDER BY trashTimestamp DESC")
     fun getTrashNotes(): Flow<List<NoteEntity>>
 
@@ -23,6 +26,12 @@ interface NoteDao {
 
     @Update
     suspend fun updateNote(note: NoteEntity)
+
+    @Query("UPDATE notes SET folderId = :folderId, updatedAt = :updatedAt WHERE id = :noteId")
+    suspend fun moveNoteToFolder(noteId: String, folderId: String?, updatedAt: Long)
+
+    @Query("UPDATE notes SET folderId = NULL WHERE folderId = :folderId")
+    suspend fun unfileNotesInFolder(folderId: String)
 
     @Query("UPDATE notes SET isTrash = :isTrash, trashTimestamp = :timestamp WHERE id = :noteId")
     suspend fun setTrashState(noteId: String, isTrash: Boolean, timestamp: Long?)

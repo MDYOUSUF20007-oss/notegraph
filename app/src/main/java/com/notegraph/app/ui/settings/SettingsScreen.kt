@@ -41,7 +41,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selectedTheme by remember { mutableStateOf(ThemeManager.currentTheme) }
+    val selectedTheme = ThemeManager.currentTheme
     var isBackingUp by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
 
@@ -155,15 +155,14 @@ fun SettingsScreen(
             // 1. Deep Purple AMOLED
             ThemeOptionCard(
                 title = "Deep Purple AMOLED",
-                description = "True OLED Black (0xFF000000), Electric Violet accent (0xFF8B5CF6) & purple-tinted borders.",
+                description = "True OLED Black (#000000), Royal Night surface (#150A26), Electric Violet accent (#A855F7), Stark White typography.",
                 previewBg = NoteGraphColors.DeepPurpleAmoledBackground,
                 previewAccent = NoteGraphColors.DeepPurpleAmoledAccent,
                 previewBorder = NoteGraphColors.DeepPurpleAmoledCardBorder,
                 previewText = NoteGraphColors.DeepPurpleAmoledText,
                 isSelected = selectedTheme == AppThemeMode.DEEP_PURPLE_AMOLED,
                 onClick = {
-                    selectedTheme = AppThemeMode.DEEP_PURPLE_AMOLED
-                    ThemeManager.currentTheme = AppThemeMode.DEEP_PURPLE_AMOLED
+                    ThemeManager.setTheme(AppThemeMode.DEEP_PURPLE_AMOLED)
                 }
             )
 
@@ -172,15 +171,14 @@ fun SettingsScreen(
             // 2. Kindle Parchment
             ThemeOptionCard(
                 title = "Kindle Parchment",
-                description = "Warm paper background (0xFFF4F1EA), Charcoal text (0xFF2C2C2C), Sepia divider (0xFFDCD6CD) & leather accent.",
+                description = "Warm Paper (#F4F1EA), Soft Linen surface (#EAE4D7), Charcoal Ink text (#2C2C2C), Warm Sepia accent (#B45309).",
                 previewBg = NoteGraphColors.KindleParchmentBackground,
                 previewAccent = NoteGraphColors.KindleParchmentAccent,
                 previewBorder = NoteGraphColors.KindleParchmentSepiaDivider,
                 previewText = NoteGraphColors.KindleParchmentCharcoalText,
                 isSelected = selectedTheme == AppThemeMode.KINDLE_PARCHMENT,
                 onClick = {
-                    selectedTheme = AppThemeMode.KINDLE_PARCHMENT
-                    ThemeManager.currentTheme = AppThemeMode.KINDLE_PARCHMENT
+                    ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
                 }
             )
 
@@ -189,15 +187,14 @@ fun SettingsScreen(
             // 3. Matte Studio
             ThemeOptionCard(
                 title = "Matte Studio",
-                description = "Subtle Slate (0xFF1E2229), Card Surface (0xFF262B35) & Nord Grid Border (0xFF3B4252).",
+                description = "Slate Matte (#1E2229), Graphite Box (#262B35), Crisp Silver text (#E2E8F0), Studio Cyan accent (#38BDF8).",
                 previewBg = NoteGraphColors.MatteStudioBackground,
                 previewAccent = NoteGraphColors.MatteStudioAccent,
                 previewBorder = NoteGraphColors.MatteStudioGridBorder,
                 previewText = NoteGraphColors.MatteStudioText,
                 isSelected = selectedTheme == AppThemeMode.MATTE_STUDIO,
                 onClick = {
-                    selectedTheme = AppThemeMode.MATTE_STUDIO
-                    ThemeManager.currentTheme = AppThemeMode.MATTE_STUDIO
+                    ThemeManager.setTheme(AppThemeMode.MATTE_STUDIO)
                 }
             )
 
@@ -257,7 +254,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(6.dp))
             Text("NoteGraph Luxury Edition", style = MaterialTheme.typography.bodyMedium)
-            Text("Version 1.3 • Rainbow Icon & Vanishing Pen • 3D Book Page-Curl Mode", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            Text("Version 2.0 • Tri-Theme Matrix • Interactive Checklists • Drag & Drop Folders", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
             Spacer(Modifier.height(24.dp))
         }
     }

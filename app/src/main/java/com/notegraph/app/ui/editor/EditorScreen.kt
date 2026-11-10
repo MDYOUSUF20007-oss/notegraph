@@ -5,6 +5,8 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -18,12 +20,14 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
+import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.serialization.json.Json
 
@@ -40,8 +44,8 @@ fun EditorScreen(
     val backlinks by viewModel.backlinks.collectAsState()
     val blocks by viewModel.blocks.collectAsState()
 
-    var title by remember(note) { mutableStateOf(note?.title ?: "") }
-    var content by remember(note) { mutableStateOf(note?.content ?: "") }
+    var title by remember(note?.id) { mutableStateOf(note?.title ?: "") }
+    var content by remember(note?.id) { mutableStateOf(note?.content ?: "") }
     var showExportSheet by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -299,14 +303,18 @@ fun EditorScreen(
             )
         },
         bottomBar = {
-            // Multimedia Toolbar
+            // Multimedia & Checklist Toolbar
             BottomAppBar(tonalElevation = 4.dp) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    TextButton(onClick = { viewModel.addChecklistBlock() }) {
+                        Text("☑ To-Do")
+                    }
                     TextButton(onClick = { viewModel.addInkBlock() }) {
                         Text("✏️ Drawing")
                     }
@@ -340,15 +348,42 @@ fun EditorScreen(
                 placeholder = { Text("Start typing notes or use [[Wiki-Links]]...") }
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Multimedia blocks
+            // Quick add actions directly underneath the note
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AssistChip(
+                    onClick = { viewModel.addChecklistBlock() },
+                    label = { Text("☑ Add To-Do Checklist") }
+                )
+                AssistChip(
+                    onClick = { viewModel.addInkBlock() },
+                    label = { Text("✏️ Add Sketch") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Multimedia & Checklist blocks
             blocks.forEach { block ->
                 key(block.id) {
+                    val blockLabel = when (block) {
+                        is NoteBlock.TextBlock -> "Text Note"
+                        is NoteBlock.InkBlock -> "Ink Canvas"
+                        is NoteBlock.AudioBlock -> "Voice Recording"
+                        is NoteBlock.ImageBlock -> "Image & OCR"
+                        is NoteBlock.ChecklistBlock -> "To-Do Checklist"
+                    }
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
+                        border = BorderStroke(1.dp, ThemeManager.cardBorderColor),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
@@ -357,12 +392,18 @@ fun EditorScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 8.dp),
-                                horizontalArrangement = Arrangement.End
+                                    .padding(start = 12.dp, end = 4.dp, top = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
+                                Text(
+                                    text = blockLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
                                 IconButton(
                                     onClick = { viewModel.removeBlock(block.id) },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(28.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Close,
@@ -374,7 +415,7 @@ fun EditorScreen(
 
                             when (block) {
                                 is NoteBlock.TextBlock -> {
-                                    var blockText by remember(block.text) { mutableStateOf(block.text) }
+                                    var blockText by remember(block.id) { mutableStateOf(block.text) }
                                     OutlinedTextField(
                                         value = blockText,
                                         onValueChange = { newText ->
@@ -446,6 +487,27 @@ fun EditorScreen(
                                                 else "$current\n\n--- OCR ---\n$text"
                                             content = appended
                                             viewModel.updateContent(appended)
+                                        }
+                                    )
+                                }
+
+                                is NoteBlock.ChecklistBlock -> {
+                                    ChecklistBlockUi(
+                                        block = block,
+                                        onTitleChanged = { newTitle ->
+                                            viewModel.updateChecklistTitle(block.id, newTitle)
+                                        },
+                                        onToggleItem = { itemId ->
+                                            viewModel.toggleChecklistItem(block.id, itemId)
+                                        },
+                                        onItemTextChanged = { itemId, newText ->
+                                            viewModel.updateChecklistItemText(block.id, itemId, newText)
+                                        },
+                                        onAddItem = {
+                                            viewModel.addChecklistItem(block.id)
+                                        },
+                                        onRemoveItem = { itemId ->
+                                            viewModel.removeChecklistItem(block.id, itemId)
                                         }
                                     )
                                 }

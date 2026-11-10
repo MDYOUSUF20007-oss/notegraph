@@ -42,7 +42,25 @@ sealed class NoteBlock {
         val uriString: String = "",
         val extractedOcrText: String? = null
     ) : NoteBlock()
+
+    @Serializable
+    @SerialName("checklist")
+    data class ChecklistBlock(
+        override val id: String,
+        val title: String = "To-Do Checklist",
+        val items: List<ChecklistItem> = emptyList()
+    ) : NoteBlock()
 }
+
+/**
+ * A single checkable item inside a [NoteBlock.ChecklistBlock].
+ */
+@Serializable
+data class ChecklistItem(
+    val id: String,
+    val text: String = "",
+    val isChecked: Boolean = false
+)
 
 /**
  * A single stroke point captured by the ink canvas.

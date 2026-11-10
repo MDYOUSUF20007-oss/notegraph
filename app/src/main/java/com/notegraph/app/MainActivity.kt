@@ -5,12 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.notegraph.app.navigation.NoteGraphNavGraph
 import com.notegraph.app.ui.theme.NoteGraphTheme
+import com.notegraph.app.ui.theme.ThemeManager
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ThemeManager.init(this)
         setContent {
             NoteGraphTheme {
                 NoteGraphNavGraph()

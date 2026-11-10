@@ -3,7 +3,9 @@ package com.notegraph.app.ui.editor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -25,6 +28,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.StrokePoint
+import com.notegraph.app.ui.theme.AppThemeMode
+import com.notegraph.app.ui.theme.NoteGraphColors
+import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.*
@@ -106,6 +112,33 @@ fun InkCanvas(
     // Lasso selection state
     var selectedStrokeIndices by remember { mutableStateOf(setOf<Int>()) }
 
+    val themeMode = ThemeManager.currentTheme
+    val activeInkColors = remember(themeMode) {
+        if (themeMode == AppThemeMode.KINDLE_PARCHMENT) {
+            listOf(
+                NoteGraphColors.KindleParchmentCharcoalText,
+                Color(0xFFD32F2F),
+                Color(0xFF0288D1),
+                Color(0xFF388E3C),
+                NoteGraphColors.KindleParchmentAccent
+            )
+        } else {
+            InkPresetColors
+        }
+    }
+    val activeInkColorHex = remember(themeMode) {
+        if (themeMode == AppThemeMode.KINDLE_PARCHMENT) {
+            listOf("#2C2C2C", "#D32F2F", "#0288D1", "#388E3C", "#B45309")
+        } else {
+            InkPresetColorHex
+        }
+    }
+    val canvasBackground = when (themeMode) {
+        AppThemeMode.DEEP_PURPLE_AMOLED -> Color(0xFF07030F)
+        AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentBackground
+        AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioBackground
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -115,6 +148,7 @@ fun InkCanvas(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -167,7 +201,7 @@ fun InkCanvas(
         ) {
             // Color palette dots
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                InkPresetColors.forEachIndexed { idx, color ->
+                activeInkColors.forEachIndexed { idx, color ->
                     IconButton(
                         onClick = { selectedColorIndex = idx },
                         modifier = Modifier.size(26.dp)
@@ -176,6 +210,7 @@ fun InkCanvas(
                             modifier = Modifier
                                 .size(if (idx == selectedColorIndex) 20.dp else 14.dp)
                                 .background(color, CircleShape)
+                                .border(0.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
                                 .then(
                                     if (idx == selectedColorIndex)
                                         Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
@@ -330,8 +365,9 @@ fun InkCanvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(heightDp.dp)
-                .background(Color(0xFF1E1E1E), RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
-                .pointerInput(mode, selectedColorIndex, strokeWidth, shapeSnapEnabled) {
+                .clipToBounds()
+                .background(canvasBackground, RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
+                .pointerInput(mode, selectedColorIndex, strokeWidth, shapeSnapEnabled, themeMode) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -393,7 +429,7 @@ fun InkCanvas(
 
                                             val newStroke = InkStroke(
                                                 points = finalPoints,
-                                                colorHex = InkPresetColorHex[selectedColorIndex],
+                                                colorHex = activeInkColorHex[selectedColorIndex],
                                                 strokeWidth = strokeWidth,
                                                 isHighlighter = mode == InkMode.HIGHLIGHTER,
                                                 isEraser = false
@@ -414,6 +450,52 @@ fun InkCanvas(
             // Read tick to drive continuous 60-120 FPS animation of vanishing strokes
             val _t = currentTick
 
+            // 0. Draw theme-specific surface ruling / grid
+            when (themeMode) {
+                AppThemeMode.KINDLE_PARCHMENT -> {
+                    // Cornell Ruled Sepia lines
+                    val ruleStep = 28.dp.toPx()
+                    var y = ruleStep
+                    while (y < size.height) {
+                        drawLine(
+                            color = NoteGraphColors.KindleParchmentSepiaDivider,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = 1.5f
+                        )
+                        y += ruleStep
+                    }
+                    // Cornell vertical cue margin
+                    val cueX = 48.dp.toPx()
+                    drawLine(
+                        color = NoteGraphColors.KindleParchmentAccent.copy(alpha = 0.45f),
+                        start = Offset(cueX, 0f),
+                        end = Offset(cueX, size.height),
+                        strokeWidth = 2f
+                    )
+                }
+                AppThemeMode.MATTE_STUDIO -> {
+                    // Matte Studio Dot Matrix Grid
+                    val gridStep = 24.dp.toPx()
+                    var gx = gridStep
+                    while (gx < size.width) {
+                        var gy = gridStep
+                        while (gy < size.height) {
+                            drawCircle(
+                                color = NoteGraphColors.MatteStudioGridBorder,
+                                radius = 1.6f,
+                                center = Offset(gx, gy)
+                            )
+                            gy += gridStep
+                        }
+                        gx += gridStep
+                    }
+                }
+                AppThemeMode.DEEP_PURPLE_AMOLED -> {
+                    // Pure OLED True Black zero-glare workspace
+                }
+            }
+
             // 1. Draw committed strokes
             committedStrokes.forEachIndexed { idx, stroke ->
                 if (stroke.points.size >= 2) {
@@ -426,12 +508,18 @@ fun InkCanvas(
                     val isSelected = idx in selectedStrokeIndices
                     val alpha = if (stroke.isHighlighter) 0.4f else 1f
                     val strokeColor = if (isSelected) {
-                        Color(0xFF8B5CF6) // Highlight selected strokes in Electric Violet
+                        NoteGraphColors.DeepPurpleAmoledAccent
                     } else {
+                        val rawHex = stroke.colorHex
+                        val adaptedHex = when {
+                            themeMode == AppThemeMode.KINDLE_PARCHMENT && rawHex.equals("#FFFFFF", ignoreCase = true) -> "#2C2C2C"
+                            themeMode != AppThemeMode.KINDLE_PARCHMENT && rawHex.equals("#2C2C2C", ignoreCase = true) -> "#FFFFFF"
+                            else -> rawHex
+                        }
                         try {
-                            Color(android.graphics.Color.parseColor(stroke.colorHex)).copy(alpha = alpha)
+                            Color(android.graphics.Color.parseColor(adaptedHex)).copy(alpha = alpha)
                         } catch (e: Exception) {
-                            Color.White.copy(alpha = alpha)
+                            (if (themeMode == AppThemeMode.KINDLE_PARCHMENT) NoteGraphColors.KindleParchmentCharcoalText else Color.White).copy(alpha = alpha)
                         }
                     }
 
@@ -512,9 +600,9 @@ fun InkCanvas(
                         }
                         val alpha = if (mode == InkMode.HIGHLIGHTER) 0.4f else 1f
                         val color = try {
-                            Color(android.graphics.Color.parseColor(InkPresetColorHex[selectedColorIndex])).copy(alpha = alpha)
+                            Color(android.graphics.Color.parseColor(activeInkColorHex[selectedColorIndex])).copy(alpha = alpha)
                         } catch (e: Exception) {
-                            Color.White.copy(alpha = alpha)
+                            activeInkColors[selectedColorIndex].copy(alpha = alpha)
                         }
                         drawPath(
                             path = path,

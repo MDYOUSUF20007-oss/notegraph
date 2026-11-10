@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -423,6 +424,50 @@ private fun BookPageSurface(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color(0xFF4A4A4A)
                                         )
+                                    }
+                                }
+                            }
+                        }
+                        is NoteBlock.ChecklistBlock -> {
+                            val checkedCount = block.items.count { it.isChecked }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFECE7DE),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = block.title.ifBlank { "To-Do Checklist" },
+                                            fontFamily = FontFamily.Serif,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = Color(0xFF2C2C2C)
+                                        )
+                                        Text(
+                                            text = "$checkedCount/${block.items.size}",
+                                            fontFamily = FontFamily.Serif,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF8B4513)
+                                        )
+                                    }
+                                    if (block.items.isNotEmpty()) {
+                                        Spacer(Modifier.height(6.dp))
+                                        block.items.forEach { item ->
+                                            val prefix = if (item.isChecked) "☑" else "☐"
+                                            Text(
+                                                text = "$prefix ${item.text}",
+                                                fontFamily = FontFamily.Serif,
+                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
+                                                ),
+                                                color = if (item.isChecked) Color(0xFF757575) else Color(0xFF2C2C2C),
+                                                modifier = Modifier.padding(vertical = 2.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }

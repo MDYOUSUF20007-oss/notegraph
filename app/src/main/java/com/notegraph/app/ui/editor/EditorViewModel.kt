@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.notegraph.app.data.local.dao.LinkDao
 import com.notegraph.app.data.local.dao.NoteDao
+import com.notegraph.app.data.local.entity.ChecklistItem
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.LinkEntity
 import com.notegraph.app.data.local.entity.NoteBlock
@@ -162,6 +163,59 @@ class EditorViewModel @Inject constructor(
         appendBlock(NoteBlock.ImageBlock(id = UUID.randomUUID().toString()))
     }
 
+    fun addChecklistBlock() {
+        appendBlock(
+            NoteBlock.ChecklistBlock(
+                id = UUID.randomUUID().toString(),
+                title = "To-Do Checklist",
+                items = listOf(ChecklistItem(id = UUID.randomUUID().toString(), text = "", isChecked = false))
+            )
+        )
+    }
+
+    fun updateChecklistTitle(blockId: String, newTitle: String) {
+        val block = _blocks.value.find { it.id == blockId }
+        if (block is NoteBlock.ChecklistBlock) {
+            updateBlock(block.copy(title = newTitle))
+        }
+    }
+
+    fun toggleChecklistItem(blockId: String, itemId: String) {
+        val block = _blocks.value.find { it.id == blockId }
+        if (block is NoteBlock.ChecklistBlock) {
+            val updatedItems = block.items.map { item ->
+                if (item.id == itemId) item.copy(isChecked = !item.isChecked) else item
+            }
+            updateBlock(block.copy(items = updatedItems))
+        }
+    }
+
+    fun updateChecklistItemText(blockId: String, itemId: String, newText: String) {
+        val block = _blocks.value.find { it.id == blockId }
+        if (block is NoteBlock.ChecklistBlock) {
+            val updatedItems = block.items.map { item ->
+                if (item.id == itemId) item.copy(text = newText) else item
+            }
+            updateBlock(block.copy(items = updatedItems))
+        }
+    }
+
+    fun addChecklistItem(blockId: String) {
+        val block = _blocks.value.find { it.id == blockId }
+        if (block is NoteBlock.ChecklistBlock) {
+            val newItem = ChecklistItem(id = UUID.randomUUID().toString(), text = "", isChecked = false)
+            updateBlock(block.copy(items = block.items + newItem))
+        }
+    }
+
+    fun removeChecklistItem(blockId: String, itemId: String) {
+        val block = _blocks.value.find { it.id == blockId }
+        if (block is NoteBlock.ChecklistBlock) {
+            val updatedItems = block.items.filter { it.id != itemId }
+            updateBlock(block.copy(items = updatedItems))
+        }
+    }
+
     fun updateBlock(updated: NoteBlock) {
         _blocks.value = _blocks.value.map { if (it.id == updated.id) updated else it }
         syncBlocksToNote()
@@ -248,7 +302,7 @@ class EditorViewModel @Inject constructor(
     }
 
     /**
-     * Gathers all text across note content and all text-containing blocks (TextBlocks, Image OCR text).
+     * Gathers all text across note content and all text-containing blocks (TextBlocks, Image OCR text, ChecklistBlocks).
      */
     private fun getCombinedNoteText(): String {
         val contentText = _note.value?.content.orEmpty()
@@ -256,6 +310,10 @@ class EditorViewModel @Inject constructor(
             when (block) {
                 is NoteBlock.TextBlock -> block.text
                 is NoteBlock.ImageBlock -> block.extractedOcrText
+                is NoteBlock.ChecklistBlock -> {
+                    val itemsText = block.items.joinToString("\n") { it.text }
+                    listOf(block.title, itemsText).filter { it.isNotBlank() }.joinToString("\n")
+                }
                 else -> null
             }
         }
