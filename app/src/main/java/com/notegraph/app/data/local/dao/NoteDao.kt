@@ -12,6 +12,9 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE isTrash = 0 ORDER BY isPinned DESC, updatedAt DESC")
     suspend fun getAllNotesOnce(): List<NoteEntity>
 
+    @Query("SELECT * FROM notes")
+    suspend fun getAllNotesIncludingTrashOnce(): List<NoteEntity>
+
     @Query("SELECT * FROM notes WHERE id = :noteId")
     suspend fun getNoteById(noteId: String): NoteEntity?
 
@@ -24,6 +27,9 @@ interface NoteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNote(note: NoteEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertNotes(notes: List<NoteEntity>)
+
     @Update
     suspend fun updateNote(note: NoteEntity)
 
@@ -33,8 +39,13 @@ interface NoteDao {
     @Query("UPDATE notes SET folderId = NULL WHERE folderId = :folderId")
     suspend fun unfileNotesInFolder(folderId: String)
 
-    @Query("UPDATE notes SET isTrash = :isTrash, trashTimestamp = :timestamp WHERE id = :noteId")
-    suspend fun setTrashState(noteId: String, isTrash: Boolean, timestamp: Long?)
+    @Query("UPDATE notes SET isTrash = :isTrash, trashTimestamp = :timestamp, updatedAt = :updatedAt WHERE id = :noteId")
+    suspend fun setTrashState(
+        noteId: String,
+        isTrash: Boolean,
+        timestamp: Long?,
+        updatedAt: Long = System.currentTimeMillis()
+    )
 
     @Query("DELETE FROM notes WHERE id = :noteId")
     suspend fun deleteNoteCompletely(noteId: String)

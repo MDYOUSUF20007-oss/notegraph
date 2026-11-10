@@ -16,5 +16,7 @@ data class FolderEntity(
     @ColumnInfo(defaultValue = "#A855F7")
     val colorHex: String = "#A855F7",
     @ColumnInfo(defaultValue = "0")
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "0")
+    val updatedAt: Long = System.currentTimeMillis()
 )

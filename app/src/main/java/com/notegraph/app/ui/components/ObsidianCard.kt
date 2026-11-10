@@ -41,31 +41,47 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.notegraph.app.ui.theme.AppThemeMode
+import com.notegraph.app.ui.theme.ThemeManager
 
 /**
- * Design tokens for NoteGraph's Frosted Two-Tier Obsidian surface system.
- * Always pairs dark obsidian tones with accessible high-contrast foreground inks
- * so cards stay legible across AMOLED, Kindle Paper, and Matte Studio themes.
+ * Design tokens for NoteGraph cards and architectural surfaces.
+ * Automatically adapts between the legacy frosted obsidian tokens in Classic UI
+ * and curated flat 1px-bordered luxury tokens in Bespoke Luxury mode.
  */
 object ObsidianTokens {
     val DefaultAccent = Color(0xFF8B5CF6)
     val SurfaceTop = Color(0xFF1A1A1E)
     val SurfaceBottom = Color(0xFF0C0C0E)
     val FooterSurface = Color(0xFF050507).copy(alpha = 0.85f)
-    val IconTileSurface = Color(0xFF0A0A0D)
-    val StatTileSurface = Color(0xFF0E0E13)
-    val DividerRule = Color.White.copy(alpha = 0.08f)
 
-    val TextPrimary = Color(0xFFF8FAFC)
-    val TextSecondary = Color(0xFFCBD5E1)
-    val TextMuted = Color(0xFF94A3B8)
-    val FooterText = Color(0xFFA1A1AA)
+    val IconTileSurface: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.recessedSurface else Color(0xFF0A0A0D)
+
+    val StatTileSurface: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.recessedSurface else Color(0xFF0E0E13)
+
+    val DividerRule: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.dividerRule else Color.White.copy(alpha = 0.08f)
+
+    val TextPrimary: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.textPrimary else Color(0xFFF8FAFC)
+
+    val TextSecondary: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.textSecondary else Color(0xFFCBD5E1)
+
+    val TextMuted: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.textMuted else Color(0xFF94A3B8)
+
+    val FooterText: Color
+        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.footerText else Color(0xFFA1A1AA)
 
     /**
      * Ensures ultra-dark accents (such as dark charcoal paper presets) remain luminous
-     * when illuminating obsidian borders and glows, while keeping vibrant accents untouched.
+     * when illuminating dark obsidian borders and glows, while keeping vibrant accents untouched.
      */
     fun resolveAccent(rawAccent: Color): Color {
+        if (ThemeManager.isLuxuryUi) return rawAccent
         return if (rawAccent.luminance() < 0.12f) {
             lerp(rawAccent, Color.White, 0.36f)
         } else {
@@ -74,9 +90,12 @@ object ObsidianTokens {
     }
 
     /**
-     * Produces a bright metallic accent ink readable for monospace tags and stats on #1A1A1E.
+     * Produces a legible accent ink adjusted for the active card surface luminance.
      */
     fun readableAccentInk(accent: Color): Color {
+        if (ThemeManager.isLuxuryUi && ThemeManager.currentTheme == AppThemeMode.KINDLE_PARCHMENT) {
+            return if (accent.luminance() > 0.30f) lerp(accent, Color(0xFF1E1B18), 0.38f) else accent
+        }
         return if (accent.luminance() < 0.28f) {
             lerp(accent, Color.White, 0.24f)
         } else {
@@ -90,9 +109,9 @@ object ObsidianTokens {
 }
 
 /**
- * Frosted Two-Tier Obsidian Card for NoteGraph.
- * Styled with AMOLED deep tones (#1A1A1E -> #0C0C0E), active accent gradient border,
- * top specular metallic highlight line, floating colored shadow, and an untruncated Tier 2 footer.
+ * Adaptive surface card for NoteGraph:
+ * - Bespoke Luxury (Default): Zero drop shadows, flat theme surface, razor-thin 1px border, clean monospace footer.
+ * - Classic UI: Legacy frosted two-tier obsidian glass with glow flare, specular highlight & floating shadow.
  */
 @Composable
 fun ObsidianCard(
@@ -104,6 +123,51 @@ fun ObsidianCard(
     headerContent: @Composable ColumnScope.() -> Unit,
     footerContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    if (ThemeManager.isLuxuryUi) {
+        val t = ThemeManager.luxuryTokens
+        val shape = RoundedCornerShape(8.dp)
+        var luxModifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = verticalPadding)
+            .clip(shape)
+            .background(t.elevatedSurface)
+            .border(width = 1.dp, color = t.borderHairline, shape = shape)
+
+        if (onClick != null) {
+            luxModifier = luxModifier.clickable(onClick = onClick)
+        }
+
+        Column(modifier = luxModifier) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(headerPadding)
+            ) {
+                CompositionLocalProvider(LocalContentColor provides t.textPrimary) {
+                    headerContent()
+                }
+            }
+
+            if (footerContent != null) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = t.dividerRule
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(t.recessedSurface)
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    CompositionLocalProvider(LocalContentColor provides t.footerText) {
+                        footerContent()
+                    }
+                }
+            }
+        }
+        return
+    }
+
     val effectiveAccent = ObsidianTokens.resolveAccent(accentColor)
     val shape = RoundedCornerShape(16.dp)
     val specularCore = lerp(effectiveAccent, Color.White, 0.58f)
@@ -210,7 +274,8 @@ fun ObsidianCard(
 }
 
 /**
- * Illuminated rounded icon frame matching the luxury left emblem in ObsidianCard.
+ * Icon frame adapting between crisp hairline architectural frame (Luxury)
+ * and illuminated rounded icon emblem (Classic).
  */
 @Composable
 fun ObsidianIconTile(
@@ -221,6 +286,27 @@ fun ObsidianIconTile(
     size: Dp = 44.dp,
     iconSize: Dp = 20.dp
 ) {
+    if (ThemeManager.isLuxuryUi) {
+        val t = ThemeManager.luxuryTokens
+        val tileShape = RoundedCornerShape(6.dp)
+        Box(
+            modifier = modifier
+                .size(size)
+                .clip(tileShape)
+                .background(t.recessedSurface)
+                .border(width = 1.dp, color = t.borderHairline, shape = tileShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = if (accentColor == t.accent) t.accent else ObsidianTokens.readableAccentInk(accentColor),
+                modifier = Modifier.size(iconSize)
+            )
+        }
+        return
+    }
+
     val effectiveAccent = ObsidianTokens.resolveAccent(accentColor)
     val tileShape = RoundedCornerShape((size.value * 0.28f).dp)
     val rimTop = lerp(effectiveAccent, Color.White, 0.32f)
@@ -265,7 +351,8 @@ fun ObsidianIconTile(
 }
 
 /**
- * Compact metallic gradient pill badge (e.g. PINNED, LOCKED, HUB, ACTIVE).
+ * Compact tag badge: sharp hairline monospace tag in Luxury mode,
+ * metallic sheen gradient pill in Classic mode.
  */
 @Composable
 fun ObsidianMetallicBadge(
@@ -273,6 +360,36 @@ fun ObsidianMetallicBadge(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    if (ThemeManager.isLuxuryUi) {
+        val t = ThemeManager.luxuryTokens
+        val pillShape = RoundedCornerShape(4.dp)
+        val upper = text.uppercase()
+        val isAccentState = upper == "ACTIVE" || upper == "DEFAULT" || upper == "PIN" || upper == "HUB" || upper == "LUXURY"
+        val borderColor = if (isAccentState) t.accent.copy(alpha = 0.55f) else t.borderHairline
+        val ink = if (isAccentState) ObsidianTokens.readableAccentInk(t.accent) else t.textSecondary
+
+        Box(
+            modifier = modifier
+                .clip(pillShape)
+                .background(t.recessedSurface)
+                .border(width = 1.dp, color = borderColor, shape = pillShape)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = upper,
+                color = ink,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                letterSpacing = 0.75.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+        }
+        return
+    }
+
     val effectiveAccent = ObsidianTokens.resolveAccent(accentColor)
     val pillShape = RoundedCornerShape(6.dp)
     val startSheen = lerp(effectiveAccent, Color.White, 0.34f)
@@ -308,7 +425,8 @@ fun ObsidianMetallicBadge(
 }
 
 /**
- * Illuminated right-side stat counter module (e.g., Connected Nodes / Task Progress / Vault Count).
+ * Right-side stat readout module: hairline flat technical tile in Luxury mode,
+ * illuminated glowing counter module in Classic mode.
  */
 @Composable
 fun ObsidianStatTile(
@@ -317,6 +435,39 @@ fun ObsidianStatTile(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    if (ThemeManager.isLuxuryUi) {
+        val t = ThemeManager.luxuryTokens
+        val tileShape = RoundedCornerShape(6.dp)
+        Column(
+            modifier = modifier
+                .clip(tileShape)
+                .background(t.recessedSurface)
+                .border(width = 1.dp, color = t.borderHairline, shape = tileShape)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = t.textPrimary,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = label.uppercase(),
+                color = t.textMuted,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 8.sp,
+                lineHeight = 10.sp,
+                letterSpacing = 0.8.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        return
+    }
+
     val effectiveAccent = ObsidianTokens.resolveAccent(accentColor)
     val tileShape = RoundedCornerShape(12.dp)
     val ink = ObsidianTokens.readableAccentInk(effectiveAccent)

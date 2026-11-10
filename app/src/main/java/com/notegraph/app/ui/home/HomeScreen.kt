@@ -1,5 +1,6 @@
 package com.notegraph.app.ui.home
 
+import android.content.Context
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -63,6 +64,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -81,6 +83,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.FolderEntity
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
@@ -100,7 +103,6 @@ import com.notegraph.app.ui.theme.NoteGraphColors
 import com.notegraph.app.ui.theme.ThemeManager
 import com.notegraph.app.ui.theme.ThemeStudioSheetContent
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -145,7 +147,8 @@ fun HomeScreen(
     onNavigateGraph: () -> Unit,
     onNavigateTags: () -> Unit,
     onNavigateSettings: () -> Unit,
-    onNavigateReader: () -> Unit = {}
+    onNavigateReader: () -> Unit = {},
+    onNavigateTutorial: (String?) -> Unit = {}
 ) {
     val allNotes by viewModel.notes.collectAsState()
     val filteredNotes by viewModel.filteredNotes.collectAsState()
@@ -154,6 +157,12 @@ fun HomeScreen(
     val selectedFolderId by viewModel.selectedFolderId.collectAsState()
 
     val context = LocalContext.current
+    val tutorialPrefs = remember {
+        context.getSharedPreferences("notegraph_prefs", Context.MODE_PRIVATE)
+    }
+    var showTutorialBanner by remember {
+        mutableStateOf(!tutorialPrefs.getBoolean("home_tutorial_banner_dismissed", false))
+    }
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -194,6 +203,8 @@ fun HomeScreen(
 
     val foldersById = remember(folders) { folders.associateBy { it.id } }
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
 
     MinimalistBackground(
         modifier = Modifier
@@ -215,31 +226,58 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(ThemeManager.activeAccentBrush),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "N",
-                                    color = activePreset.onAccent,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            if (isLuxury) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(lux.elevatedSurface)
+                                        .border(1.dp, lux.accent, RoundedCornerShape(6.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "N",
+                                        fontFamily = FontFamily.Serif,
+                                        color = lux.textPrimary,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(ThemeManager.activeAccentBrush),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "N",
+                                        color = activePreset.onAccent,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                             Column {
                                 Text(
                                     text = "NoteGraph",
+                                    fontFamily = if (isLuxury) FontFamily.Serif else null,
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "${filteredNotes.size} note${if (filteredNotes.size == 1) "" else "s"}",
+                                    text = if (isLuxury) {
+                                        "${filteredNotes.size} ${if (filteredNotes.size == 1) "NOTE" else "NOTES"}"
+                                    } else {
+                                        "${filteredNotes.size} note${if (filteredNotes.size == 1) "" else "s"}"
+                                    },
+                                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                                    fontSize = if (isLuxury) 9.5.sp else 10.sp,
+                                    letterSpacing = if (isLuxury) 0.7.sp else 0.sp,
+                                    color = (if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f))
                                 )
                             }
                         }
@@ -249,11 +287,32 @@ fun HomeScreen(
                             themeMode = ThemeManager.currentTheme,
                             onClick = { showThemeStudioSheet = true }
                         )
+                        IconButton(onClick = { onNavigateTutorial("ALL") }) {
+                            Box(
+                                modifier = Modifier
+                                    .size(23.dp)
+                                    .clip(CircleShape)
+                                    .border(
+                                        width = if (isLuxury) 1.dp else 1.5.dp,
+                                        color = if (isLuxury) lux.borderHairline else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "?",
+                                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isLuxury) lux.textSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         IconButton(onClick = onNavigateSettings) {
                             Icon(
                                 imageVector = Icons.Rounded.Settings,
                                 contentDescription = "Appearance & Settings",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (isLuxury) lux.textSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -452,25 +511,30 @@ fun HomeScreen(
                     item(key = "add_folder_btn") {
                         Surface(
                             onClick = { showCreateFolderDialog = true },
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(if (isLuxury) 100.dp else 18.dp),
                             color = Color.Transparent,
-                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                            border = BorderStroke(
+                                width = if (isLuxury) 1.dp else 0.75.dp,
+                                color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+                            )
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = if (isLuxury) 6.dp else 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Add,
                                     contentDescription = "New Folder",
-                                    tint = activePreset.accentStart,
+                                    tint = if (isLuxury) lux.accent else activePreset.accentStart,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Text(
-                                    text = "Folder",
+                                    text = if (isLuxury) "FOLDER" else "Folder",
+                                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = activePreset.accentStart,
+                                    fontSize = if (isLuxury) 10.sp else 12.sp,
+                                    color = if (isLuxury) lux.textSecondary else activePreset.accentStart,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -479,6 +543,88 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(6.dp))
+
+                if (showTutorialBanner && filteredNotes.isNotEmpty()) {
+                    val bannerAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+                    val bannerInk = ObsidianTokens.readableAccentInk(bannerAccent)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 2.dp)
+                    ) {
+                        ObsidianCard(
+                            accentColor = bannerAccent,
+                            verticalPadding = 2.dp,
+                            headerPadding = 12.dp,
+                            headerContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Quick Guide",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            ObsidianMetallicBadge(
+                                                text = "TIPS",
+                                                accentColor = bannerAccent
+                                            )
+                                        }
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = "Learn how [[Wiki-Links]] connect Graph nodes and how Lasso Move & PDF OCR work.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.5.sp,
+                                            color = ObsidianTokens.TextSecondary
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            tutorialPrefs.edit()
+                                                .putBoolean("home_tutorial_banner_dismissed", true)
+                                                .apply()
+                                            showTutorialBanner = false
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Hide", fontSize = 11.sp, color = ObsidianTokens.TextMuted)
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = { onNavigateTutorial("GRAPH") },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(0.75.dp, bannerAccent.copy(alpha = 0.6f)),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = bannerInk),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Connect Graph Nodes", fontSize = 11.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { onNavigateTutorial("ALL") },
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(0.75.dp, ObsidianTokens.DividerRule),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ObsidianTokens.TextPrimary),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Full Tutorial", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
 
                 // ─── Minimalist Masonry Note Grid ───
                 if (filteredNotes.isEmpty()) {
@@ -538,6 +684,18 @@ fun HomeScreen(
                                         label = "VAULT",
                                         accentColor = emptyAccent
                                     )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = { onNavigateTutorial("ALL") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(0.75.dp, emptyAccent.copy(alpha = 0.55f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = ObsidianTokens.readableAccentInk(emptyAccent)
+                                    )
+                                ) {
+                                    Text("Open App & Graph Tutorial", fontSize = 12.sp)
                                 }
                             },
                             footerContent = {
@@ -1058,8 +1216,42 @@ private fun QuickActionPill(
     onClick: () -> Unit
 ) {
     val activePreset = ThemeManager.currentGradient
-    val shape = RoundedCornerShape(20.dp)
-    if (highlighted) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val shape = RoundedCornerShape(if (isLuxury) 100.dp else 20.dp)
+    if (isLuxury) {
+        Surface(
+            onClick = onClick,
+            shape = shape,
+            color = if (highlighted) lux.accent.copy(alpha = 0.14f) else lux.elevatedSurface,
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (highlighted) lux.accent else lux.borderHairline
+            ),
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = if (highlighted) lux.accent else lux.textSecondary,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = label.uppercase(),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.6.sp,
+                    fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (highlighted) lux.textPrimary else lux.textSecondary
+                )
+            }
+        }
+    } else if (highlighted) {
         Box(
             modifier = Modifier
                 .clip(shape)
@@ -1181,11 +1373,17 @@ private fun ThemeStudioPill(
     onClick: () -> Unit
 ) {
     val preset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f),
-        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+        shape = RoundedCornerShape(100.dp),
+        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f),
+        border = BorderStroke(
+            width = if (isLuxury) 1.dp else 0.75.dp,
+            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+        ),
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1194,16 +1392,21 @@ private fun ThemeStudioPill(
         ) {
             Box(
                 modifier = Modifier
-                    .size(10.dp)
+                    .size(if (isLuxury) 8.dp else 10.dp)
                     .clip(CircleShape)
                     .background(
-                        Brush.linearGradient(listOf(preset.accentStart, preset.accentEnd))
+                        if (isLuxury) SolidColor(lux.accent)
+                        else Brush.linearGradient(listOf(preset.accentStart, preset.accentEnd))
                     )
             )
             Text(
-                text = themeMode.shortLabel,
+                text = if (isLuxury) themeMode.shortLabelFor(true).uppercase() else themeMode.shortLabel,
+                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium
+                fontSize = if (isLuxury) 10.sp else 12.sp,
+                letterSpacing = if (isLuxury) 0.5.sp else 0.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -1225,31 +1428,40 @@ private fun FolderChip(
     onLongClick: () -> Unit,
     onEditClick: () -> Unit
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val effectiveAccent = if (isLuxury) lux.accent else accentColor
     val containerColor = when {
+        isLuxury && isDropHovered -> lux.accent.copy(alpha = 0.20f)
+        isLuxury && isSelected -> lux.accent.copy(alpha = 0.12f)
+        isLuxury -> lux.elevatedSurface
         isDropHovered -> accentColor.copy(alpha = 0.25f)
         isSelected -> accentColor.copy(alpha = 0.14f)
         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
     }
     val borderColor = when {
-        isDropHovered -> accentColor
-        isSelected -> accentColor.copy(alpha = 0.75f)
+        isDropHovered -> effectiveAccent
+        isSelected -> effectiveAccent.copy(alpha = if (isLuxury) 0.9f else 0.75f)
+        isLuxury -> lux.borderHairline
         else -> ThemeManager.cardBorderColor
     }
-    val borderWidth = if (isDropHovered || isSelected) 1.25.dp else 0.75.dp
+    val borderWidth = if (isLuxury) 1.dp else if (isDropHovered || isSelected) 1.25.dp else 0.75.dp
+    val chipShape = RoundedCornerShape(if (isLuxury) 100.dp else 18.dp)
 
     Surface(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(chipShape)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(18.dp),
+        shape = chipShape,
         color = containerColor,
-        border = BorderStroke(borderWidth, borderColor)
+        border = BorderStroke(borderWidth, borderColor),
+        shadowElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = if (isLuxury) 6.dp else 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -1257,7 +1469,7 @@ private fun FolderChip(
                 Icon(
                     imageVector = vectorIcon,
                     contentDescription = null,
-                    tint = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (isSelected) effectiveAccent else if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(14.dp)
                 )
             } else if (!emojiIcon.isNullOrBlank()) {
@@ -1267,19 +1479,20 @@ private fun FolderChip(
                 text = name,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (isSelected || isDropHovered) FontWeight.SemiBold else FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = "$count",
+                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                color = if (isSelected) effectiveAccent else (if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)),
                 fontWeight = FontWeight.Medium
             )
             if (showEditButton) {
                 Icon(
                     imageVector = Icons.Rounded.Edit,
                     contentDescription = "Customize Folder",
-                    tint = accentColor,
+                    tint = effectiveAccent,
                     modifier = Modifier
                         .size(14.dp)
                         .clickable { onEditClick() }
@@ -1296,6 +1509,8 @@ private fun BottomGlassDock(
     onNavigateReader: () -> Unit,
     onNavigateSearch: () -> Unit
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1303,17 +1518,28 @@ private fun BottomGlassDock(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(10.dp, RoundedCornerShape(26.dp)),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
-            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+            modifier = if (isLuxury) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .shadow(10.dp, RoundedCornerShape(26.dp))
+            },
+            shape = RoundedCornerShape(if (isLuxury) 100.dp else 26.dp),
+            color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
+            border = BorderStroke(
+                width = if (isLuxury) 1.dp else 0.75.dp,
+                color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+            ),
+            shadowElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(
+                        horizontal = if (isLuxury) 10.dp else 8.dp,
+                        vertical = if (isLuxury) 4.dp else 6.dp
+                    ),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1360,34 +1586,45 @@ private fun DockActionItem(
     onClick: () -> Unit
 ) {
     val activePreset = ThemeManager.currentGradient
-    val contentColor = if (isActive) {
-        activePreset.accentStart
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val contentColor = when {
+        isLuxury && isActive -> lux.accent
+        isLuxury -> lux.textMuted
+        isActive -> activePreset.accentStart
+        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
     }
 
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(if (isLuxury) 100.dp else 16.dp))
             .background(
-                if (isActive) activePreset.accentStart.copy(alpha = 0.13f)
-                else Color.Transparent
+                when {
+                    isLuxury && isActive -> lux.accent.copy(alpha = 0.12f)
+                    !isLuxury && isActive -> activePreset.accentStart.copy(alpha = 0.13f)
+                    else -> Color.Transparent
+                }
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(
+                horizontal = if (isLuxury) 12.dp else 12.dp,
+                vertical = if (isLuxury) 5.dp else 6.dp
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = contentColor,
-            modifier = Modifier.size(19.dp)
+            modifier = Modifier.size(if (isLuxury) 17.dp else 19.dp)
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(if (isLuxury) 1.dp else 2.dp))
         Text(
-            text = label,
+            text = if (isLuxury) label.uppercase() else label,
+            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 10.sp,
+            fontSize = if (isLuxury) 9.sp else 10.sp,
+            letterSpacing = if (isLuxury) 0.5.sp else 0.sp,
             color = contentColor,
             fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium
         )
@@ -1426,28 +1663,25 @@ fun NoteCard(
     val hasPdf = pdfBlocks.isNotEmpty()
 
     val previewStrokes = remember(blocks) {
-        val json = Json { ignoreUnknownKeys = true }
         val firstInk = blocks.filterIsInstance<NoteBlock.InkBlock>().firstOrNull { it.strokesJson.length > 4 }
         if (firstInk != null) {
-            try {
-                json.decodeFromString<List<InkStroke>>(firstInk.strokesJson)
-                    .filter { it.points.size >= 2 }
-            } catch (_: Exception) {
-                emptyList()
-            }
+            NoteJson.decodeStrokes(firstInk.strokesJson).filter { it.points.size >= 2 }
         } else {
             emptyList()
         }
     }
 
-    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
     val activePreset = ThemeManager.currentGradient
-    val themeAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
-    val folderColor = folder?.let { ObsidianTokens.resolveAccent(parseColorSafe(it.colorHex, themeAccent)) }
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val themeAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
+    val folderColor = folder?.let {
+        if (isLuxury) lux.textSecondary else ObsidianTokens.resolveAccent(parseColorSafe(it.colorHex, themeAccent))
+    }
     val cardAccent = themeAccent
     val badgeColor = folderColor ?: themeAccent
     val accentInk = ObsidianTokens.readableAccentInk(cardAccent)
-    val folderInk = ObsidianTokens.readableAccentInk(badgeColor)
+    val folderInk = if (isLuxury) lux.textSecondary else ObsidianTokens.readableAccentInk(badgeColor)
     val themeMode = ThemeManager.currentTheme
 
     val primaryIcon = when {
@@ -1576,6 +1810,7 @@ fun NoteCard(
             // Note Title
             Text(
                 text = latestNote.title.ifEmpty { "Untitled" },
+                fontFamily = if (isLuxury) FontFamily.Serif else null,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = ObsidianTokens.TextPrimary,
@@ -1658,9 +1893,9 @@ fun NoteCard(
                 if (checklistBlocks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(if (isLuxury) 6.dp else 10.dp),
                         color = ObsidianTokens.StatTileSurface,
-                        border = BorderStroke(0.75.dp, ObsidianTokens.DividerRule),
+                        border = BorderStroke(if (isLuxury) 1.dp else 0.75.dp, ObsidianTokens.DividerRule),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -1687,7 +1922,7 @@ fun NoteCard(
                                         .fillMaxWidth()
                                         .height(3.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White.copy(alpha = 0.10f))
+                                        .background(if (isLuxury) lux.dividerRule else Color.White.copy(alpha = 0.10f))
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -1728,7 +1963,7 @@ fun NoteCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = dateFormat.format(Date(latestNote.updatedAt)),
+                        text = NoteJson.formatShortDateTime(latestNote.updatedAt),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         lineHeight = 14.sp,
@@ -1780,71 +2015,119 @@ fun NoteCard(
     )
 }
 
+private data class CachedPreviewPath(
+    val path: Path,
+    val color: Color,
+    val width: Float
+)
+
 @Composable
 private fun MiniInkPreviewCanvas(
     strokes: List<InkStroke>,
     themeMode: AppThemeMode,
     accentColor: Color
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val previewBg = if (isLuxury) lux.recessedSurface else Color(0xFF07070A)
+    val previewBorder = if (isLuxury) lux.borderHairline else accentColor.copy(alpha = 0.35f)
+    val previewCorner = if (isLuxury) 6.dp else 10.dp
+    val previewStrokeWidth = if (isLuxury) 1.dp else 0.75.dp
+    val isLightPaper = isLuxury && themeMode == AppThemeMode.KINDLE_PARCHMENT
+
+    val cachedPaths = remember { ArrayList<CachedPreviewPath>(strokes.size) }
+    var cachedStrokesRef by remember { mutableStateOf<List<InkStroke>?>(null) }
+    var cachedThemeRef by remember { mutableStateOf<AppThemeMode?>(null) }
+    var cachedLuxuryRef by remember { mutableStateOf<Boolean?>(null) }
+    var cachedDimsKey by remember { mutableLongStateOf(0L) }
+
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF07070A))
-            .border(0.75.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(previewCorner))
+            .background(previewBg)
+            .border(previewStrokeWidth, previewBorder, RoundedCornerShape(previewCorner))
             .clipToBounds()
     ) {
-        val allPts = strokes.flatMap { it.points }
-        if (allPts.isEmpty()) return@Canvas
+        val dimsKey = (size.width.toInt().toLong() shl 32) or (size.height.toInt().toLong() and 0xffffffffL)
+        if (cachedStrokesRef !== strokes || cachedThemeRef != themeMode || cachedLuxuryRef != isLuxury || cachedDimsKey != dimsKey) {
+            cachedStrokesRef = strokes
+            cachedThemeRef = themeMode
+            cachedLuxuryRef = isLuxury
+            cachedDimsKey = dimsKey
+            cachedPaths.clear()
 
-        val minX = allPts.minOf { it.x }
-        val maxX = allPts.maxOf { it.x }
-        val minY = allPts.minOf { it.y }
-        val maxY = allPts.maxOf { it.y }
-
-        val rawW = (maxX - minX).coerceAtLeast(10f)
-        val rawH = (maxY - minY).coerceAtLeast(10f)
-        val pad = 8f
-        val availW = (size.width - pad * 2f).coerceAtLeast(1f)
-        val availH = (size.height - pad * 2f).coerceAtLeast(1f)
-        val scale = minOf(availW / rawW, availH / rawH)
-        val xOffset = (size.width - rawW * scale) / 2f
-        val yOffset = (size.height - rawH * scale) / 2f
-
-        for (stroke in strokes) {
-            if (stroke.points.size < 2) continue
-            val rawHex = stroke.colorHex
-            val adaptedHex = when {
-                rawHex.equals("#2C2C2C", ignoreCase = true) ||
-                    rawHex.equals("#22201B", ignoreCase = true) ||
-                    rawHex.equals("#000000", ignoreCase = true) -> "#FFFFFF"
-                else -> rawHex
-            }
-            val baseColor = parseColorSafe(
-                adaptedHex,
-                if (themeMode == AppThemeMode.KINDLE_PARCHMENT) Color(0xFFF8FAFC) else Color.White
-            )
-            val color = baseColor.copy(alpha = if (stroke.isHighlighter) 0.45f else 0.95f)
-
-            val path = Path().apply {
-                moveTo(
-                    xOffset + (stroke.points[0].x - minX) * scale,
-                    yOffset + (stroke.points[0].y - minY) * scale
-                )
-                for (i in 1 until stroke.points.size) {
-                    lineTo(
-                        xOffset + (stroke.points[i].x - minX) * scale,
-                        yOffset + (stroke.points[i].y - minY) * scale
-                    )
+            var minX = Float.POSITIVE_INFINITY
+            var minY = Float.POSITIVE_INFINITY
+            var maxX = Float.NEGATIVE_INFINITY
+            var maxY = Float.NEGATIVE_INFINITY
+            var hasAny = false
+            for (s in strokes) {
+                for (pt in s.points) {
+                    hasAny = true
+                    if (pt.x < minX) minX = pt.x
+                    if (pt.y < minY) minY = pt.y
+                    if (pt.x > maxX) maxX = pt.x
+                    if (pt.y > maxY) maxY = pt.y
                 }
             }
 
+            if (hasAny) {
+                val rawW = (maxX - minX).coerceAtLeast(10f)
+                val rawH = (maxY - minY).coerceAtLeast(10f)
+                val pad = 8f
+                val availW = (size.width - pad * 2f).coerceAtLeast(1f)
+                val availH = (size.height - pad * 2f).coerceAtLeast(1f)
+                val scale = minOf(availW / rawW, availH / rawH)
+                val xOffset = (size.width - rawW * scale) / 2f
+                val yOffset = (size.height - rawH * scale) / 2f
+                val fallback = if (isLightPaper) Color(0xFF1E1B18) else if (themeMode == AppThemeMode.KINDLE_PARCHMENT && !isLuxury) Color(0xFFF8FAFC) else Color.White
+
+                for (stroke in strokes) {
+                    if (stroke.points.size < 2) continue
+                    val rawHex = stroke.colorHex
+                    val adaptedHex = if (isLightPaper) {
+                        if (rawHex.equals("#FFFFFF", ignoreCase = true)) "#1E1B18" else rawHex
+                    } else {
+                        when {
+                            rawHex.equals("#2C2C2C", ignoreCase = true) ||
+                                rawHex.equals("#22201B", ignoreCase = true) ||
+                                rawHex.equals("#000000", ignoreCase = true) -> "#FFFFFF"
+                            else -> rawHex
+                        }
+                    }
+                    val baseColor = parseColorSafe(adaptedHex, fallback)
+                    val color = baseColor.copy(alpha = if (stroke.isHighlighter) 0.45f else 0.95f)
+                    val path = Path().apply {
+                        moveTo(
+                            xOffset + (stroke.points[0].x - minX) * scale,
+                            yOffset + (stroke.points[0].y - minY) * scale
+                        )
+                        for (i in 1 until stroke.points.size) {
+                            lineTo(
+                                xOffset + (stroke.points[i].x - minX) * scale,
+                                yOffset + (stroke.points[i].y - minY) * scale
+                            )
+                        }
+                    }
+                    cachedPaths.add(
+                        CachedPreviewPath(
+                            path = path,
+                            color = color,
+                            width = (stroke.strokeWidth * scale).coerceIn(1.5f, 4.5f)
+                        )
+                    )
+                }
+            }
+        }
+
+        for (item in cachedPaths) {
             drawPath(
-                path = path,
-                color = color,
+                path = item.path,
+                color = item.color,
                 style = Stroke(
-                    width = (stroke.strokeWidth * scale).coerceIn(1.5f, 4.5f),
+                    width = item.width,
                     cap = StrokeCap.Round,
                     join = StrokeJoin.Round
                 )
@@ -2008,8 +2291,5 @@ private fun FolderEditorDialog(
     )
 }
 
-private fun parseColorSafe(hex: String, fallback: Color): Color = try {
-    Color(android.graphics.Color.parseColor(hex))
-} catch (_: Exception) {
-    fallback
-}
+private fun parseColorSafe(hex: String, fallback: Color): Color =
+    NoteJson.parseColorCached(hex, fallback)

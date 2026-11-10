@@ -2,6 +2,7 @@ package com.notegraph.app.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.notegraph.app.data.local.NoteGraphDatabase
@@ -25,6 +26,18 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE folders ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_folderId ON notes (folderId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_isTrash ON notes (isTrash)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_notes_updatedAt ON notes (updatedAt)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_links_sourceNoteId ON links (sourceNoteId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_links_targetNoteId ON links (targetNoteId)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_links_targetNoteTitle ON links (targetNoteTitle)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): NoteGraphDatabase {
@@ -33,7 +46,8 @@ object DatabaseModule {
             NoteGraphDatabase::class.java,
             "notegraph.db"
         )
-            .addMigrations(MIGRATION_3_4)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .fallbackToDestructiveMigration()
             .build()
     }

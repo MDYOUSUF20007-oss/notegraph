@@ -43,19 +43,20 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.PdfPageAnnotation
 import com.notegraph.app.data.local.entity.StrokePoint
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -119,6 +120,9 @@ fun PdfAnnotationBlock(
     var importError by remember { mutableStateOf<String?>(null) }
     var showFullscreenStudio by remember { mutableStateOf(false) }
     var showOcrWindow by remember { mutableStateOf(false) }
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val activePreset = ThemeManager.currentGradient
 
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -150,7 +154,7 @@ fun PdfAnnotationBlock(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
+            .padding(horizontal = if (isLuxury) 0.dp else 8.dp, vertical = if (isLuxury) 6.dp else 8.dp)
     ) {
         if (block.filePath.isBlank() || block.pageCount <= 0) {
             Column(
@@ -163,19 +167,28 @@ fun PdfAnnotationBlock(
                 Text(
                     "PDF Document & Markup",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontFamily = if (isLuxury) FontFamily.Serif else FontFamily.Default,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     "Open a PDF file to write, highlight, or draw directly above every page.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Button(
                     onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
                     enabled = !isImporting,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(if (isLuxury) 8.dp else 12.dp),
+                    colors = if (isLuxury) {
+                        ButtonDefaults.buttonColors(containerColor = lux.accent, contentColor = lux.onAccent)
+                    } else ButtonDefaults.buttonColors(),
+                    elevation = if (isLuxury) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation()
                 ) {
-                    Text(if (isImporting) "Importing PDF…" else "Select PDF from Device")
+                    Text(
+                        text = if (isImporting) "Importing PDF…" else "Select PDF from Device",
+                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default
+                    )
                 }
                 importError?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
@@ -186,14 +199,16 @@ fun PdfAnnotationBlock(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .padding(horizontal = if (isLuxury) 16.dp else 4.dp, vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = block.fileName.ifBlank { "Document.pdf" },
                         style = MaterialTheme.typography.titleSmall,
+                        fontFamily = if (isLuxury) FontFamily.Serif else FontFamily.Default,
                         fontWeight = FontWeight.SemiBold,
+                        color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -203,9 +218,15 @@ fun PdfAnnotationBlock(
                         }
                     }
                     Text(
-                        text = "${block.pageCount} pages • $annotatedPages annotated",
+                        text = if (isLuxury) {
+                            "${block.pageCount}P // $annotatedPages ANNOTATED"
+                        } else {
+                            "${block.pageCount} pages • $annotatedPages annotated"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
+                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                        fontSize = if (isLuxury) 10.sp else MaterialTheme.typography.labelSmall.fontSize,
+                        color = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.outline
                     )
                 }
 
@@ -216,43 +237,60 @@ fun PdfAnnotationBlock(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val activePreset = ThemeManager.currentGradient
-                    FilledTonalButton(
-                        onClick = { showOcrWindow = true },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = activePreset.accentStart.copy(alpha = 0.16f),
-                            contentColor = activePreset.accentStart
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Icon(
-                            Icons.Rounded.DocumentScanner,
-                            contentDescription = "OCR Extract PDF Text",
-                            modifier = Modifier.size(15.dp)
+                    if (isLuxury) {
+                        PdfLuxuryPill(
+                            label = "OCR TEXT",
+                            selected = true,
+                            onClick = { showOcrWindow = true }
                         )
-                        Spacer(Modifier.width(4.dp))
-                        Text("OCR Text", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                    }
-                    FilledTonalButton(
-                        onClick = { showFullscreenStudio = true },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Fullscreen,
-                            contentDescription = "Fullscreen PDF Markup",
-                            modifier = Modifier.size(16.dp)
+                        PdfLuxuryPill(
+                            label = "FOCUS STUDIO",
+                            selected = false,
+                            onClick = { showFullscreenStudio = true }
                         )
-                        Spacer(Modifier.width(4.dp))
-                        Text("Focus Studio", style = MaterialTheme.typography.labelSmall)
-                    }
-                    OutlinedButton(
-                        onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Text("Replace", style = MaterialTheme.typography.labelSmall)
+                        PdfLuxuryPill(
+                            label = "REPLACE",
+                            selected = false,
+                            onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }
+                        )
+                    } else {
+                        FilledTonalButton(
+                            onClick = { showOcrWindow = true },
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = activePreset.accentStart.copy(alpha = 0.16f),
+                                contentColor = activePreset.accentStart
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Icon(
+                                Icons.Rounded.DocumentScanner,
+                                contentDescription = "OCR Extract PDF Text",
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("OCR Text", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                        }
+                        FilledTonalButton(
+                            onClick = { showFullscreenStudio = true },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Fullscreen,
+                                contentDescription = "Fullscreen PDF Markup",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Focus Studio", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(
+                            onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("Replace", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }
@@ -274,49 +312,72 @@ fun PdfAnnotationBlock(
         ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
+                color = if (isLuxury) lux.canvasBackground else MaterialTheme.colorScheme.background
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Fullscreen Top Header
                     Surface(
-                        tonalElevation = 4.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant
+                        tonalElevation = if (isLuxury) 0.dp else 4.dp,
+                        shadowElevation = 0.dp,
+                        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = block.fileName.ifBlank { "PDF Studio" },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = "Pinch with 2 fingers to zoom & pan • Annotate right on PDF",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                        Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = block.fileName.ifBlank { "PDF Studio" },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontFamily = if (isLuxury) FontFamily.Serif else FontFamily.Default,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = if (isLuxury) "2-FINGER PINCH ZOOM // PEN + HIGHLIGHT" else "Pinch with 2 fingers to zoom & pan • Annotate right on PDF",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                        fontSize = if (isLuxury) 10.sp else MaterialTheme.typography.labelSmall.fontSize,
+                                        color = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (isLuxury) {
+                                        PdfLuxuryPill(
+                                            label = "OCR",
+                                            selected = false,
+                                            onClick = { showOcrWindow = true }
+                                        )
+                                        PdfLuxuryPill(
+                                            label = "DONE",
+                                            selected = true,
+                                            onClick = { showFullscreenStudio = false }
+                                        )
+                                    } else {
+                                        FilledTonalButton(
+                                            onClick = { showOcrWindow = true },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.DocumentScanner, contentDescription = "OCR PDF Text", modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("OCR")
+                                        }
+                                        FilledTonalButton(onClick = { showFullscreenStudio = false }) {
+                                            Icon(Icons.Default.Close, contentDescription = "Close Studio", modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Done")
+                                        }
+                                    }
+                                }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                FilledTonalButton(
-                                    onClick = { showOcrWindow = true },
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Rounded.DocumentScanner, contentDescription = "OCR PDF Text", modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("OCR")
-                                }
-                                FilledTonalButton(onClick = { showFullscreenStudio = false }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Close Studio", modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("Done")
-                                }
+                            if (isLuxury) {
+                                HorizontalDivider(thickness = 1.dp, color = lux.dividerRule)
                             }
                         }
                     }
@@ -327,7 +388,7 @@ fun PdfAnnotationBlock(
                         onBlockUpdated = onBlockUpdated,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(8.dp)
+                            .padding(if (isLuxury) 0.dp else 8.dp)
                     )
                 }
             }
@@ -361,12 +422,39 @@ fun PdfAnnotationBlock(
 }
 
 @Composable
+private fun PdfLuxuryPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val lux = ThemeManager.luxuryTokens
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(100.dp),
+        color = if (selected) lux.accent.copy(alpha = 0.14f) else lux.elevatedSurface,
+        border = BorderStroke(1.dp, if (selected) lux.accent else lux.borderHairline),
+        shadowElevation = 0.dp
+    ) {
+        Text(
+            text = label,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) lux.accent else lux.textSecondary,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+        )
+    }
+}
+
+@Composable
 private fun PdfMarkupSurface(
     block: NoteBlock.PdfBlock,
     isFullscreen: Boolean,
     onBlockUpdated: (NoteBlock.PdfBlock) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     val safePageCount = block.pageCount.coerceAtLeast(1)
     val currentPage = block.currentPage.coerceIn(0, safePageCount - 1)
 
@@ -410,28 +498,40 @@ private fun PdfMarkupSurface(
     val latestOnBlockUpdated by rememberUpdatedState(onBlockUpdated)
 
     // Live in-progress stroke (stored in normalized [0..1] coords)
-    var activeNormPoints by remember { mutableStateOf(listOf<StrokePoint>()) }
-    val vanishingStrokes = remember { mutableStateListOf<VanishingStroke>() }
-    var currentTick by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val activeNormPoints = remember { ArrayList<StrokePoint>(128) }
+    var activeStrokeRevision by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(Unit) {
+    // Optimized Rainbow Vanishing Laser controller + on-demand frame ticker (0% CPU when idle)
+    val laserController = remember(block.id, currentPage) {
+        RainbowLaserController(minSpacing = 0.007f)
+    }
+    var isLaserDrawing by remember { mutableStateOf(false) }
+    var runLaserLoop by remember { mutableStateOf(false) }
+    var laserFrameTick by remember { mutableLongStateOf(0L) }
+    var laserInputVersion by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(runLaserLoop) {
+        if (!runLaserLoop) return@LaunchedEffect
         while (isActive) {
-            delay(16L)
-            currentTick = System.currentTimeMillis()
-            if (vanishingStrokes.isNotEmpty()) {
-                vanishingStrokes.removeAll { currentTick - it.startTime >= 1500L }
+            withFrameMillis { _ ->
+                val now = System.currentTimeMillis()
+                laserFrameTick = now
+                val stillAlive = laserController.pruneExpired(now)
+                if (!stillAlive && !isLaserDrawing) {
+                    runLaserLoop = false
+                }
             }
         }
     }
 
-    // Rasterize current PDF page bitmap on IO dispatcher
+    // Rasterize current PDF page bitmap with bounded LRU cache on IO dispatcher
     var pageBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isRendering by remember { mutableStateOf(true) }
     LaunchedEffect(block.filePath, currentPage, isFullscreen) {
         isRendering = true
         val widthPx = if (isFullscreen) 1440 else 1080
         val bmp = withContext(Dispatchers.IO) {
-            PdfHelper.renderPageBitmap(block.filePath, currentPage, widthPx)
+            PdfHelper.renderPageBitmapCached(block.filePath, currentPage, widthPx)
         }
         pageBitmap = bmp
         isRendering = false
@@ -466,135 +566,286 @@ private fun PdfMarkupSurface(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = if (isLuxury) 12.dp else 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            FilledTonalIconButton(
-                onClick = {
-                    if (currentPage > 0) {
-                        onBlockUpdated(block.copy(currentPage = currentPage - 1))
-                    }
-                },
-                enabled = currentPage > 0,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous PDF Page")
-            }
-
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Text(
-                    text = "Page ${currentPage + 1} / $safePageCount",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
-            }
-
-            FilledTonalIconButton(
-                onClick = {
-                    if (currentPage < safePageCount - 1) {
-                        onBlockUpdated(block.copy(currentPage = currentPage + 1))
-                    }
-                },
-                enabled = currentPage < safePageCount - 1,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next PDF Page")
-            }
-
-            FilterChip(
-                selected = block.invertDark,
-                onClick = { onBlockUpdated(block.copy(invertDark = !block.invertDark)) },
-                label = { Text(if (block.invertDark) "Night PDF" else "Light PDF", fontSize = 11.sp) }
-            )
-
-            FilterChip(
-                selected = stylusOnlyMode,
-                onClick = { stylusOnlyMode = !stylusOnlyMode },
-                label = { Text(if (stylusOnlyMode) "Stylus Only" else "Touch Ink", fontSize = 11.sp) }
-            )
-
-            if (zoomScale > 1.02f) {
-                OutlinedButton(
-                    onClick = {
-                        zoomScale = 1f
-                        panOffset = Offset.Zero
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(30.dp)
+            if (isLuxury) {
+                Surface(
+                    onClick = { if (currentPage > 0) onBlockUpdated(block.copy(currentPage = currentPage - 1)) },
+                    enabled = currentPage > 0,
+                    shape = CircleShape,
+                    color = lux.elevatedSurface,
+                    border = BorderStroke(1.dp, lux.borderHairline),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.size(30.dp)
                 ) {
-                    Text("${(zoomScale * 100).toInt()}% Reset", style = MaterialTheme.typography.labelSmall)
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Previous PDF Page",
+                            tint = if (currentPage > 0) lux.textPrimary else lux.textMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(100.dp),
+                    color = lux.elevatedSurface,
+                    border = BorderStroke(1.dp, lux.borderHairline),
+                    shadowElevation = 0.dp
+                ) {
+                    Text(
+                        text = "P.${currentPage + 1} / $safePageCount",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = lux.textPrimary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+                Surface(
+                    onClick = { if (currentPage < safePageCount - 1) onBlockUpdated(block.copy(currentPage = currentPage + 1)) },
+                    enabled = currentPage < safePageCount - 1,
+                    shape = CircleShape,
+                    color = lux.elevatedSurface,
+                    border = BorderStroke(1.dp, lux.borderHairline),
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Next PDF Page",
+                            tint = if (currentPage < safePageCount - 1) lux.textPrimary else lux.textMuted,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                PdfLuxuryPill(
+                    label = if (block.invertDark) "NIGHT" else "LIGHT",
+                    selected = block.invertDark,
+                    onClick = { onBlockUpdated(block.copy(invertDark = !block.invertDark)) }
+                )
+                PdfLuxuryPill(
+                    label = if (stylusOnlyMode) "STYLUS" else "TOUCH",
+                    selected = stylusOnlyMode,
+                    onClick = { stylusOnlyMode = !stylusOnlyMode }
+                )
+                if (zoomScale > 1.02f) {
+                    PdfLuxuryPill(
+                        label = "${(zoomScale * 100).toInt()}% RESET",
+                        selected = true,
+                        onClick = {
+                            zoomScale = 1f
+                            panOffset = Offset.Zero
+                        }
+                    )
+                }
+            } else {
+                FilledTonalIconButton(
+                    onClick = {
+                        if (currentPage > 0) {
+                            onBlockUpdated(block.copy(currentPage = currentPage - 1))
+                        }
+                    },
+                    enabled = currentPage > 0,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous PDF Page")
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = "Page ${currentPage + 1} / $safePageCount",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    )
+                }
+
+                FilledTonalIconButton(
+                    onClick = {
+                        if (currentPage < safePageCount - 1) {
+                            onBlockUpdated(block.copy(currentPage = currentPage + 1))
+                        }
+                    },
+                    enabled = currentPage < safePageCount - 1,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next PDF Page")
+                }
+
+                FilterChip(
+                    selected = block.invertDark,
+                    onClick = { onBlockUpdated(block.copy(invertDark = !block.invertDark)) },
+                    label = { Text(if (block.invertDark) "Night PDF" else "Light PDF", fontSize = 11.sp) }
+                )
+
+                FilterChip(
+                    selected = stylusOnlyMode,
+                    onClick = { stylusOnlyMode = !stylusOnlyMode },
+                    label = { Text(if (stylusOnlyMode) "Stylus Only" else "Touch Ink", fontSize = 11.sp) }
+                )
+
+                if (zoomScale > 1.02f) {
+                    OutlinedButton(
+                        onClick = {
+                            zoomScale = 1f
+                            panOffset = Offset.Zero
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("${(zoomScale * 100).toInt()}% Reset", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
 
         // ─── Annotation Tool Row ───
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            FilterChip(
-                selected = toolMode == PdfToolMode.PEN,
-                onClick = {
-                    toolMode = PdfToolMode.PEN
-                    if (selectedColorIdx == 4) selectedColorIdx = 1
-                },
-                label = { Text("Pen") }
-            )
-            FilterChip(
-                selected = toolMode == PdfToolMode.HIGHLIGHTER,
-                onClick = {
-                    toolMode = PdfToolMode.HIGHLIGHTER
-                    selectedColorIdx = 4
-                },
-                label = { Text("Highlight") }
-            )
-            FilterChip(
-                selected = toolMode == PdfToolMode.ERASER,
-                onClick = { toolMode = PdfToolMode.ERASER },
-                label = { Text("Eraser") }
-            )
-            FilterChip(
-                selected = toolMode == PdfToolMode.VANISHING,
-                onClick = { toolMode = PdfToolMode.VANISHING },
-                label = { Text("Laser") }
-            )
-            FilterChip(
-                selected = toolMode == PdfToolMode.PAN,
-                onClick = { toolMode = PdfToolMode.PAN },
-                label = { Text("Pan") }
-            )
-            FilterChip(
-                selected = shapeSnapEnabled,
-                onClick = { shapeSnapEnabled = !shapeSnapEnabled },
-                label = { Text(if (shapeSnapEnabled) "Snap ON" else "Snap") }
-            )
+        if (isLuxury) {
+            Surface(
+                shape = RoundedCornerShape(100.dp),
+                color = lux.elevatedSurface,
+                border = BorderStroke(1.dp, lux.borderHairline),
+                shadowElevation = 0.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val toolItems = listOf(
+                        PdfToolMode.PEN to "PEN",
+                        PdfToolMode.HIGHLIGHTER to "HL",
+                        PdfToolMode.ERASER to "ERASE",
+                        PdfToolMode.VANISHING to "LASER",
+                        PdfToolMode.PAN to "PAN"
+                    )
+                    toolItems.forEach { (mode, label) ->
+                        val active = toolMode == mode
+                        Surface(
+                            onClick = {
+                                toolMode = mode
+                                if (mode == PdfToolMode.PEN && selectedColorIdx == 4) selectedColorIdx = 1
+                                if (mode == PdfToolMode.HIGHLIGHTER) selectedColorIdx = 4
+                            },
+                            shape = RoundedCornerShape(100.dp),
+                            color = if (active) lux.accent.copy(alpha = 0.14f) else Color.Transparent,
+                            border = if (active) BorderStroke(1.dp, lux.accent) else null,
+                            shadowElevation = 0.dp
+                        ) {
+                            Text(
+                                text = label,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                color = if (active) lux.accent else lux.textSecondary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                    Surface(
+                        onClick = { shapeSnapEnabled = !shapeSnapEnabled },
+                        shape = RoundedCornerShape(100.dp),
+                        color = if (shapeSnapEnabled) lux.accent.copy(alpha = 0.14f) else Color.Transparent,
+                        border = if (shapeSnapEnabled) BorderStroke(1.dp, lux.accent) else null,
+                        shadowElevation = 0.dp
+                    ) {
+                        Text(
+                            text = if (shapeSnapEnabled) "SNAP:ON" else "SNAP",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            fontWeight = if (shapeSnapEnabled) FontWeight.Bold else FontWeight.Medium,
+                            color = if (shapeSnapEnabled) lux.accent else lux.textSecondary,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                FilterChip(
+                    selected = toolMode == PdfToolMode.PEN,
+                    onClick = {
+                        toolMode = PdfToolMode.PEN
+                        if (selectedColorIdx == 4) selectedColorIdx = 1
+                    },
+                    label = { Text("Pen") }
+                )
+                FilterChip(
+                    selected = toolMode == PdfToolMode.HIGHLIGHTER,
+                    onClick = {
+                        toolMode = PdfToolMode.HIGHLIGHTER
+                        selectedColorIdx = 4
+                    },
+                    label = { Text("Highlight") }
+                )
+                FilterChip(
+                    selected = toolMode == PdfToolMode.ERASER,
+                    onClick = { toolMode = PdfToolMode.ERASER },
+                    label = { Text("Eraser") }
+                )
+                FilterChip(
+                    selected = toolMode == PdfToolMode.VANISHING,
+                    onClick = { toolMode = PdfToolMode.VANISHING },
+                    label = { Text("Laser") }
+                )
+                FilterChip(
+                    selected = toolMode == PdfToolMode.PAN,
+                    onClick = { toolMode = PdfToolMode.PAN },
+                    label = { Text("Pan") }
+                )
+                FilterChip(
+                    selected = shapeSnapEnabled,
+                    onClick = { shapeSnapEnabled = !shapeSnapEnabled },
+                    label = { Text(if (shapeSnapEnabled) "Snap ON" else "Snap") }
+                )
+            }
         }
 
         // ─── Color Dots + Stroke Width + Undo / Redo / Clear ───
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (isLuxury) 12.dp else 0.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 PdfInkColors.forEachIndexed { idx, col ->
+                    val selectedCol = idx == selectedColorIdx
                     Box(
                         modifier = Modifier
-                            .size(if (idx == selectedColorIdx) 22.dp else 16.dp)
+                            .size(if (selectedCol) 20.dp else 15.dp)
                             .clip(CircleShape)
                             .background(col, CircleShape)
                             .border(
-                                width = if (idx == selectedColorIdx) 2.dp else 1.dp,
-                                color = if (idx == selectedColorIdx) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                width = if (selectedCol) (if (isLuxury) 1.5.dp else 2.dp) else 1.dp,
+                                color = when {
+                                    selectedCol && isLuxury -> lux.accent
+                                    selectedCol -> MaterialTheme.colorScheme.primary
+                                    isLuxury -> lux.borderHairline
+                                    else -> MaterialTheme.colorScheme.outline
+                                },
                                 shape = CircleShape
                             )
                             .clickable { selectedColorIdx = idx }
@@ -602,55 +853,127 @@ private fun PdfMarkupSurface(
                 }
             }
 
-            Slider(
-                value = strokeWidth,
-                onValueChange = { strokeWidth = it },
-                valueRange = 2f..22f,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            )
+            if (isLuxury) {
+                Surface(
+                    shape = RoundedCornerShape(100.dp),
+                    color = lux.elevatedSurface,
+                    border = BorderStroke(1.dp, lux.borderHairline),
+                    shadowElevation = 0.dp
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "−",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            color = lux.textPrimary,
+                            modifier = Modifier.clickable { strokeWidth = (strokeWidth - 2f).coerceIn(2f, 22f) }
+                        )
+                        Text(
+                            text = "${strokeWidth.toInt()}PX",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = lux.accent
+                        )
+                        Text(
+                            text = "+",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            color = lux.textPrimary,
+                            modifier = Modifier.clickable { strokeWidth = (strokeWidth + 2f).coerceIn(2f, 22f) }
+                        )
+                    }
+                }
+            } else {
+                Slider(
+                    value = strokeWidth,
+                    onValueChange = { strokeWidth = it },
+                    valueRange = 2f..22f,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                )
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        if (pageStrokes.isNotEmpty()) {
-                            redoStack = redoStack + pageStrokes.last()
-                            pageStrokes = pageStrokes.dropLast(1)
-                            persistCurrentPage(pageStrokes)
-                        }
-                    },
-                    enabled = pageStrokes.isNotEmpty(),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(30.dp)
-                ) {
-                    Text("↶", fontSize = 14.sp)
-                }
-                OutlinedButton(
-                    onClick = {
-                        if (redoStack.isNotEmpty()) {
-                            pageStrokes = pageStrokes + redoStack.last()
-                            redoStack = redoStack.dropLast(1)
-                            persistCurrentPage(pageStrokes)
-                        }
-                    },
-                    enabled = redoStack.isNotEmpty(),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                    modifier = Modifier.height(30.dp)
-                ) {
-                    Text("↷", fontSize = 14.sp)
-                }
-                if (pageStrokes.isNotEmpty()) {
-                    TextButton(
+                if (isLuxury) {
+                    PdfLuxuryPill(
+                        label = "↶",
+                        selected = pageStrokes.isNotEmpty(),
                         onClick = {
-                            redoStack = emptyList()
-                            pageStrokes = emptyList()
-                            persistCurrentPage(emptyList())
+                            if (pageStrokes.isNotEmpty()) {
+                                redoStack = redoStack + pageStrokes.last()
+                                pageStrokes = pageStrokes.dropLast(1)
+                                persistCurrentPage(pageStrokes)
+                            }
+                        }
+                    )
+                    PdfLuxuryPill(
+                        label = "↷",
+                        selected = redoStack.isNotEmpty(),
+                        onClick = {
+                            if (redoStack.isNotEmpty()) {
+                                pageStrokes = pageStrokes + redoStack.last()
+                                redoStack = redoStack.dropLast(1)
+                                persistCurrentPage(pageStrokes)
+                            }
+                        }
+                    )
+                    if (pageStrokes.isNotEmpty()) {
+                        PdfLuxuryPill(
+                            label = "CLR",
+                            selected = false,
+                            onClick = {
+                                redoStack = emptyList()
+                                pageStrokes = emptyList()
+                                persistCurrentPage(emptyList())
+                            }
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            if (pageStrokes.isNotEmpty()) {
+                                redoStack = redoStack + pageStrokes.last()
+                                pageStrokes = pageStrokes.dropLast(1)
+                                persistCurrentPage(pageStrokes)
+                            }
                         },
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        enabled = pageStrokes.isNotEmpty(),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
-                        Text("Clear", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        Text("↶", fontSize = 14.sp)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            if (redoStack.isNotEmpty()) {
+                                pageStrokes = pageStrokes + redoStack.last()
+                                redoStack = redoStack.dropLast(1)
+                                persistCurrentPage(pageStrokes)
+                            }
+                        },
+                        enabled = redoStack.isNotEmpty(),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("↷", fontSize = 14.sp)
+                    }
+                    if (pageStrokes.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                redoStack = emptyList()
+                                pageStrokes = emptyList()
+                                persistCurrentPage(emptyList())
+                            },
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("Clear", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
@@ -667,11 +990,21 @@ private fun PdfMarkupSurface(
                 .aspectRatio(aspectRatio.coerceIn(0.45f, 1.8f))
         }
 
+        val pageBgColor = when {
+            isLuxury && block.invertDark -> Color(0xFF000000)
+            isLuxury -> Color(0xFFF4F1EA)
+            block.invertDark -> Color(0xFF0B0B0D)
+            else -> Color(0xFFF3F4F6)
+        }
+        val pageShape = RoundedCornerShape(if (isLuxury) 0.dp else 8.dp)
+
         BoxWithConstraints(
             modifier = pageContainerModifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, ThemeManager.cardBorderColor, RoundedCornerShape(8.dp))
-                .background(if (block.invertDark) Color(0xFF0B0B0D) else Color(0xFFF3F4F6)),
+                .clip(pageShape)
+                .then(
+                    if (isLuxury) Modifier else Modifier.border(1.dp, ThemeManager.cardBorderColor, pageShape)
+                )
+                .background(pageBgColor),
             contentAlignment = Alignment.Center
         ) {
             val safeAspect = aspectRatio.coerceIn(0.45f, 1.8f)
@@ -706,7 +1039,15 @@ private fun PdfMarkupSurface(
 
                                 if (active.size >= 2) {
                                     // Two-finger pinch zoom & pan always works
-                                    activeNormPoints = emptyList()
+                                    if (activeNormPoints.isNotEmpty()) {
+                                        activeNormPoints.clear()
+                                        activeStrokeRevision++
+                                    }
+                                    if (isLaserDrawing) {
+                                        laserController.endStroke(System.currentTimeMillis())
+                                        isLaserDrawing = false
+                                        laserInputVersion++
+                                    }
                                     val zoom = event.calculateZoom()
                                     val pan = event.calculatePan()
                                     var cx = 0f
@@ -745,7 +1086,15 @@ private fun PdfMarkupSurface(
                                             (stylusOnlyMode && !isStylus && !isHardwareEraser)
 
                                     if (effectivePanOnly) {
-                                        activeNormPoints = emptyList()
+                                        if (activeNormPoints.isNotEmpty()) {
+                                            activeNormPoints.clear()
+                                            activeStrokeRevision++
+                                        }
+                                        if (isLaserDrawing) {
+                                            laserController.endStroke(System.currentTimeMillis())
+                                            isLaserDrawing = false
+                                            laserInputVersion++
+                                        }
                                         if (zoomScale > 1.01f || isFullscreen) {
                                             val delta = single.position - single.previousPosition
                                             val maxPanX = 0f
@@ -766,18 +1115,39 @@ private fun PdfMarkupSurface(
                                     val h = size.height.toFloat().coerceAtLeast(1f)
                                     val pageX = (single.position.x - panOffset.x) / zoomScale
                                     val pageY = (single.position.y - panOffset.y) / zoomScale
-                                    val normPt = StrokePoint(
-                                        x = (pageX / w).coerceIn(0f, 1f),
-                                        y = (pageY / h).coerceIn(0f, 1f)
-                                    )
-                                    activeNormPoints = activeNormPoints + normPt
+                                    val nx = (pageX / w).coerceIn(0f, 1f)
+                                    val ny = (pageY / h).coerceIn(0f, 1f)
+
+                                    if (toolMode == PdfToolMode.VANISHING) {
+                                        val now = System.currentTimeMillis()
+                                        if (!isLaserDrawing) {
+                                            isLaserDrawing = true
+                                            laserController.beginStroke(nx, ny, now)
+                                            runLaserLoop = true
+                                            laserInputVersion++
+                                        } else if (laserController.addSample(nx, ny, now)) {
+                                            laserInputVersion++
+                                        }
+                                        changes.forEach { it.consume() }
+                                        continue
+                                    }
+
+                                    val lastPt = activeNormPoints.lastOrNull()
+                                    if (lastPt == null || (nx - lastPt.x) * (nx - lastPt.x) + (ny - lastPt.y) * (ny - lastPt.y) >= 0.000004f) {
+                                        activeNormPoints.add(StrokePoint(nx, ny))
+                                        activeStrokeRevision++
+                                    }
                                     changes.forEach { it.consume() }
+                                } else if (isLaserDrawing) {
+                                    laserController.endStroke(System.currentTimeMillis())
+                                    isLaserDrawing = false
+                                    laserInputVersion++
                                 } else if (activeNormPoints.isNotEmpty()) {
                                     // Pointer released — commit PDF stroke or erase
                                     val releasedMode = toolMode
                                     when (releasedMode) {
                                         PdfToolMode.ERASER -> {
-                                            val eraserPts = activeNormPoints
+                                            val eraserPts = activeNormPoints.toList()
                                             val threshSq = 0.035f * 0.035f
                                             val filtered = pageStrokes.filter { stroke ->
                                                 stroke.points.none { sp ->
@@ -793,19 +1163,14 @@ private fun PdfMarkupSurface(
                                                 persistCurrentPage(filtered)
                                             }
                                         }
-                                        PdfToolMode.VANISHING -> {
-                                            if (activeNormPoints.size >= 2) {
-                                                vanishingStrokes.add(
-                                                    VanishingStroke(activeNormPoints, System.currentTimeMillis())
-                                                )
-                                            }
-                                        }
+                                        PdfToolMode.VANISHING -> Unit
                                         PdfToolMode.PEN, PdfToolMode.HIGHLIGHTER -> {
                                             if (activeNormPoints.size >= 2) {
+                                                val snapshot = activeNormPoints.toList()
                                                 val finalPts = if (shapeSnapEnabled) {
-                                                    snapNormalizedPoints(activeNormPoints)
+                                                    snapNormalizedPoints(snapshot)
                                                 } else {
-                                                    activeNormPoints
+                                                    snapshot
                                                 }
                                                 val widthToUse = if (releasedMode == PdfToolMode.HIGHLIGHTER) {
                                                     (strokeWidth * 2.6f).coerceAtLeast(14f)
@@ -826,12 +1191,18 @@ private fun PdfMarkupSurface(
                                         }
                                         PdfToolMode.PAN -> Unit
                                     }
-                                    activeNormPoints = emptyList()
+                                    activeNormPoints.clear()
+                                    activeStrokeRevision++
                                 }
                             }
                         }
                     }
             ) {
+                var cachedStrokesRef by remember { mutableStateOf<List<InkStroke>?>(null) }
+                var cachedDimsKey by remember { mutableLongStateOf(0L) }
+                val cachedCommittedPaths = remember { ArrayList<Pair<Path, InkStroke>>() }
+                val activeStrokePath = remember { Path() }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -868,26 +1239,35 @@ private fun PdfMarkupSurface(
 
                     // Ink Overlay Canvas (scales cleanly in sync with the PDF bitmap)
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        val _t = currentTick
+                        val _t = laserFrameTick
+                        val _inp = laserInputVersion
+                        val _activeRev = activeStrokeRevision
                         val w = size.width
                         val h = size.height
                         val widthScale = (w / 420f).coerceAtLeast(0.75f)
 
-                        // Committed strokes on this PDF page
-                        for (stroke in pageStrokes) {
-                            if (stroke.points.size < 2) continue
-                            val path = Path().apply {
-                                moveTo(stroke.points[0].x * w, stroke.points[0].y * h)
-                                for (i in 1 until stroke.points.size) {
-                                    lineTo(stroke.points[i].x * w, stroke.points[i].y * h)
+                        val dimsKey = (w.toInt().toLong() shl 32) or (h.toInt().toLong() and 0xffffffffL)
+                        if (cachedStrokesRef !== pageStrokes || cachedDimsKey != dimsKey) {
+                            cachedStrokesRef = pageStrokes
+                            cachedDimsKey = dimsKey
+                            cachedCommittedPaths.clear()
+                            for (stroke in pageStrokes) {
+                                if (stroke.points.size >= 2) {
+                                    val path = Path().apply {
+                                        moveTo(stroke.points[0].x * w, stroke.points[0].y * h)
+                                        for (i in 1 until stroke.points.size) {
+                                            lineTo(stroke.points[i].x * w, stroke.points[i].y * h)
+                                        }
+                                    }
+                                    cachedCommittedPaths.add(path to stroke)
                                 }
                             }
+                        }
+
+                        // Committed strokes on this PDF page (pre-built Path + LRU color parse)
+                        for ((path, stroke) in cachedCommittedPaths) {
                             val alpha = if (stroke.isHighlighter) 0.42f else 1f
-                            val parsed = try {
-                                Color(android.graphics.Color.parseColor(stroke.colorHex)).copy(alpha = alpha)
-                            } catch (_: Exception) {
-                                Color.Red.copy(alpha = alpha)
-                            }
+                            val parsed = NoteJson.parseColorCached(stroke.colorHex, Color.Red).copy(alpha = alpha)
                             drawPath(
                                 path = path,
                                 color = parsed,
@@ -899,62 +1279,39 @@ private fun PdfMarkupSurface(
                             )
                         }
 
-                        // Active in-progress stroke
-                        if (activeNormPoints.size >= 2) {
-                            if (toolMode == PdfToolMode.VANISHING) {
-                                for (i in 1 until activeNormPoints.size) {
-                                    val p1 = activeNormPoints[i - 1]
-                                    val p2 = activeNormPoints[i]
-                                    val hue = ((i * 12f + (currentTick / 4f)) % 360f)
-                                    drawLine(
-                                        color = Color.hsl(hue, 1f, 0.55f, 0.95f),
-                                        start = Offset(p1.x * w, p1.y * h),
-                                        end = Offset(p2.x * w, p2.y * h),
-                                        strokeWidth = (strokeWidth + 3f) * widthScale,
-                                        cap = StrokeCap.Round
-                                    )
-                                }
-                            } else if (toolMode == PdfToolMode.PEN || toolMode == PdfToolMode.HIGHLIGHTER) {
-                                val path = Path().apply {
-                                    moveTo(activeNormPoints[0].x * w, activeNormPoints[0].y * h)
-                                    for (i in 1 until activeNormPoints.size) {
-                                        lineTo(activeNormPoints[i].x * w, activeNormPoints[i].y * h)
-                                    }
-                                }
-                                val isHi = toolMode == PdfToolMode.HIGHLIGHTER
-                                val widthToDraw = if (isHi) (strokeWidth * 2.6f).coerceAtLeast(14f) else strokeWidth
-                                val color = PdfInkColors[selectedColorIdx].copy(alpha = if (isHi) 0.42f else 1f)
-                                drawPath(
-                                    path = path,
-                                    color = color,
-                                    style = Stroke(
-                                        width = widthToDraw * widthScale,
-                                        cap = StrokeCap.Round,
-                                        join = StrokeJoin.Round
-                                    )
-                                )
+                        // Active in-progress stroke (non-laser)
+                        if (_activeRev >= 0 && activeNormPoints.size >= 2 &&
+                            (toolMode == PdfToolMode.PEN || toolMode == PdfToolMode.HIGHLIGHTER)
+                        ) {
+                            activeStrokePath.rewind()
+                            activeStrokePath.moveTo(activeNormPoints[0].x * w, activeNormPoints[0].y * h)
+                            for (i in 1 until activeNormPoints.size) {
+                                activeStrokePath.lineTo(activeNormPoints[i].x * w, activeNormPoints[i].y * h)
                             }
+                            val isHi = toolMode == PdfToolMode.HIGHLIGHTER
+                            val widthToDraw = if (isHi) (strokeWidth * 2.6f).coerceAtLeast(14f) else strokeWidth
+                            val color = PdfInkColors[selectedColorIdx].copy(alpha = if (isHi) 0.42f else 1f)
+                            drawPath(
+                                path = activeStrokePath,
+                                color = color,
+                                style = Stroke(
+                                    width = widthToDraw * widthScale,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
                         }
 
-                        // Vanishing rainbow laser strokes
-                        for (vanish in vanishingStrokes) {
-                            val age = currentTick - vanish.startTime
-                            if (age < 1500L && vanish.points.size >= 2) {
-                                val progress = (age / 1500f).coerceIn(0f, 1f)
-                                val alpha = (1f - progress).coerceIn(0f, 1f) * 0.95f
-                                for (i in 1 until vanish.points.size) {
-                                    val p1 = vanish.points[i - 1]
-                                    val p2 = vanish.points[i]
-                                    val hue = ((i * 14f + (vanish.startTime / 6f) + (progress * 180f)) % 360f)
-                                    drawLine(
-                                        color = Color.hsl(hue, 1f, 0.55f, alpha),
-                                        start = Offset(p1.x * w, p1.y * h),
-                                        end = Offset(p2.x * w, p2.y * h),
-                                        strokeWidth = ((strokeWidth + 3f) * widthScale) * (1f - progress * 0.3f),
-                                        cap = StrokeCap.Round
-                                    )
-                                }
-                            }
+                        // Batched Rainbow Vanishing Laser trails (normalized [0..1] scaled to PDF dims)
+                        if (laserController.hasAnyContent) {
+                            val nowMs = if (_t > 0L) maxOf(_t, System.currentTimeMillis()) else System.currentTimeMillis()
+                            laserController.drawInto(
+                                scope = this,
+                                nowMs = nowMs,
+                                baseStrokeWidthPx = (strokeWidth + 3f) * widthScale,
+                                scaleX = w,
+                                scaleY = h
+                            )
                         }
                     }
                 }
@@ -968,11 +1325,30 @@ private fun PdfMarkupSurface(
                 pageNoteText = updatedText
                 persistCurrentPage(pageStrokes, updatedText)
             },
-            placeholder = { Text("Margin notes for page ${currentPage + 1}…", fontSize = 13.sp) },
+            placeholder = {
+                Text(
+                    text = if (isLuxury) "MARGIN NOTE P.${currentPage + 1}..." else "Margin notes for page ${currentPage + 1}…",
+                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                    fontSize = if (isLuxury) 11.sp else 13.sp
+                )
+            },
             singleLine = false,
             maxLines = 3,
-            modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodySmall
+            shape = RoundedCornerShape(if (isLuxury) 6.dp else 12.dp),
+            colors = if (isLuxury) {
+                OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = lux.accent,
+                    unfocusedBorderColor = lux.borderHairline,
+                    focusedContainerColor = lux.recessedSurface,
+                    unfocusedContainerColor = lux.recessedSurface,
+                    focusedTextColor = lux.textPrimary,
+                    unfocusedTextColor = lux.textPrimary
+                )
+            } else OutlinedTextFieldDefaults.colors(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = if (isLuxury) 12.dp else 0.dp),
+            textStyle = if (isLuxury) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall
         )
     }
 }

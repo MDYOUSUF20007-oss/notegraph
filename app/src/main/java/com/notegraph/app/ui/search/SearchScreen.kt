@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
@@ -39,9 +40,6 @@ import com.notegraph.app.ui.components.ObsidianStatTile
 import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +53,8 @@ fun SearchScreen(
     val searchResults by viewModel.searchResults.collectAsState()
     var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
 
     MinimalistBackground {
         Scaffold(
@@ -62,12 +62,24 @@ fun SearchScreen(
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                    title = { Text("Search", style = MaterialTheme.typography.titleLarge) },
+                    title = {
+                        if (isLuxury) {
+                            Text(
+                                text = "Search",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontFamily = FontFamily.Serif,
+                                color = lux.textPrimary
+                            )
+                        } else {
+                            Text("Search", style = MaterialTheme.typography.titleLarge)
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back"
+                                contentDescription = "Back",
+                                tint = if (isLuxury) lux.textPrimary else LocalContentColor.current
                             )
                         }
                     }
@@ -82,22 +94,26 @@ fun SearchScreen(
             ) {
                 // Minimalist Capsule Search Bar
                 Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
+                    shape = RoundedCornerShape(if (isLuxury) 100.dp else 22.dp),
+                    color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                    border = BorderStroke(
+                        width = if (isLuxury) 1.dp else 0.75.dp,
+                        color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+                    ),
+                    shadowElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Search,
                             contentDescription = null,
-                            tint = activePreset.accentStart,
+                            tint = if (isLuxury) lux.accent else activePreset.accentStart,
                             modifier = Modifier.size(18.dp)
                         )
                         BasicTextField(
@@ -105,16 +121,20 @@ fun SearchScreen(
                             onValueChange = { viewModel.onQueryChanged(it) },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                fontSize = if (isLuxury) 13.sp else MaterialTheme.typography.bodyMedium.fontSize,
+                                color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
                             ),
-                            cursorBrush = SolidColor(activePreset.accentStart),
+                            cursorBrush = SolidColor(if (isLuxury) lux.accent else activePreset.accentStart),
                             modifier = Modifier.weight(1f),
                             decorationBox = { inner ->
                                 if (query.isEmpty()) {
                                     Text(
-                                        text = "Search notes, #tags, [[links]], OCR…",
+                                        text = if (isLuxury) "SEARCH NOTES, #TAGS, [[LINKS]], OCR..." else "Search notes, #tags, [[links]], OCR…",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                        fontSize = if (isLuxury) 11.5.sp else MaterialTheme.typography.bodyMedium.fontSize,
+                                        color = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                                     )
                                 }
                                 inner()
@@ -124,7 +144,7 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = "Clear",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier
                                     .size(18.dp)
                                     .clickable { viewModel.onQueryChanged("") }
@@ -135,7 +155,7 @@ fun SearchScreen(
 
                 Spacer(Modifier.height(14.dp))
 
-                val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+                val obsidianAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
                 val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
 
                 if (query.isBlank()) {
@@ -244,14 +264,17 @@ fun SearchScreen(
                     }
                 } else {
                     Text(
-                        text = "${searchResults.size} result${if (searchResults.size == 1) "" else "s"}",
+                        text = if (isLuxury) {
+                            "${searchResults.size} RESULT${if (searchResults.size == 1) "" else "S"}"
+                        } else {
+                            "${searchResults.size} result${if (searchResults.size == 1) "" else "s"}"
+                        },
                         style = MaterialTheme.typography.labelMedium,
-                        color = activePreset.accentStart,
+                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                        color = if (isLuxury) lux.accent else activePreset.accentStart,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-
-                    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
 
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -339,7 +362,7 @@ fun SearchScreen(
                                         "Markdown text note"
                                     }
                                     Text(
-                                        text = "Modified ${dateFormat.format(Date(note.updatedAt))} • $blockInfo • Local Room DB",
+                                        text = "Modified ${NoteJson.formatShortDateTime(note.updatedAt)} • $blockInfo • Local Room DB",
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 10.5.sp,
                                         lineHeight = 15.sp,

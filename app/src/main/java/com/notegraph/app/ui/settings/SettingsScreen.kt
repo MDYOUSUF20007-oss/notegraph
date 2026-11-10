@@ -1,11 +1,12 @@
 package com.notegraph.app.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,15 +18,20 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.LaptopMac
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -35,7 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.ui.components.ObsidianCard
 import com.notegraph.app.ui.components.ObsidianIconTile
 import com.notegraph.app.ui.components.ObsidianMetallicBadge
@@ -43,34 +49,38 @@ import com.notegraph.app.ui.components.ObsidianStatTile
 import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.AppThemeMode
 import com.notegraph.app.ui.theme.GradientSwatchRow
+import com.notegraph.app.ui.theme.LuxuryTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
-import kotlinx.coroutines.Dispatchers
+import com.notegraph.app.ui.theme.UiEngineMode
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onNavigateTutorial: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selectedTheme = ThemeManager.currentTheme
+    val uiEngine = ThemeManager.uiEngine
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     val activePreset = ThemeManager.currentGradient
-    val gradientsOn = ThemeManager.gradientsEnabled
+    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
+    val syncPrefs by viewModel.syncPrefs.collectAsState()
+    val lanHostState by viewModel.lanHostState.collectAsState()
+
     var isBackingUp by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
+    var isFolderSyncing by remember { mutableStateOf(false) }
+    var isLanSyncing by remember { mutableStateOf(false) }
+    var peerAddress by remember { mutableStateOf(viewModel.getLastPeerAddress()) }
+    var peerPin by remember { mutableStateOf("") }
 
-    val json = remember { Json { ignoreUnknownKeys = true; prettyPrint = true } }
-
-    // SAF Create Document for .zip backup
+    // SAF Create Document for Sync v2 .zip backup (v2 + legacy notes.json + media assets)
     val backupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri ->
@@ -78,18 +88,8 @@ fun SettingsScreen(
         isBackingUp = true
         scope.launch {
             try {
-                val notes = withContext(Dispatchers.IO) { viewModel.getAllNotesOnce() }
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        ZipOutputStream(outputStream).use { zos ->
-                            val jsonString = json.encodeToString(notes)
-                            zos.putNextEntry(ZipEntry("notes.json"))
-                            zos.write(jsonString.toByteArray(Charsets.UTF_8))
-                            zos.closeEntry()
-                        }
-                    }
-                }
-                Toast.makeText(context, "Backup complete (${notes.size} notes exported)", Toast.LENGTH_LONG).show()
+                val count = viewModel.exportZipBackup(uri)
+                Toast.makeText(context, "Sync v2 backup complete ($count notes exported)", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_SHORT).show()
             } finally {
@@ -98,7 +98,7 @@ fun SettingsScreen(
         }
     }
 
-    // SAF Open Document for restoring .zip
+    // SAF Open Document for merging/restoring .zip (supports both Sync v2 and legacy zips)
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -106,36 +106,44 @@ fun SettingsScreen(
         isRestoring = true
         scope.launch {
             try {
-                val notesJson = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                        ZipInputStream(inputStream).use { zis ->
-                            var entry = zis.nextEntry
-                            var content: String? = null
-                            while (entry != null) {
-                                if (entry.name == "notes.json") {
-                                    content = zis.bufferedReader(Charsets.UTF_8).readText()
-                                    break
-                                }
-                                entry = zis.nextEntry
-                            }
-                            content
-                        }
-                    }
-                }
-
-                if (!notesJson.isNullOrBlank()) {
-                    val notes = json.decodeFromString<List<NoteEntity>>(notesJson)
-                    withContext(Dispatchers.IO) {
-                        viewModel.restoreNotes(notes)
-                    }
-                    Toast.makeText(context, "Restored ${notes.size} notes successfully", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(context, "Invalid backup: notes.json missing inside zip", Toast.LENGTH_SHORT).show()
-                }
+                val summary = viewModel.importAndMergeZip(uri)
+                Toast.makeText(
+                    context,
+                    "Synced ${summary.notesMerged} updated, ${summary.newNotesAdded} added (${summary.linksRebuilt} links)",
+                    Toast.LENGTH_LONG
+                ).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Sync restore failed: ${e.message}", Toast.LENGTH_SHORT).show()
             } finally {
                 isRestoring = false
+            }
+        }
+    }
+
+    // SAF Open Document Tree for Shared Cloud Folder (Drive / OneDrive / Dropbox / Syncthing)
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        treeUri ?: return@rememberLauncherForActivityResult
+        val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        try {
+            context.contentResolver.takePersistableUriPermission(treeUri, takeFlags)
+        } catch (_: SecurityException) {
+        }
+        viewModel.setSavedFolderUri(treeUri)
+        isFolderSyncing = true
+        scope.launch {
+            try {
+                val summary = viewModel.syncWithSafFolder(treeUri)
+                Toast.makeText(
+                    context,
+                    "Folder synced (${summary.newNotesAdded} added, ${summary.notesMerged} merged)",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Folder sync error: ${e.message}", Toast.LENGTH_SHORT).show()
+            } finally {
+                isFolderSyncing = false
             }
         }
     }
@@ -146,16 +154,26 @@ fun SettingsScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = "Appearance & Vault",
-                            style = MaterialTheme.typography.titleLarge
-                        )
+                        if (isLuxury) {
+                            Text(
+                                text = "Appearance & Vault",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontFamily = FontFamily.Serif,
+                                color = lux.textPrimary
+                            )
+                        } else {
+                            Text(
+                                text = "Appearance & Vault",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back"
+                                contentDescription = "Back",
+                                tint = if (isLuxury) lux.textPrimary else LocalContentColor.current
                             )
                         }
                     },
@@ -176,7 +194,7 @@ fun SettingsScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // ─── Live Interactive Theme + Gradient Preview (ObsidianCard) ───
+                // ─── Live Interactive Theme + Architecture Preview ───
                 ObsidianCard(
                     accentColor = obsidianAccent,
                     verticalPadding = 2.dp,
@@ -196,27 +214,39 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = if (gradientsOn) activePreset.name else "${activePreset.name} · Flat",
+                                        text = when {
+                                            isLuxury -> selectedTheme.luxuryName
+                                            gradientsOn -> activePreset.name
+                                            else -> "${activePreset.name} · Flat"
+                                        },
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = ObsidianTokens.TextPrimary
                                     )
                                     ObsidianMetallicBadge(
-                                        text = selectedTheme.shortLabel,
+                                        text = selectedTheme.shortLabelFor(isLuxury),
                                         accentColor = obsidianAccent
                                     )
                                 }
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "${selectedTheme.displayName} • Obsidian Card System",
+                                    text = if (isLuxury) {
+                                        "${selectedTheme.luxurySubtitle} // 1px Flat System"
+                                    } else {
+                                        "${selectedTheme.displayName} • Obsidian Card System"
+                                    },
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 11.sp,
                                     color = ObsidianTokens.TextMuted
                                 )
                             }
                             ObsidianStatTile(
-                                value = if (gradientsOn) "GRAD" else "FLAT",
-                                label = "FINISH",
+                                value = when {
+                                    isLuxury -> "1PX"
+                                    gradientsOn -> "GRAD"
+                                    else -> "FLAT"
+                                },
+                                label = if (isLuxury) "LUXURY" else "FINISH",
                                 accentColor = obsidianAccent
                             )
                         }
@@ -225,9 +255,12 @@ fun SettingsScreen(
 
                         // Mini mock note card preview inside Tier 1
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(if (isLuxury) 6.dp else 12.dp),
                             color = ObsidianTokens.StatTileSurface,
-                            border = BorderStroke(0.75.dp, obsidianAccent.copy(alpha = 0.45f))
+                            border = BorderStroke(
+                                width = if (isLuxury) 1.dp else 0.75.dp,
+                                color = if (isLuxury) lux.borderHairline else obsidianAccent.copy(alpha = 0.45f)
+                            )
                         ) {
                             Row(
                                 modifier = Modifier
@@ -244,7 +277,11 @@ fun SettingsScreen(
                                     )
                                     Spacer(Modifier.height(2.dp))
                                     Text(
-                                        text = "Frosted two-tier contrast · specular edge glow",
+                                        text = if (isLuxury) {
+                                            "Zero gradients · 1px borders · monospace chrome"
+                                        } else {
+                                            "Frosted two-tier contrast · specular edge glow"
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = ObsidianTokens.TextMuted
                                     )
@@ -252,12 +289,12 @@ fun SettingsScreen(
                                 Spacer(Modifier.width(8.dp))
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(20.dp))
+                                        .clip(RoundedCornerShape(if (isLuxury) 100.dp else 20.dp))
                                         .background(ThemeManager.activeAccentBrush)
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
                                     Text(
-                                        text = "New",
+                                        text = if (isLuxury) "NEW" else "New",
                                         style = MaterialTheme.typography.labelMedium,
                                         color = activePreset.onAccent,
                                         fontWeight = FontWeight.SemiBold
@@ -268,7 +305,11 @@ fun SettingsScreen(
                     },
                     footerContent = {
                         Text(
-                            text = "Active preset: ${activePreset.name} (${selectedTheme.displayName}) • Persisted locally via SharedPreferences • Dynamic accent synced to cards & graph nodes",
+                            text = if (isLuxury) {
+                                "Engine: Bespoke Luxury • Surface: ${selectedTheme.luxuryName} • Zero gradient fills · Persisted in SharedPreferences"
+                            } else {
+                                "Active preset: ${activePreset.name} (${selectedTheme.displayName}) • Persisted locally via SharedPreferences • Dynamic accent synced to cards & graph nodes"
+                            },
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.5.sp,
                             lineHeight = 15.sp,
@@ -277,10 +318,10 @@ fun SettingsScreen(
                     }
                 )
 
-                // ─── Theme Mode Matrix (AMOLED, Kindle, Matte / Mac) ───
+                // ─── Theme Mode Matrix (AMOLED Black, Kindle Parchment, Matte Minimalist) ───
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Theme Surface",
+                        text = if (isLuxury) "CURATED THEME SURFACE" else "Theme Surface",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -292,60 +333,93 @@ fun SettingsScreen(
                         AppThemeMode.values().forEach { mode ->
                             val isSelected = selectedTheme == mode
                             val modePreset = ThemeManager.presetFor(mode)
+                            val modeLux = LuxuryTokens.forMode(mode)
                             val icon = when (mode) {
                                 AppThemeMode.DEEP_PURPLE_AMOLED -> Icons.Rounded.DarkMode
                                 AppThemeMode.KINDLE_PARCHMENT -> Icons.Rounded.MenuBook
                                 AppThemeMode.MATTE_STUDIO -> Icons.Rounded.LaptopMac
                             }
-                            val subtitle = when (mode) {
-                                AppThemeMode.DEEP_PURPLE_AMOLED -> "True Black"
-                                AppThemeMode.KINDLE_PARCHMENT -> "E-Ink Paper"
-                                AppThemeMode.MATTE_STUDIO -> "Slate Studio"
+                            val subtitle = when {
+                                isLuxury -> mode.luxurySubtitle
+                                mode == AppThemeMode.DEEP_PURPLE_AMOLED -> "True Black"
+                                mode == AppThemeMode.KINDLE_PARCHMENT -> "E-Ink Paper"
+                                else -> "Slate Studio"
                             }
 
                             Surface(
                                 onClick = { ThemeManager.setTheme(mode) },
                                 modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isSelected) modePreset.cardTint else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(if (isLuxury) 8.dp else 16.dp),
+                                color = if (isLuxury) {
+                                    if (isSelected) modeLux.recessedSurface else modeLux.elevatedSurface
+                                } else {
+                                    if (isSelected) modePreset.cardTint else MaterialTheme.colorScheme.surfaceVariant
+                                },
                                 border = BorderStroke(
-                                    width = if (isSelected) 1.5.dp else 0.75.dp,
-                                    color = if (isSelected) modePreset.accentStart else ThemeManager.cardBorderColor
+                                    width = if (isLuxury) 1.dp else if (isSelected) 1.5.dp else 0.75.dp,
+                                    color = when {
+                                        isLuxury && isSelected -> modeLux.accent
+                                        isLuxury -> lux.borderHairline
+                                        isSelected -> modePreset.accentStart
+                                        else -> ThemeManager.cardBorderColor
+                                    }
                                 )
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(vertical = 14.dp, horizontal = 10.dp),
+                                    modifier = Modifier.padding(vertical = 13.dp, horizontal = 8.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(
-                                                Brush.linearGradient(
-                                                    listOf(modePreset.accentStart, modePreset.accentEnd)
-                                                )
+                                    if (isLuxury) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = modeLux.canvasBackground,
+                                            border = BorderStroke(
+                                                width = if (isSelected) 1.5.dp else 1.dp,
+                                                color = if (isSelected) modeLux.accent else modeLux.borderHairline
                                             ),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isSelected) Icons.Rounded.Check else icon,
-                                            contentDescription = mode.displayName,
-                                            tint = modePreset.onAccent,
-                                            modifier = Modifier.size(15.dp)
-                                        )
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = if (isSelected) Icons.Rounded.Check else icon,
+                                                    contentDescription = mode.luxuryName,
+                                                    tint = if (isSelected) modeLux.accent else modeLux.textSecondary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        listOf(modePreset.accentStart, modePreset.accentEnd)
+                                                    )
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isSelected) Icons.Rounded.Check else icon,
+                                                contentDescription = mode.displayName,
+                                                tint = modePreset.onAccent,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
                                     }
                                     Text(
-                                        text = mode.shortLabel,
+                                        text = mode.shortLabelFor(isLuxury),
                                         style = MaterialTheme.typography.titleSmall,
+                                        color = if (isLuxury) modeLux.textPrimary else MaterialTheme.colorScheme.onSurface,
                                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                                     )
                                     Text(
                                         text = subtitle,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 9.5.sp,
+                                        color = if (isLuxury) modeLux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -353,92 +427,570 @@ fun SettingsScreen(
                     }
                 }
 
-                // ─── Choosable Gradient Colors (Per Theme) ───
+                // ─── Curated Luxury Palette / Classic Gradient Palette ───
+                if (isLuxury) {
+                    ObsidianCard(
+                        accentColor = obsidianAccent,
+                        verticalPadding = 2.dp,
+                        headerContent = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Curated Surface Tokens",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    Text(
+                                        text = "Strict zero-gradient palette for ${selectedTheme.luxuryName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ObsidianTokens.TextMuted
+                                    )
+                                }
+                                ObsidianMetallicBadge(
+                                    text = "FLAT",
+                                    accentColor = obsidianAccent
+                                )
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val swatches = listOf(
+                                    "CANVAS" to lux.canvasBackground,
+                                    "SURFACE" to lux.elevatedSurface,
+                                    "1PX" to lux.borderHairline,
+                                    "ACCENT" to lux.accent
+                                )
+                                swatches.forEach { (label, swatchCol) ->
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = lux.recessedSurface,
+                                        border = BorderStroke(1.dp, lux.borderHairline),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                        ) {
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = swatchCol,
+                                                border = BorderStroke(1.dp, lux.borderHairline),
+                                                modifier = Modifier.size(18.dp)
+                                            ) {}
+                                            Text(
+                                                text = label,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                color = lux.textSecondary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        footerContent = {
+                            Text(
+                                text = "AMOLED (#000000/#121212/#262626), Kindle Parchment (#F4F1EA), Matte Minimalist (#1E2229) • Accent #8B5CF6",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                lineHeight = 14.5.sp,
+                                color = ObsidianTokens.FooterText
+                            )
+                        }
+                    )
+                } else {
+                    ObsidianCard(
+                        accentColor = obsidianAccent,
+                        verticalPadding = 2.dp,
+                        headerContent = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${selectedTheme.shortLabel} Gradient Palette",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    Text(
+                                        text = "Each theme remembers its own gradient color",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ObsidianTokens.TextMuted
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        ThemeManager.resetVisualsToDefault()
+                                        Toast.makeText(context, "Visuals reset to default", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Refresh,
+                                        contentDescription = "Reset Gradients",
+                                        tint = accentInk
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+
+                            GradientSwatchRow(
+                                mode = selectedTheme,
+                                selectedId = ThemeManager.selectedGradientIdFor(selectedTheme),
+                                onSelect = { chosen ->
+                                    ThemeManager.setGradient(selectedTheme, chosen.id)
+                                },
+                                labelColor = ObsidianTokens.TextPrimary,
+                                secondaryLabelColor = ObsidianTokens.TextMuted
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider(color = ObsidianTokens.DividerRule)
+                            Spacer(Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { ThemeManager.setGradientsEnabledState(!gradientsOn) }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Ambient Gradient Finish",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    Text(
+                                        text = if (gradientsOn) "Multi-stop accent & card sheen active" else "Minimal classic flat surfaces",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = ObsidianTokens.TextMuted
+                                    )
+                                }
+                                Switch(
+                                    checked = gradientsOn,
+                                    onCheckedChange = { ThemeManager.setGradientsEnabledState(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = activePreset.onAccent,
+                                        checkedTrackColor = obsidianAccent
+                                    )
+                                )
+                            }
+                        },
+                        footerContent = {
+                            Text(
+                                text = "AMOLED, Kindle Paper, and Matte Studio each keep independent accent presets offline on this device.",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.5.sp,
+                                lineHeight = 15.sp,
+                                color = ObsidianTokens.FooterText
+                            )
+                        }
+                    )
+                }
+
+                // ─── Interface Engine Switcher (Bottom of Theme / Appearance Section) ───
                 ObsidianCard(
                     accentColor = obsidianAccent,
                     verticalPadding = 2.dp,
                     headerContent = {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
+                            ObsidianIconTile(
+                                icon = Icons.Rounded.Layers,
+                                accentColor = obsidianAccent,
+                                size = 40.dp,
+                                iconSize = 19.dp
+                            )
                             Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Interface Engine",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    ObsidianMetallicBadge(
+                                        text = uiEngine.badgeLabel,
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "${selectedTheme.shortLabel} Gradient Palette",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ObsidianTokens.TextPrimary
-                                )
-                                Text(
-                                    text = "Each theme remembers its own gradient color",
+                                    text = "Switches live across cards, graph blueprint, canvas & toolbars without restart",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ObsidianTokens.TextMuted
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    ThemeManager.resetVisualsToDefault()
-                                    Toast.makeText(context, "Visuals reset to default", Toast.LENGTH_SHORT).show()
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Refresh,
-                                    contentDescription = "Reset Gradients",
-                                    tint = accentInk
                                 )
                             }
                         }
 
                         Spacer(Modifier.height(12.dp))
 
-                        GradientSwatchRow(
-                            mode = selectedTheme,
-                            selectedId = ThemeManager.selectedGradientIdFor(selectedTheme),
-                            onSelect = { chosen ->
-                                ThemeManager.setGradient(selectedTheme, chosen.id)
-                            },
-                            labelColor = ObsidianTokens.TextPrimary,
-                            secondaryLabelColor = ObsidianTokens.TextMuted
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                UiEngineMode.CLASSIC,
+                                UiEngineMode.BESPOKE_LUXURY
+                            ).forEach { option ->
+                                val isActive = uiEngine == option
+                                val optionBorder = when {
+                                    isActive && isLuxury -> lux.accent
+                                    isActive -> obsidianAccent
+                                    isLuxury -> lux.borderHairline
+                                    else -> ObsidianTokens.DividerRule
+                                }
+                                val optionFill = when {
+                                    isActive && isLuxury -> lux.accent.copy(alpha = 0.10f)
+                                    isActive -> obsidianAccent.copy(alpha = 0.14f)
+                                    else -> ObsidianTokens.StatTileSurface
+                                }
+
+                                Surface(
+                                    onClick = { ThemeManager.setUiEngine(option) },
+                                    shape = RoundedCornerShape(if (isLuxury) 6.dp else 12.dp),
+                                    color = optionFill,
+                                    border = BorderStroke(
+                                        width = if (isActive) 1.25.dp else 1.dp,
+                                        color = optionBorder
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        RadioButton(
+                                            selected = isActive,
+                                            onClick = { ThemeManager.setUiEngine(option) },
+                                            colors = RadioButtonDefaults.colors(
+                                                selectedColor = obsidianAccent,
+                                                unselectedColor = ObsidianTokens.TextMuted
+                                            )
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = option.displayName,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                text = option.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = ObsidianTokens.TextMuted
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    footerContent = {
+                        Text(
+                            text = "Active engine: ${uiEngine.displayName} • Stored locally in SharedPreferences • Instant runtime tree switch",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            lineHeight = 14.5.sp,
+                            color = ObsidianTokens.FooterText
                         )
+                    }
+                )
 
-                        Spacer(Modifier.height(12.dp))
-                        HorizontalDivider(color = ObsidianTokens.DividerRule)
-                        Spacer(Modifier.height(10.dp))
+                // ─── Cross-OS Cloud Folder & Wi-Fi LAN Sync (ObsidianCard) ───
+                ObsidianCard(
+                    accentColor = obsidianAccent,
+                    verticalPadding = 2.dp,
+                    headerContent = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ObsidianIconTile(
+                                icon = Icons.Rounded.Sync,
+                                accentColor = obsidianAccent,
+                                size = 40.dp,
+                                iconSize = 19.dp
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Cross-OS Node Sync",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    ObsidianMetallicBadge(
+                                        text = "WIN / MAC / ANDROID",
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "Two-way LWW merge for every note, folder, checklist, ink stroke, PDF markup, graph link & deletion across Android, Windows & macOS.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ObsidianTokens.TextSecondary
+                                )
+                            }
+                        }
 
+                        Spacer(Modifier.height(14.dp))
+
+                        // 1. Shared Cloud Folder (Drive / OneDrive / Syncthing / Dropbox / iCloud Bridge)
+                        Text(
+                            text = "Shared Cloud Folder Sync",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ObsidianTokens.TextPrimary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        val savedFolderDisplay = syncPrefs.savedFolderUri?.let { uriStr ->
+                            Uri.decode(Uri.parse(uriStr).lastPathSegment ?: uriStr)
+                        } ?: "No shared folder linked"
+                        Text(
+                            text = savedFolderDisplay,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = ObsidianTokens.TextMuted
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { folderPickerLauncher.launch(null) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ObsidianTokens.TextPrimary),
+                                border = BorderStroke(1.dp, obsidianAccent.copy(alpha = 0.45f))
+                            ) {
+                                Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = accentInk, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Choose Folder", fontSize = 12.sp)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .alpha(if (!isFolderSyncing && syncPrefs.savedFolderUri != null) 1f else 0.45f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(ThemeManager.activeAccentBrush)
+                                    .clickable(enabled = !isFolderSyncing && syncPrefs.savedFolderUri != null) {
+                                        val uriStr = syncPrefs.savedFolderUri ?: return@clickable
+                                        isFolderSyncing = true
+                                        scope.launch {
+                                            try {
+                                                val summary = viewModel.syncWithSafFolder(Uri.parse(uriStr))
+                                                Toast.makeText(
+                                                    context,
+                                                    "Synced (${summary.newNotesAdded} added, ${summary.notesMerged} merged)",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Sync failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            } finally {
+                                                isFolderSyncing = false
+                                            }
+                                        }
+                                    }
+                                    .padding(vertical = 10.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isFolderSyncing) "Syncing…" else "Sync Folder Now",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = activePreset.onAccent
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { ThemeManager.setGradientsEnabledState(!gradientsOn) }
+                                .clickable { viewModel.setAutoSyncOnOpen(!syncPrefs.autoSyncOnOpen) }
                                 .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Ambient Gradient Finish",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = ObsidianTokens.TextPrimary
-                                )
-                                Text(
-                                    text = if (gradientsOn) "Multi-stop accent & card sheen active" else "Minimal classic flat surfaces",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = ObsidianTokens.TextMuted
-                                )
-                            }
+                            Text(
+                                text = "Auto-sync shared folder on launch",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ObsidianTokens.TextSecondary
+                            )
                             Switch(
-                                checked = gradientsOn,
-                                onCheckedChange = { ThemeManager.setGradientsEnabledState(it) },
+                                checked = syncPrefs.autoSyncOnOpen,
+                                onCheckedChange = { viewModel.setAutoSyncOnOpen(it) },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = activePreset.onAccent,
                                     checkedTrackColor = obsidianAccent
                                 )
                             )
                         }
+
+                        Spacer(Modifier.height(10.dp))
+                        HorizontalDivider(color = ObsidianTokens.DividerRule)
+                        Spacer(Modifier.height(12.dp))
+
+                        // 2. Direct Wi-Fi LAN Peer-to-Peer Sync
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Rounded.Wifi, contentDescription = null, tint = accentInk, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = "Direct Wi-Fi LAN Sync",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ObsidianTokens.TextPrimary
+                                )
+                            }
+                            Switch(
+                                checked = lanHostState.isRunning,
+                                onCheckedChange = { enabled ->
+                                    if (enabled) viewModel.startLanHostServer() else viewModel.stopLanHostServer()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = activePreset.onAccent,
+                                    checkedTrackColor = obsidianAccent
+                                )
+                            )
+                        }
+
+                        if (lanHostState.isRunning) {
+                            Spacer(Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = ObsidianTokens.StatTileSurface,
+                                border = BorderStroke(0.75.dp, obsidianAccent.copy(alpha = 0.4f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    val hostDisplay = if (lanHostState.addresses.isNotEmpty()) {
+                                        "${lanHostState.addresses.first()}:${lanHostState.port}"
+                                    } else {
+                                        "Port ${lanHostState.port}"
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Enter on Win / Mac: $hostDisplay",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ObsidianTokens.TextPrimary
+                                        )
+                                        Text(
+                                            text = "Sync PIN: ${lanHostState.pin} • ${lanHostState.statusMessage}",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.5.sp,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                    IconButton(onClick = { viewModel.regenerateLanPin() }) {
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "New PIN", tint = accentInk, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = peerAddress,
+                                onValueChange = { peerAddress = it },
+                                label = { Text("Desktop / Peer IP:Port") },
+                                placeholder = { Text("192.168.1.42:8765") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1.6f),
+                                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            )
+                            OutlinedTextField(
+                                value = peerPin,
+                                onValueChange = { peerPin = it },
+                                label = { Text("PIN") },
+                                placeholder = { Text("4829") },
+                                singleLine = true,
+                                modifier = Modifier.weight(0.9f),
+                                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                isLanSyncing = true
+                                scope.launch {
+                                    val result = viewModel.syncWithLanPeer(peerAddress, peerPin)
+                                    result.onSuccess { summary ->
+                                        Toast.makeText(
+                                            context,
+                                            "Wi-Fi Synced with ${summary.remoteDevice}: ${summary.notesMerged} merged, ${summary.newNotesAdded} added",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }.onFailure { err ->
+                                        Toast.makeText(context, err.message ?: "Wi-Fi sync failed", Toast.LENGTH_SHORT).show()
+                                    }
+                                    isLanSyncing = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isLanSyncing && peerAddress.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = accentInk),
+                            border = BorderStroke(1.dp, obsidianAccent.copy(alpha = 0.5f))
+                        ) {
+                            Icon(Icons.Rounded.Wifi, contentDescription = null, tint = accentInk, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (isLanSyncing) "Syncing over Wi-Fi…" else "Sync with Peer over Wi-Fi")
+                        }
                     },
                     footerContent = {
+                        val lastTime = if (syncPrefs.lastSyncAt > 0L) {
+                            NoteJson.formatShortDateTime(syncPrefs.lastSyncAt)
+                        } else {
+                            "Never"
+                        }
                         Text(
-                            text = "AMOLED, Kindle Paper, and Matte Studio each keep independent accent presets offline on this device.",
+                            text = "Device: ${syncPrefs.deviceName} • Last sync: $lastTime • ${syncPrefs.lastSyncMessage}",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.5.sp,
                             lineHeight = 15.sp,
@@ -469,19 +1021,19 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = "Vault Backup & Sync",
+                                        text = "Portable Vault Archive",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = ObsidianTokens.TextPrimary
                                     )
                                     ObsidianMetallicBadge(
-                                        text = "ZIP",
+                                        text = "ZIP v2",
                                         accentColor = obsidianAccent
                                     )
                                 }
                                 Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = "Export notes, blocks, ink strokes, and PDFs into a portable .zip archive for desktop or backup.",
+                                    text = "Export & merge notes, folders, ink strokes, boards, checklists & PDF assets via portable .zip across Android, Windows & macOS.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = ObsidianTokens.TextSecondary
                                 )
@@ -493,10 +1045,11 @@ fun SettingsScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .alpha(if (isBackingUp) 0.55f else 1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(ThemeManager.activeAccentBrush)
                                 .clickable(enabled = !isBackingUp) {
-                                    backupLauncher.launch("NoteGraph_Vault_Backup.zip")
+                                    backupLauncher.launch("NoteGraph_Vault_Sync_v2.zip")
                                 }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
@@ -512,7 +1065,7 @@ fun SettingsScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = if (isBackingUp) "Archiving Vault…" else "Backup Vault (.zip)",
+                                    text = if (isBackingUp) "Archiving Vault…" else "Export Sync Package (.zip)",
                                     style = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold,
                                     color = activePreset.onAccent
@@ -541,12 +1094,86 @@ fun SettingsScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text(if (isRestoring) "Restoring Vault…" else "Restore from .zip")
+                            Text(if (isRestoring) "Merging Vault…" else "Merge / Restore from .zip")
                         }
                     },
                     footerContent = {
                         Text(
-                            text = "Local storage: Room SQLite database • Zero cloud telemetry • Portable archive restores all notes, folders, sketches & PDF markups.",
+                            text = "WAL SQLite database • Zero cloud lock-in • Includes Sync v2 + legacy notes.json compatibility.",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.5.sp,
+                            lineHeight = 15.sp,
+                            color = ObsidianTokens.FooterText
+                        )
+                    }
+                )
+
+                // ─── App Tutorial & Graph Guide (ObsidianCard) ───
+                ObsidianCard(
+                    accentColor = obsidianAccent,
+                    verticalPadding = 2.dp,
+                    onClick = onNavigateTutorial,
+                    headerContent = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ObsidianIconTile(
+                                icon = Icons.Rounded.MenuBook,
+                                accentColor = obsidianAccent,
+                                size = 40.dp,
+                                iconSize = 19.dp
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "App Tutorial & Field Guide",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    ObsidianMetallicBadge(
+                                        text = "GUIDE",
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "Step-by-step walkthrough: connecting Knowledge Graph nodes, Sketch Lasso move, PDF OCR, Voice timestamps & Vault security.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ObsidianTokens.TextSecondary
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = onNavigateTutorial,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = accentInk
+                            ),
+                            border = BorderStroke(1.dp, obsidianAccent.copy(alpha = 0.55f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MenuBook,
+                                contentDescription = null,
+                                tint = accentInk,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Open Interactive Tutorial")
+                        }
+                    },
+                    footerContent = {
+                        Text(
+                            text = "Includes a 1-tap demo cluster generator to visualize linked nodes immediately.",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.5.sp,
                             lineHeight = 15.sp,

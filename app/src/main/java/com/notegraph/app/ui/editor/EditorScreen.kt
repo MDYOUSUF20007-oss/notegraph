@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.ui.common.NoteSecurityManager
@@ -68,10 +69,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,8 +96,10 @@ fun EditorScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val json = remember { Json { ignoreUnknownKeys = true } }
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val primaryAccent = if (isLuxury) lux.accent else activePreset.accentStart
 
     LaunchedEffect(note?.id) {
         val loaded = note
@@ -339,7 +338,7 @@ fun EditorScreen(
                             Icon(
                                 imageVector = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
                                 contentDescription = if (isLocked) "Unlock Note" else "Lock Note",
-                                tint = if (isLocked) activePreset.accentStart else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (isLocked) primaryAccent else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         IconButton(onClick = {
@@ -356,7 +355,7 @@ fun EditorScreen(
                             Icon(
                                 imageVector = Icons.Rounded.Check,
                                 contentDescription = "Save Note",
-                                tint = activePreset.accentStart
+                                tint = primaryAccent
                             )
                         }
                         IconButton(onClick = { showExportSheet = true }) {
@@ -370,26 +369,40 @@ fun EditorScreen(
                 )
             },
             bottomBar = {
-                // Single minimalist glass toolbar for multimedia, PDF & checklist blocks
+                // Toolbar Restraint: minimal razor-thin pill with 1px hairline border & zero drop shadow in Luxury mode
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(
+                            horizontal = if (isLuxury) 16.dp else 12.dp,
+                            vertical = if (isLuxury) 10.dp else 8.dp
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(10.dp, RoundedCornerShape(24.dp)),
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
-                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                        modifier = if (isLuxury) {
+                            Modifier.fillMaxWidth()
+                        } else {
+                            Modifier
+                                .fillMaxWidth()
+                                .shadow(10.dp, RoundedCornerShape(24.dp))
+                        },
+                        shape = RoundedCornerShape(if (isLuxury) 100.dp else 24.dp),
+                        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                        border = BorderStroke(
+                            width = if (isLuxury) 1.dp else 0.75.dp,
+                            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+                        ),
+                        shadowElevation = 0.dp
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .padding(
+                                    horizontal = if (isLuxury) 10.dp else 8.dp,
+                                    vertical = if (isLuxury) 4.dp else 6.dp
+                                ),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -428,121 +441,151 @@ fun EditorScreen(
                 }
             }
         ) { padding ->
+            val proseWordCount = remember(contentField.text) {
+                contentField.text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 20.dp)
+                    .then(if (isLuxury) Modifier else Modifier.padding(horizontal = 20.dp))
                     .verticalScroll(rememberScrollState())
             ) {
-                // Borderless Editorial Title
-                BasicTextField(
-                    value = title,
-                    onValueChange = {
-                        title = it
-                        viewModel.updateTitle(it)
-                    },
-                    textStyle = MaterialTheme.typography.headlineMedium.copy(
-                        color = MaterialTheme.colorScheme.onBackground
-                    ),
-                    cursorBrush = SolidColor(activePreset.accentStart),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { innerTextField ->
-                        if (title.isEmpty()) {
-                            Text(
-                                text = "Untitled",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                            )
+                Column(
+                    modifier = if (isLuxury) {
+                        Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+                    } else {
+                        Modifier.fillMaxWidth()
+                    }
+                ) {
+                    if (isLuxury) {
+                        val modDate = NoteJson.formatShortDateTime(note?.updatedAt ?: System.currentTimeMillis()).uppercase()
+                        Text(
+                            text = "$modDate · $proseWordCount WORDS · ${blocks.size} BLOCKS",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.8.sp,
+                            color = lux.textMuted,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+
+                    // Borderless Editorial Title (Serif in Luxury)
+                    BasicTextField(
+                        value = title,
+                        onValueChange = {
+                            title = it
+                            viewModel.updateTitle(it)
+                        },
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(
+                            fontFamily = if (isLuxury) FontFamily.Serif else MaterialTheme.typography.headlineMedium.fontFamily,
+                            color = MaterialTheme.colorScheme.onBackground
+                        ),
+                        cursorBrush = SolidColor(primaryAccent),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { innerTextField ->
+                            if (title.isEmpty()) {
+                                Text(
+                                    text = "Untitled",
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontFamily = if (isLuxury) FontFamily.Serif else null,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                )
+                            }
+                            innerTextField()
                         }
-                        innerTextField()
-                    }
-                )
-
-                Spacer(Modifier.height(10.dp))
-
-                // Minimal accent hairline rule
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .width(40.dp)
-                            .height(2.5.dp)
-                            .clip(CircleShape)
-                            .background(ThemeManager.activeAccentBrush)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(0.5.dp)
-                            .background(ThemeManager.cardBorderColor)
-                    )
-                }
 
-                Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(10.dp))
 
-                // Borderless Distraction-Free Note Canvas
-                BasicTextField(
-                    value = contentField,
-                    onValueChange = { updated ->
-                        contentField = updated
-                        viewModel.updateContent(updated.text)
-                    },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                        color = MaterialTheme.colorScheme.onBackground,
-                        lineHeight = 25.sp
-                    ),
-                    cursorBrush = SolidColor(activePreset.accentStart),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 120.dp),
-                    decorationBox = { innerTextField ->
-                        if (contentField.text.isEmpty()) {
-                            Text(
-                                text = "Start writing, or type [[ to connect notes…",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-                            )
-                        }
-                        innerTextField()
+                    // Minimal accent hairline rule
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .width(if (isLuxury) 28.dp else 40.dp)
+                                .height(if (isLuxury) 1.5.dp else 2.5.dp)
+                                .clip(CircleShape)
+                                .background(if (isLuxury) SolidColor(lux.accent) else ThemeManager.activeAccentBrush)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(if (isLuxury) 1.dp else 0.5.dp)
+                                .background(if (isLuxury) lux.dividerRule else ThemeManager.cardBorderColor)
+                        )
                     }
-                )
 
-                // Live Obsidian [[Wiki-Link]] Autocomplete Bar while typing `[[query`
-                val activeWikiMatch = remember(contentField) {
-                    val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
-                    val beforeCursor = contentField.text.substring(0, cursor)
-                    Regex("""\[\[([^\[\]\n]*)$""").find(beforeCursor)
-                }
-                if (activeWikiMatch != null) {
-                    val rawQuery = activeWikiMatch.groupValues[1].trim()
-                    val candidates = remember(allNotes, note?.id, rawQuery) {
-                        allNotes
-                            .filter { it.id != note?.id && it.title.isNotBlank() }
-                            .filter { rawQuery.isBlank() || it.title.contains(rawQuery, ignoreCase = true) }
-                            .take(10)
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(0.75.dp, activePreset.accentStart.copy(alpha = 0.55f)),
+                    Spacer(Modifier.height(16.dp))
+
+                    // Borderless Distraction-Free Note Canvas (Serif body typography in Luxury)
+                    BasicTextField(
+                        value = contentField,
+                        onValueChange = { updated ->
+                            contentField = updated
+                            viewModel.updateContent(updated.text)
+                        },
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            fontFamily = if (isLuxury) FontFamily.Serif else MaterialTheme.typography.bodyLarge.fontFamily,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            lineHeight = if (isLuxury) 27.sp else 25.sp
+                        ),
+                        cursorBrush = SolidColor(primaryAccent),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            Text(
-                                text = if (candidates.isEmpty()) "No matching notes (close with ]] to create)" else "Link note:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = activePreset.accentStart,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            if (candidates.isNotEmpty()) {
-                                Spacer(Modifier.height(6.dp))
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    items(candidates, key = { it.id }) { candidate ->
-                                        SuggestionChip(
-                                            onClick = {
+                            .heightIn(min = 120.dp),
+                        decorationBox = { innerTextField ->
+                            if (contentField.text.isEmpty()) {
+                                Text(
+                                    text = "Start writing, or type [[ to connect notes…",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontFamily = if (isLuxury) FontFamily.Serif else null,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                )
+                            }
+                            innerTextField()
+                        }
+                    )
+
+                    // Live Obsidian [[Wiki-Link]] Autocomplete Bar while typing `[[query`
+                    val activeWikiMatch = remember(contentField) {
+                        val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
+                        val beforeCursor = contentField.text.substring(0, cursor)
+                        Regex("""\[\[([^\[\]\n]*)$""").find(beforeCursor)
+                    }
+                    if (activeWikiMatch != null) {
+                        val rawQuery = activeWikiMatch.groupValues[1].trim()
+                        val candidates = remember(allNotes, note?.id, rawQuery) {
+                            allNotes
+                                .filter { it.id != note?.id && it.title.isNotBlank() }
+                                .filter { rawQuery.isBlank() || it.title.contains(rawQuery, ignoreCase = true) }
+                                .take(10)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(if (isLuxury) 8.dp else 14.dp),
+                            color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(
+                                width = if (isLuxury) 1.dp else 0.75.dp,
+                                color = primaryAccent.copy(alpha = 0.6f)
+                            ),
+                            shadowElevation = 0.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                Text(
+                                    text = if (candidates.isEmpty()) "NO MATCHING NOTES (CLOSE WITH ]] TO CREATE)" else if (isLuxury) "LINK NOTE" else "Link note:",
+                                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = primaryAccent,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                if (candidates.isNotEmpty()) {
+                                    Spacer(Modifier.height(6.dp))
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        items(candidates, key = { it.id }) { candidate ->
+                                            val applyWikiLink = {
                                                 val startIdx = activeWikiMatch.range.first
                                                 val cursor = contentField.selection.start.coerceIn(startIdx, contentField.text.length)
                                                 val inserted = "[[${candidate.title}]] "
@@ -550,9 +593,29 @@ fun EditorScreen(
                                                 val newCursor = startIdx + inserted.length
                                                 contentField = TextFieldValue(newText, TextRange(newCursor))
                                                 viewModel.updateContent(newText)
-                                            },
-                                            label = { Text("[[${candidate.title}]]") }
-                                        )
+                                            }
+                                            if (isLuxury) {
+                                                Surface(
+                                                    onClick = applyWikiLink,
+                                                    shape = RoundedCornerShape(100.dp),
+                                                    color = lux.recessedSurface,
+                                                    border = BorderStroke(1.dp, lux.borderHairline)
+                                                ) {
+                                                    Text(
+                                                        text = "[[${candidate.title}]]",
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = 11.sp,
+                                                        color = lux.textPrimary,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    )
+                                                }
+                                            } else {
+                                                SuggestionChip(
+                                                    onClick = applyWikiLink,
+                                                    label = { Text("[[${candidate.title}]]") }
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -573,192 +636,321 @@ fun EditorScreen(
                             is NoteBlock.ChecklistBlock -> "Checklist"
                             is NoteBlock.PdfBlock -> "PDF Markup"
                         }
-                        val blockShape = RoundedCornerShape(16.dp)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 5.dp)
-                                .clip(blockShape)
-                                .background(ThemeManager.activeCardBrush(highlighted = false))
-                                .border(0.75.dp, ThemeManager.cardBorderColor, blockShape)
-                        ) {
-                            Column {
+
+                        val blockBody: @Composable () -> Unit = {
+                            when (block) {
+                                is NoteBlock.TextBlock -> {
+                                    var blockText by remember(block.id) { mutableStateOf(block.text) }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .then(
+                                                if (isLuxury) Modifier.padding(vertical = 4.dp)
+                                                else Modifier
+                                            )
+                                    ) {
+                                        if (isLuxury) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(2.dp)
+                                                    .heightIn(min = 38.dp)
+                                                    .background(lux.borderHairline)
+                                            )
+                                            Spacer(Modifier.width(12.dp))
+                                        }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            BasicTextField(
+                                                value = blockText,
+                                                onValueChange = { newText ->
+                                                    blockText = newText
+                                                    viewModel.updateBlock(block.copy(text = newText))
+                                                    viewModel.stampTextBlockWithAudioTime(block.id)
+                                                },
+                                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                    fontFamily = if (isLuxury) FontFamily.Serif else MaterialTheme.typography.bodyMedium.fontFamily,
+                                                    fontSize = if (isLuxury) 15.5.sp else MaterialTheme.typography.bodyMedium.fontSize,
+                                                    lineHeight = if (isLuxury) 24.sp else 20.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                ),
+                                                cursorBrush = SolidColor(primaryAccent),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = if (isLuxury) 0.dp else 14.dp,
+                                                        vertical = if (isLuxury) 6.dp else 10.dp
+                                                    ),
+                                                decorationBox = { inner ->
+                                                    if (blockText.isEmpty()) {
+                                                        Text(
+                                                            "Write additional notes…",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontFamily = if (isLuxury) FontFamily.Serif else null,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
+                                                        )
+                                                    }
+                                                    inner()
+                                                }
+                                            )
+                                            block.audioTimestampMs?.let { ts ->
+                                                if (isLuxury) {
+                                                    Surface(
+                                                        onClick = { pendingAudioSeekMs = ts },
+                                                        shape = RoundedCornerShape(100.dp),
+                                                        color = lux.elevatedSurface,
+                                                        border = BorderStroke(1.dp, lux.borderHairline),
+                                                        modifier = Modifier.padding(bottom = 8.dp)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                        ) {
+                                                            Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = lux.accent, modifier = Modifier.size(13.dp))
+                                                            Text(
+                                                                text = "AUDIO @ ${ts / 1000}S",
+                                                                fontFamily = FontFamily.Monospace,
+                                                                fontSize = 10.sp,
+                                                                color = lux.textSecondary
+                                                            )
+                                                        }
+                                                    }
+                                                } else {
+                                                    AssistChip(
+                                                        onClick = { pendingAudioSeekMs = ts },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                Icons.Rounded.PlayArrow,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                        },
+                                                        label = { Text("Audio @ ${ts / 1000}s") },
+                                                        modifier = Modifier.padding(start = 14.dp, bottom = 10.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                is NoteBlock.InkBlock -> {
+                                    val strokes: List<InkStroke> = remember(block.strokesJson) {
+                                        NoteJson.decodeStrokes(block.strokesJson)
+                                    }
+                                    InkCanvas(
+                                        strokes = strokes,
+                                        heightDp = block.heightDp,
+                                        paperTemplate = block.paperTemplate,
+                                        onTemplateChanged = { tmpl ->
+                                            viewModel.updateInkTemplate(block.id, tmpl)
+                                        },
+                                        onStrokesChanged = { newStrokes ->
+                                            viewModel.updateInkStrokes(block.id, newStrokes)
+                                        }
+                                    )
+                                }
+
+                                is NoteBlock.AudioBlock -> {
+                                    AudioRecorderBlock(
+                                        audioFilePath = block.filePath,
+                                        durationMs = block.durationMs,
+                                        seekToRequestMs = pendingAudioSeekMs,
+                                        onSeekHandled = { pendingAudioSeekMs = null },
+                                        onRecordingStarted = { _, startMs ->
+                                            viewModel.onAudioRecordingStarted(startMs)
+                                        },
+                                        onRecordingStopped = { duration ->
+                                            viewModel.onAudioRecordingStopped()
+                                            viewModel.updateBlock(block.copy(durationMs = duration))
+                                        }
+                                    )
+                                }
+
+                                is NoteBlock.ImageBlock -> {
+                                    ImageOcrBlock(
+                                        uriString = block.uriString,
+                                        extractedText = block.extractedOcrText,
+                                        onImagePicked = { uri: Uri ->
+                                            viewModel.updateBlock(
+                                                block.copy(uriString = uri.toString())
+                                            )
+                                        },
+                                        onOcrResult = { text ->
+                                            viewModel.updateBlock(
+                                                block.copy(extractedOcrText = text)
+                                            )
+                                            val current = contentField.text
+                                            val appended = if (current.isBlank()) text
+                                            else "$current\n\n--- OCR ---\n$text"
+                                            contentField = TextFieldValue(appended, TextRange(appended.length))
+                                            viewModel.updateContent(appended)
+                                        }
+                                    )
+                                }
+
+                                is NoteBlock.ChecklistBlock -> {
+                                    ChecklistBlockUi(
+                                        block = block,
+                                        onTitleChanged = { newTitle ->
+                                            viewModel.updateChecklistTitle(block.id, newTitle)
+                                        },
+                                        onToggleItem = { itemId ->
+                                            viewModel.toggleChecklistItem(block.id, itemId)
+                                        },
+                                        onItemTextChanged = { itemId, newText ->
+                                            viewModel.updateChecklistItemText(block.id, itemId, newText)
+                                        },
+                                        onAddItem = {
+                                            viewModel.addChecklistItem(block.id)
+                                        },
+                                        onRemoveItem = { itemId ->
+                                            viewModel.removeChecklistItem(block.id, itemId)
+                                        }
+                                    )
+                                }
+
+                                is NoteBlock.PdfBlock -> {
+                                    PdfAnnotationBlock(
+                                        block = block,
+                                        onBlockUpdated = { updatedPdf ->
+                                            viewModel.updateBlock(updatedPdf)
+                                        },
+                                        onExtractTextToNote = { extracted ->
+                                            val pdfTitle = block.fileName.ifBlank { "PDF" }
+                                            val current = contentField.text
+                                            val appended = if (current.isBlank()) {
+                                                extracted
+                                            } else {
+                                                "$current\n\n--- PDF OCR ($pdfTitle) ---\n$extracted"
+                                            }
+                                            contentField = TextFieldValue(appended, TextRange(appended.length))
+                                            viewModel.updateContent(appended)
+                                            viewModel.saveNow(showEvent = true)
+                                            Toast.makeText(
+                                                context,
+                                                "Inserted ${extracted.length} chars into note",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        if (isLuxury && block is NoteBlock.InkBlock) {
+                            // Edge-to-Edge Canvas: zero enclosing box or side padding
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 14.dp, end = 6.dp, top = 6.dp),
+                                        .padding(start = 20.dp, end = 12.dp, bottom = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "INK CANVAS",
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 9.5.sp,
+                                        letterSpacing = 1.sp,
+                                        color = lux.textMuted
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.removeBlock(block.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Close,
+                                            contentDescription = "Remove block",
+                                            modifier = Modifier.size(14.dp),
+                                            tint = lux.textMuted
+                                        )
+                                    }
+                                }
+                                blockBody()
+                            }
+                        } else if (isLuxury && block is NoteBlock.TextBlock) {
+                            // Borderless writing segment
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = blockLabel.uppercase(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp,
-                                        letterSpacing = 0.8.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 9.5.sp,
+                                        letterSpacing = 0.9.sp,
+                                        color = lux.textMuted
                                     )
                                     IconButton(
                                         onClick = { viewModel.removeBlock(block.id) },
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.size(24.dp)
                                     ) {
                                         Icon(
                                             Icons.Rounded.Close,
                                             contentDescription = "Remove block",
-                                            modifier = Modifier.size(15.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                            modifier = Modifier.size(14.dp),
+                                            tint = lux.textMuted
                                         )
                                     }
                                 }
-
-                                when (block) {
-                                    is NoteBlock.TextBlock -> {
-                                        var blockText by remember(block.id) { mutableStateOf(block.text) }
-                                        BasicTextField(
-                                            value = blockText,
-                                            onValueChange = { newText ->
-                                                blockText = newText
-                                                viewModel.updateBlock(block.copy(text = newText))
-                                                viewModel.stampTextBlockWithAudioTime(block.id)
-                                            },
-                                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            ),
-                                            cursorBrush = SolidColor(activePreset.accentStart),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                                            decorationBox = { inner ->
-                                                if (blockText.isEmpty()) {
-                                                    Text(
-                                                        "Write additional notes…",
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
-                                                    )
-                                                }
-                                                inner()
-                                            }
+                                blockBody()
+                            }
+                        } else {
+                            val blockShape = RoundedCornerShape(if (isLuxury) 8.dp else 16.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = if (isLuxury) 20.dp else 0.dp,
+                                        vertical = 5.dp
+                                    )
+                                    .clip(blockShape)
+                                    .background(if (isLuxury) SolidColor(lux.elevatedSurface) else ThemeManager.activeCardBrush(highlighted = false))
+                                    .border(
+                                        width = if (isLuxury) 1.dp else 0.75.dp,
+                                        color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor,
+                                        shape = blockShape
+                                    )
+                            ) {
+                                Column {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 14.dp, end = 6.dp, top = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = blockLabel.uppercase(),
+                                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 10.sp,
+                                            letterSpacing = 0.8.sp,
+                                            color = (if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f))
                                         )
-                                        block.audioTimestampMs?.let { ts ->
-                                            AssistChip(
-                                                onClick = { pendingAudioSeekMs = ts },
-                                                leadingIcon = {
-                                                    Icon(
-                                                        Icons.Rounded.PlayArrow,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                },
-                                                label = { Text("Audio @ ${ts / 1000}s") },
-                                                modifier = Modifier.padding(start = 14.dp, bottom = 10.dp)
+                                        IconButton(
+                                            onClick = { viewModel.removeBlock(block.id) },
+                                            modifier = Modifier.size(26.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.Close,
+                                                contentDescription = "Remove block",
+                                                modifier = Modifier.size(15.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
                                             )
                                         }
                                     }
-
-                                    is NoteBlock.InkBlock -> {
-                                        val strokes: List<InkStroke> = remember(block.strokesJson) {
-                                            try {
-                                                json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                                            } catch (_: Exception) {
-                                                emptyList()
-                                            }
-                                        }
-                                        InkCanvas(
-                                            strokes = strokes,
-                                            heightDp = block.heightDp,
-                                            paperTemplate = block.paperTemplate,
-                                            onTemplateChanged = { tmpl ->
-                                                viewModel.updateInkTemplate(block.id, tmpl)
-                                            },
-                                            onStrokesChanged = { newStrokes ->
-                                                viewModel.updateInkStrokes(block.id, newStrokes)
-                                            }
-                                        )
-                                    }
-
-                                    is NoteBlock.AudioBlock -> {
-                                        AudioRecorderBlock(
-                                            audioFilePath = block.filePath,
-                                            durationMs = block.durationMs,
-                                            seekToRequestMs = pendingAudioSeekMs,
-                                            onSeekHandled = { pendingAudioSeekMs = null },
-                                            onRecordingStarted = { _, startMs ->
-                                                viewModel.onAudioRecordingStarted(startMs)
-                                            },
-                                            onRecordingStopped = { duration ->
-                                                viewModel.onAudioRecordingStopped()
-                                                viewModel.updateBlock(block.copy(durationMs = duration))
-                                            }
-                                        )
-                                    }
-
-                                    is NoteBlock.ImageBlock -> {
-                                        ImageOcrBlock(
-                                            uriString = block.uriString,
-                                            extractedText = block.extractedOcrText,
-                                            onImagePicked = { uri: Uri ->
-                                                viewModel.updateBlock(
-                                                    block.copy(uriString = uri.toString())
-                                                )
-                                            },
-                                            onOcrResult = { text ->
-                                                viewModel.updateBlock(
-                                                    block.copy(extractedOcrText = text)
-                                                )
-                                                val current = contentField.text
-                                                val appended = if (current.isBlank()) text
-                                                else "$current\n\n--- OCR ---\n$text"
-                                                contentField = TextFieldValue(appended, TextRange(appended.length))
-                                                viewModel.updateContent(appended)
-                                            }
-                                        )
-                                    }
-
-                                    is NoteBlock.ChecklistBlock -> {
-                                        ChecklistBlockUi(
-                                            block = block,
-                                            onTitleChanged = { newTitle ->
-                                                viewModel.updateChecklistTitle(block.id, newTitle)
-                                            },
-                                            onToggleItem = { itemId ->
-                                                viewModel.toggleChecklistItem(block.id, itemId)
-                                            },
-                                            onItemTextChanged = { itemId, newText ->
-                                                viewModel.updateChecklistItemText(block.id, itemId, newText)
-                                            },
-                                            onAddItem = {
-                                                viewModel.addChecklistItem(block.id)
-                                            },
-                                            onRemoveItem = { itemId ->
-                                                viewModel.removeChecklistItem(block.id, itemId)
-                                            }
-                                        )
-                                    }
-
-                                    is NoteBlock.PdfBlock -> {
-                                        PdfAnnotationBlock(
-                                            block = block,
-                                            onBlockUpdated = { updatedPdf ->
-                                                viewModel.updateBlock(updatedPdf)
-                                            },
-                                            onExtractTextToNote = { extracted ->
-                                                val pdfTitle = block.fileName.ifBlank { "PDF" }
-                                                val current = contentField.text
-                                                val appended = if (current.isBlank()) {
-                                                    extracted
-                                                } else {
-                                                    "$current\n\n--- PDF OCR ($pdfTitle) ---\n$extracted"
-                                                }
-                                                contentField = TextFieldValue(appended, TextRange(appended.length))
-                                                viewModel.updateContent(appended)
-                                                viewModel.saveNow(showEvent = true)
-                                                Toast.makeText(
-                                                    context,
-                                                    "Inserted ${extracted.length} chars into note",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        )
-                                    }
+                                    blockBody()
                                 }
                             }
                         }
@@ -768,17 +960,13 @@ fun EditorScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Graph Connections & Note Metadata Panel (ObsidianCard)
-                val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+                val obsidianAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
                 val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
                 val totalLinksCount = outgoingLinks.size + backlinks.size
-                val wordCount = remember(contentField.text) {
-                    contentField.text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size
-                }
-                val editorDateFormat = remember {
-                    SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault())
-                }
+                val wordCount = proseWordCount
 
                 ObsidianCard(
+                    modifier = if (isLuxury) Modifier.padding(horizontal = 20.dp) else Modifier,
                     accentColor = obsidianAccent,
                     headerContent = {
                         Row(
@@ -838,13 +1026,13 @@ fun EditorScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 items(outgoingLinks, key = { it.id }) { link ->
-                                    val chipShape = RoundedCornerShape(10.dp)
+                                    val chipShape = RoundedCornerShape(if (isLuxury) 6.dp else 10.dp)
                                     Row(
                                         modifier = Modifier
                                             .clip(chipShape)
                                             .background(ObsidianTokens.StatTileSurface)
                                             .border(
-                                                width = 0.75.dp,
+                                                width = if (isLuxury) 1.dp else 0.75.dp,
                                                 color = if (link.isResolved) obsidianAccent.copy(alpha = 0.6f)
                                                 else ObsidianTokens.DividerRule,
                                                 shape = chipShape
@@ -866,7 +1054,8 @@ fun EditorScreen(
                                         Text(
                                             text = if (link.isResolved) "[[${link.targetNoteTitle}]]"
                                             else "[[${link.targetNoteTitle}]] (+ Create)",
-                                            fontSize = 12.sp,
+                                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                            fontSize = if (isLuxury) 11.sp else 12.sp,
                                             fontWeight = FontWeight.Medium,
                                             color = if (link.isResolved) ObsidianTokens.TextPrimary else accentInk
                                         )
@@ -896,12 +1085,16 @@ fun EditorScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 items(backlinks) { item ->
-                                    val chipShape = RoundedCornerShape(10.dp)
+                                    val chipShape = RoundedCornerShape(if (isLuxury) 6.dp else 10.dp)
                                     Row(
                                         modifier = Modifier
                                             .clip(chipShape)
                                             .background(ObsidianTokens.StatTileSurface)
-                                            .border(0.75.dp, obsidianAccent.copy(alpha = 0.45f), chipShape)
+                                            .border(
+                                                width = if (isLuxury) 1.dp else 0.75.dp,
+                                                color = obsidianAccent.copy(alpha = 0.45f),
+                                                shape = chipShape
+                                            )
                                             .clickable {
                                                 viewModel.saveNow()
                                                 onNoteClick(item.sourceNoteId)
@@ -918,7 +1111,8 @@ fun EditorScreen(
                                         )
                                         Text(
                                             text = item.sourceNoteTitle,
-                                            fontSize = 12.sp,
+                                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                            fontSize = if (isLuxury) 11.sp else 12.sp,
                                             color = ObsidianTokens.TextPrimary
                                         )
                                     }
@@ -930,7 +1124,7 @@ fun EditorScreen(
                         val updatedTs = note?.updatedAt ?: System.currentTimeMillis()
                         val securityStatus = if (note?.isLocked == true) "Vault PIN protected" else "Unlocked"
                         Text(
-                            text = "Modified ${editorDateFormat.format(Date(updatedTs))} • $securityStatus • Synced locally via Room Database",
+                            text = "Modified ${NoteJson.formatShortDateTime(updatedTs)} • $securityStatus • Synced locally via Room Database",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.5.sp,
                             lineHeight = 15.sp,
@@ -1030,25 +1224,32 @@ private fun EditorToolButton(
     onClick: () -> Unit
 ) {
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(if (isLuxury) 100.dp else 14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(
+                horizontal = if (isLuxury) 9.dp else 10.dp,
+                vertical = if (isLuxury) 4.dp else 5.dp
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = activePreset.accentStart,
-            modifier = Modifier.size(18.dp)
+            tint = if (isLuxury) lux.accent else activePreset.accentStart,
+            modifier = Modifier.size(if (isLuxury) 16.dp else 18.dp)
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(if (isLuxury) 1.dp else 2.dp))
         Text(
-            text = label,
+            text = if (isLuxury) label.uppercase() else label,
+            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 10.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = if (isLuxury) 9.sp else 10.sp,
+            letterSpacing = if (isLuxury) 0.5.sp else 0.sp,
+            color = if (isLuxury) lux.textSecondary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -1061,11 +1262,17 @@ private fun ExportOptionRow(
     onClick: () -> Unit
 ) {
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
+        shape = RoundedCornerShape(if (isLuxury) 8.dp else 14.dp),
+        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            width = if (isLuxury) 1.dp else 0.75.dp,
+            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+        ),
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -1076,14 +1283,14 @@ private fun ExportOptionRow(
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(activePreset.accentStart.copy(alpha = 0.14f)),
+                    .clip(RoundedCornerShape(if (isLuxury) 6.dp else 10.dp))
+                    .background((if (isLuxury) lux.accent else activePreset.accentStart).copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = activePreset.accentStart,
+                    tint = if (isLuxury) lux.accent else activePreset.accentStart,
                     modifier = Modifier.size(18.dp)
                 )
             }

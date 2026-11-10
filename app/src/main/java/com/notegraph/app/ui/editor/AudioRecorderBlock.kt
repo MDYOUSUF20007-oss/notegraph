@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,7 +86,9 @@ fun AudioRecorderBlock(
     }
 
     val activePreset = ThemeManager.currentGradient
-    val gradientsOn = ThemeManager.gradientsEnabled
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
 
     val infiniteTransition = rememberInfiniteTransition(label = "voiceVizPulse")
     val pulsePhase by infiniteTransition.animateFloat(
@@ -211,7 +214,7 @@ fun AudioRecorderBlock(
                 Icon(
                     imageVector = if (isRecording || isPlaying) Icons.Rounded.GraphicEq else Icons.Rounded.Mic,
                     contentDescription = null,
-                    tint = activePreset.accentStart,
+                    tint = if (isLuxury) lux.accent else activePreset.accentStart,
                     modifier = Modifier.size(16.dp)
                 )
                 Text("Voice Recording", style = MaterialTheme.typography.titleSmall)
@@ -232,8 +235,9 @@ fun AudioRecorderBlock(
                     Text(
                         text = formatClockMs(recordingElapsedMs),
                         style = MaterialTheme.typography.labelMedium,
+                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                         fontWeight = FontWeight.SemiBold,
-                        color = activePreset.accentStart
+                        color = if (isLuxury) lux.accent else activePreset.accentStart
                     )
                 } else if (fileExists && effectiveTotalMs > 0L) {
                     Text(
@@ -243,15 +247,18 @@ fun AudioRecorderBlock(
                             formatClockMs(effectiveTotalMs)
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                        color = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
         // ─── Theme-Matched Real-Time Voice Visualizer Canvas ───
-        val vizShape = RoundedCornerShape(14.dp)
-        val vizBgBrush = if (gradientsOn) {
+        val vizShape = RoundedCornerShape(if (isLuxury) 6.dp else 14.dp)
+        val vizBgBrush = if (isLuxury) {
+            SolidColor(lux.recessedSurface)
+        } else if (gradientsOn) {
             Brush.horizontalGradient(
                 listOf(
                     activePreset.cardTint.copy(alpha = 0.72f),
@@ -261,16 +268,18 @@ fun AudioRecorderBlock(
         } else {
             SolidColor(activePreset.cardSurface)
         }
-        val activeBarBrush = if (gradientsOn) {
+        val activeBarBrush = if (isLuxury) {
+            SolidColor(lux.accent)
+        } else if (gradientsOn) {
             Brush.verticalGradient(listOf(activePreset.accentStart, activePreset.accentEnd))
         } else {
             SolidColor(activePreset.accentStart)
         }
-        val inactiveBarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.26f)
-        val borderColor = if (isRecording || isPlaying) {
-            activePreset.accentStart.copy(alpha = 0.65f)
-        } else {
-            ThemeManager.cardBorderColor
+        val inactiveBarColor = (if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.26f)
+        val borderColor = when {
+            isRecording || isPlaying -> (if (isLuxury) lux.accent else activePreset.accentStart).copy(alpha = 0.75f)
+            isLuxury -> lux.borderHairline
+            else -> ThemeManager.cardBorderColor
         }
 
         Box(
@@ -279,7 +288,7 @@ fun AudioRecorderBlock(
                 .height(58.dp)
                 .clip(vizShape)
                 .background(vizBgBrush)
-                .border(0.85.dp, borderColor, vizShape)
+                .border(if (isLuxury) 1.dp else 0.85.dp, borderColor, vizShape)
                 .pointerInput(audioFilePath, fileExists, isRecording, effectiveTotalMs) {
                     if (fileExists && !isRecording && effectiveTotalMs > 0L) {
                         detectTapGestures { tapOffset ->
@@ -362,32 +371,41 @@ fun AudioRecorderBlock(
                 if (!isRecording && fileExists && (isPlaying || playbackPosition > 0) && effectiveTotalMs > 0L) {
                     val headX = (playFraction * w).coerceIn(1f, w - 1f)
                     drawLine(
-                        color = activePreset.accentEnd,
+                        color = if (isLuxury) lux.accent else activePreset.accentEnd,
                         start = Offset(headX, 0f),
                         end = Offset(headX, h),
-                        strokeWidth = 2.2f
+                        strokeWidth = if (isLuxury) 1.5f else 2.2f
                     )
                 }
             }
 
             if (!isRecording && !fileExists) {
                 Text(
-                    text = "Ready to visualize microphone levels",
+                    text = if (isLuxury) "MIC LEVELS READY" else "Ready to visualize microphone levels",
                     style = MaterialTheme.typography.labelSmall,
+                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                    color = (if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.72f)
                 )
             }
         }
 
         // ─── Controls Row ───
+        val btnShape = RoundedCornerShape(if (isLuxury) 8.dp else 12.dp)
+        val btnBorder = BorderStroke(
+            width = if (isLuxury) 1.dp else 0.75.dp,
+            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+        )
         if (!hasPermission) {
             OutlinedButton(
                 onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                shape = btnShape,
+                border = btnBorder
             ) {
-                Text("Grant Microphone Permission")
+                Text(
+                    text = "Grant Microphone Permission",
+                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default
+                )
             }
         } else {
             Row(
@@ -443,11 +461,23 @@ fun AudioRecorderBlock(
                                 ).show()
                             }
                         },
-                        shape = RoundedCornerShape(12.dp)
+                        shape = btnShape,
+                        colors = if (isLuxury) {
+                            ButtonDefaults.buttonColors(
+                                containerColor = lux.accent,
+                                contentColor = lux.onAccent
+                            )
+                        } else {
+                            ButtonDefaults.buttonColors()
+                        },
+                        elevation = if (isLuxury) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation()
                     ) {
                         Icon(Icons.Rounded.FiberManualRecord, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (fileExists) "Re-record" else "Record")
+                        Text(
+                            text = if (fileExists) "Re-record" else "Record",
+                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default
+                        )
                     }
                 } else {
                     Button(
@@ -468,14 +498,18 @@ fun AudioRecorderBlock(
                             isRecording = false
                             onRecordingStopped(duration)
                         },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = btnShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error
-                        )
+                        ),
+                        elevation = if (isLuxury) ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp) else ButtonDefaults.buttonElevation()
                     ) {
                         Icon(Icons.Rounded.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Stop")
+                        Text(
+                            text = "Stop",
+                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default
+                        )
                     }
                 }
 
@@ -523,12 +557,15 @@ fun AudioRecorderBlock(
                                     ).show()
                                 }
                             },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                            shape = btnShape,
+                            border = btnBorder
                         ) {
                             Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Play")
+                            Text(
+                                text = "Play",
+                                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default
+                            )
                         }
                     } else {
                         OutlinedButton(
@@ -541,12 +578,15 @@ fun AudioRecorderBlock(
                                 }
                                 isPlaying = false
                             },
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                            shape = btnShape,
+                            border = btnBorder
                         ) {
                             Icon(Icons.Rounded.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Pause")
+                            Text(
+                                text = "Pause",
+                                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default
+                            )
                         }
                     }
                 }

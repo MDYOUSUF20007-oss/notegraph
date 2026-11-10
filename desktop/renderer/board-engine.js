@@ -49,6 +49,152 @@
     };
   }
 
+  function computeSelectedStrokesBounds(strokes, selectedIds) {
+    if (!strokes || !selectedIds || selectedIds.size === 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let hasPoints = false;
+    for (let i = 0; i < strokes.length; i++) {
+      const s = strokes[i];
+      if (!selectedIds.has(s.id) || !s.points) continue;
+      for (let j = 0; j < s.points.length; j++) {
+        const p = s.points[j];
+        hasPoints = true;
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+    }
+    return hasPoints ? { minX, minY, maxX, maxY } : null;
+  }
+
+  function translateSelectedStrokes(strokes, selectedIds, dx, dy) {
+    if (!strokes || !selectedIds || selectedIds.size === 0 || (dx === 0 && dy === 0)) {
+      return strokes;
+    }
+    return strokes.map((s) => {
+      if (!selectedIds.has(s.id) || !s.points) return s;
+      return {
+        ...s,
+        points: s.points.map((p) => ({ x: p.x + dx, y: p.y + dy }))
+      };
+    });
+  }
+
+  const LASER_TTL_MS = 1250;
+  const LASER_MAX_ACTIVE_POINTS = 140;
+  const LASER_MAX_COMPLETED_TRAILS = 6;
+  const LASER_MIN_SPACING = 6;
+  const LASER_HUE_BINS = 24;
+  const LASER_ALPHA_STEPS = 5;
+
+  // Precomputed static HSLA palette: 24 hues x 5 opacity steps = 120 strings (0 per-frame allocations)
+  const LASER_COLOR_LUT = Array.from({ length: LASER_HUE_BINS }, (_, hIdx) => {
+    const hue = Math.round((hIdx * 360) / LASER_HUE_BINS);
+    return Array.from({ length: LASER_ALPHA_STEPS }, (__, aIdx) => {
+      const alpha = ((aIdx + 1) / LASER_ALPHA_STEPS * 0.94).toFixed(2);
+      return `hsla(${hue},100%,58%,${alpha})`;
+    });
+  });
+
+  function pruneTimedPointsInPlace(points, nowMs, ttlMs = LASER_TTL_MS) {
+    if (!Array.isArray(points) || points.length === 0) return points;
+    const cutoff = nowMs - ttlMs;
+    let firstLive = 0;
+    while (firstLive < points.length && points[firstLive].t < cutoff) {
+      firstLive++;
+    }
+    if (firstLive > 0) {
+      points.splice(0, firstLive);
+    }
+    return points;
+  }
+
+  function appendLaserPoint(
+    points,
+    x,
+    y,
+    nowMs,
+    minSpacing = LASER_MIN_SPACING,
+    maxPoints = LASER_MAX_ACTIVE_POINTS,
+    ttlMs = LASER_TTL_MS
+  ) {
+    pruneTimedPointsInPlace(points, nowMs, ttlMs);
+    const len = points.length;
+    if (len > 0) {
+      const last = points[len - 1];
+      const dx = x - last.x;
+      const dy = y - last.y;
+      if (dx * dx + dy * dy < minSpacing * minSpacing) {
+        return false;
+      }
+    }
+    points.push({ x, y, t: nowMs });
+    if (points.length > maxPoints) {
+      points.splice(0, points.length - maxPoints);
+    }
+    return true;
+  }
+
+  function pruneCompletedLaserTrails(
+    trails,
+    nowMs,
+    ttlMs = LASER_TTL_MS,
+    maxTrails = LASER_MAX_COMPLETED_TRAILS
+  ) {
+    if (!Array.isArray(trails) || trails.length === 0) return [];
+    const alive = [];
+    for (let i = 0; i < trails.length; i++) {
+      const tr = trails[i];
+      if (!tr || !Array.isArray(tr.points)) continue;
+      pruneTimedPointsInPlace(tr.points, nowMs, ttlMs);
+      if (tr.points.length >= 2) {
+        alive.push(tr);
+      }
+    }
+    if (alive.length > maxTrails) {
+      return alive.slice(alive.length - maxTrails);
+    }
+    return alive;
+  }
+
+  function cloneStrokesShallow(strokes) {
+    if (!Array.isArray(strokes)) return [];
+    return strokes.map((s) => ({
+      ...s,
+      points: Array.isArray(s.points) ? s.points.map((p) => ({ x: p.x, y: p.y })) : []
+    }));
+  }
+
+  const _strokePathCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
+  function getOrBuildStrokePath2D(stroke) {
+    if (typeof Path2D === 'undefined' || !_strokePathCache || !stroke || !stroke.points) {
+      return null;
+    }
+    let cached = _strokePathCache.get(stroke.points);
+    if (cached) return cached;
+    const pts = stroke.points;
+    if (pts.length < 2) return null;
+    const path = new Path2D();
+    path.moveTo(pts[0].x, pts[0].y);
+    if (pts.length === 2 || stroke.isArrow) {
+      for (let i = 1; i < pts.length; i++) {
+        path.lineTo(pts[i].x, pts[i].y);
+      }
+    } else {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const midX = (pts[i].x + pts[i + 1].x) * 0.5;
+        const midY = (pts[i].y + pts[i + 1].y) * 0.5;
+        path.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+      }
+      const last = pts[pts.length - 1];
+      path.lineTo(last.x, last.y);
+    }
+    _strokePathCache.set(stroke.points, path);
+    return path;
+  }
+
   function drawSmoothStroke(ctx, stroke, themeMode, isSelected) {
     const pts = stroke.points;
     if (!pts || pts.length < 2) return;
@@ -64,22 +210,27 @@
       : adaptInkColorForTheme(stroke.colorHex, themeMode);
     ctx.strokeStyle = stroke.isHighlighter ? hexToRgba(color, 0.36) : color;
 
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    if (pts.length === 2 || stroke.isArrow) {
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
+    const cachedPath = getOrBuildStrokePath2D(stroke);
+    if (cachedPath) {
+      ctx.stroke(cachedPath);
     } else {
-      for (let i = 1; i < pts.length - 1; i++) {
-        const midX = (pts[i].x + pts[i + 1].x) * 0.5;
-        const midY = (pts[i].y + pts[i + 1].y) * 0.5;
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      if (pts.length === 2 || stroke.isArrow) {
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(pts[i].x, pts[i].y);
+        }
+      } else {
+        for (let i = 1; i < pts.length - 1; i++) {
+          const midX = (pts[i].x + pts[i + 1].x) * 0.5;
+          const midY = (pts[i].y + pts[i + 1].y) * 0.5;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+        }
+        const last = pts[pts.length - 1];
+        ctx.lineTo(last.x, last.y);
       }
-      const last = pts[pts.length - 1];
-      ctx.lineTo(last.x, last.y);
+      ctx.stroke();
     }
-    ctx.stroke();
 
     // Crisp vector arrowhead when arrow mode is active
     if (stroke.isArrow && pts.length >= 2) {
@@ -101,28 +252,59 @@
       ctx.stroke();
     }
 
-    if (isSelected) {
-      const b = computeStrokeBounds(pts, 8);
-      ctx.setLineDash([8, 6]);
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#00FFFF';
-      ctx.strokeRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
-      ctx.setLineDash([]);
-    }
-
     ctx.restore();
   }
 
   function pointInPolygon(pt, poly) {
+    if (!poly || poly.length < 3) return false;
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       const xi = poly[i].x, yi = poly[i].y;
       const xj = poly[j].x, yj = poly[j].y;
-      const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
-        (pt.x < ((xj - xi) * (pt.y - yi)) / ((yj - yi) || 1e-6) + xi);
+      const dy = yj - yi;
+      const intersect = Math.abs(dy) > 1e-6 &&
+        ((yi > pt.y) !== (yj > pt.y)) &&
+        (pt.x < ((xj - xi) * (pt.y - yi)) / dy + xi);
       if (intersect) inside = !inside;
     }
     return inside;
+  }
+
+  function _cross2(o, a, b) {
+    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  }
+
+  function _segmentsIntersect(a, b, c, d) {
+    if (Math.max(a.x, b.x) < Math.min(c.x, d.x) ||
+        Math.max(c.x, d.x) < Math.min(a.x, b.x) ||
+        Math.max(a.y, b.y) < Math.min(c.y, d.y) ||
+        Math.max(c.y, d.y) < Math.min(a.y, b.y)) {
+      return false;
+    }
+    const d1 = _cross2(c, d, a);
+    const d2 = _cross2(c, d, b);
+    const d3 = _cross2(a, b, c);
+    const d4 = _cross2(a, b, d);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+      ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  }
+
+  function strokeIntersectsPolygon(stroke, poly) {
+    const pts = stroke && stroke.points;
+    if (!pts || pts.length === 0 || !poly || poly.length < 3) return false;
+    if (pts.some((p) => pointInPolygon(p, poly))) return true;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const mid = { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
+      if (pointInPolygon(mid, poly)) return true;
+      for (let k = 0; k < poly.length; k++) {
+        const c = poly[k];
+        const d = poly[(k + 1) % poly.length];
+        if (_segmentsIntersect(a, b, c, d)) return true;
+      }
+    }
+    return false;
   }
 
   class BoardCanvasEngine {
@@ -133,11 +315,11 @@
       this.liveCanvas = options.liveCanvas;
       this.cardsLayer = options.cardsLayer;
 
-      this.gridCtx = this.gridCanvas.getContext('2d');
+      this.gridCtx = this.gridCanvas.getContext('2d', { alpha: false }) || this.gridCanvas.getContext('2d');
       this.staticCtx = this.staticCanvas.getContext('2d');
       this.liveCtx = this.liveCanvas.getContext('2d', { desynchronized: true }) || this.liveCanvas.getContext('2d');
 
-      this.dpr = window.devicePixelRatio || 1;
+      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
       this.width = 1000;
       this.height = 700;
 
@@ -152,11 +334,17 @@
 
       this.page = null;
       this.selectedStrokeIds = new Set();
+      this.isLassoMoveMode = false;
+      this.isDraggingLasso = false;
+      this.dragLastWorld = null;
       this.redoStack = [];
       this.undoStack = [];
       this.vanishingTrails = [];
+      this.activeLaserPoints = [];
       this.animFrameId = null;
       this.vanishingLoopActive = false;
+      this._resizeRafId = null;
+      this._laserBuckets = Array.from({ length: LASER_HUE_BINS }, () => []);
 
       this.activeStrokePoints = [];
       this.isDrawing = false;
@@ -170,6 +358,7 @@
         onStrokesModified: options.onStrokesModified || (() => {}),
         onViewportChanged: options.onViewportChanged || (() => {}),
         onSelectionChanged: options.onSelectionChanged || (() => {}),
+        onLassoMoveModeChanged: options.onLassoMoveModeChanged || (() => {}),
         onBackgroundClick: options.onBackgroundClick || (() => {})
       };
 
@@ -178,7 +367,13 @@
     }
 
     _bindEvents() {
-      this._ro = new ResizeObserver(() => this.resize());
+      this._ro = new ResizeObserver(() => {
+        if (this._resizeRafId) return;
+        this._resizeRafId = requestAnimationFrame(() => {
+          this._resizeRafId = null;
+          this.resize();
+        });
+      });
       this._ro.observe(this.stageEl);
 
       this.liveCanvas.addEventListener('pointerdown', (e) => this._onPointerDown(e));
@@ -213,9 +408,15 @@
       if (gradientPreset !== undefined) this.gradientPreset = gradientPreset;
       if (typeof gradientsEnabled === 'boolean') this.gradientsEnabled = gradientsEnabled;
       this.selectedStrokeIds.clear();
+      this.isLassoMoveMode = false;
+      this.isDraggingLasso = false;
+      this.dragLastWorld = null;
+      this.activeLaserPoints = [];
+      this.vanishingTrails = [];
       this.undoStack = [];
       this.redoStack = [];
       this.callbacks.onSelectionChanged(0);
+      this.callbacks.onLassoMoveModeChanged(false);
       this.syncViewportTransform();
       this.redrawGrid();
       this.redrawStatic();
@@ -235,10 +436,24 @@
       this.tool = tool;
       if (tool !== 'lasso') {
         this.selectedStrokeIds.clear();
+        this.isLassoMoveMode = false;
+        this.isDraggingLasso = false;
+        this.dragLastWorld = null;
         this.callbacks.onSelectionChanged(0);
+        this.callbacks.onLassoMoveModeChanged(false);
         this.redrawStatic();
       }
       this.updatePointerPassthrough();
+    }
+
+    setLassoMoveMode(enabled) {
+      this.isLassoMoveMode = Boolean(enabled);
+      this.callbacks.onLassoMoveModeChanged(this.isLassoMoveMode);
+      this.updatePointerPassthrough();
+    }
+
+    toggleLassoMoveMode() {
+      this.setLassoMoveMode(!this.isLassoMoveMode);
     }
 
     updatePointerPassthrough() {
@@ -247,6 +462,8 @@
       this.liveCanvas.style.pointerEvents = cardInteractive ? 'none' : 'auto';
       if (this.spaceHeld || this.tool === 'pan') {
         this.stageEl.style.cursor = this.isPanning ? 'grabbing' : 'grab';
+      } else if (this.tool === 'lasso' && this.selectedStrokeIds.size > 0 && this.isLassoMoveMode) {
+        this.stageEl.style.cursor = 'move';
       } else if (this.tool === 'select') {
         this.stageEl.style.cursor = 'default';
       } else if (this.tool === 'eraser') {
@@ -260,7 +477,7 @@
       const rect = this.stageEl.getBoundingClientRect();
       this.width = Math.max(200, Math.floor(rect.width));
       this.height = Math.max(200, Math.floor(rect.height));
-      this.dpr = window.devicePixelRatio || 1;
+      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
 
       [this.gridCanvas, this.staticCanvas, this.liveCanvas].forEach((cv) => {
         cv.width = Math.floor(this.width * this.dpr);
@@ -404,7 +621,33 @@
         return;
       }
 
-      if (['pen', 'highlighter', 'arrow', 'laser', 'lasso'].includes(this.tool)) {
+      if (this.tool === 'lasso' && this.selectedStrokeIds.size > 0) {
+        const bounds = computeSelectedStrokesBounds(this.page.strokes, this.selectedStrokeIds);
+        const hitPad = 20 / Math.max(0.25, (this.page.viewport && this.page.viewport.zoom) || 1);
+        const insideSelectionBox = bounds &&
+          pt.x >= bounds.minX - hitPad &&
+          pt.x <= bounds.maxX + hitPad &&
+          pt.y >= bounds.minY - hitPad &&
+          pt.y <= bounds.maxY + hitPad;
+        if (this.isLassoMoveMode || insideSelectionBox) {
+          this.isDraggingLasso = true;
+          this.dragLastWorld = pt;
+          this.dragMovedStrokes = false;
+          this._pushUndoSnapshot();
+          this.stageEl.style.cursor = 'move';
+          return;
+        }
+      }
+
+      if (this.tool === 'laser') {
+        this.isDrawing = true;
+        this.activeLaserPoints = [];
+        appendLaserPoint(this.activeLaserPoints, pt.x, pt.y, performance.now());
+        this._ensureVanishingAnimation();
+        return;
+      }
+
+      if (['pen', 'highlighter', 'arrow', 'lasso'].includes(this.tool)) {
         this.isDrawing = true;
         this.activeStrokePoints = [pt];
         this.redrawLive();
@@ -426,6 +669,30 @@
         return;
       }
 
+      if (this.isDraggingLasso) {
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const worldPt = this.screenToWorld(sx, sy);
+        if (this.dragLastWorld) {
+          const dx = worldPt.x - this.dragLastWorld.x;
+          const dy = worldPt.y - this.dragLastWorld.y;
+          if (dx !== 0 || dy !== 0) {
+            this.page.strokes = translateSelectedStrokes(
+              this.page.strokes,
+              this.selectedStrokeIds,
+              dx,
+              dy
+            );
+            this.dragMovedStrokes = true;
+            this.dragLastWorld = worldPt;
+            this.redrawStatic();
+          }
+        } else {
+          this.dragLastWorld = worldPt;
+        }
+        return;
+      }
+
       if (!this.isDrawing) return;
 
       // Use high-rate PointerEvent coalescing for ultra-smooth stylus/mouse ink
@@ -438,6 +705,23 @@
           const sx = ev.clientX - rect.left;
           const sy = ev.clientY - rect.top;
           this._eraseAtPoint(this.screenToWorld(sx, sy));
+        }
+        return;
+      }
+
+      if (this.tool === 'laser') {
+        const nowMs = performance.now();
+        let added = false;
+        for (const ev of events) {
+          const sx = ev.clientX - rect.left;
+          const sy = ev.clientY - rect.top;
+          const worldPt = this.screenToWorld(sx, sy);
+          if (appendLaserPoint(this.activeLaserPoints, worldPt.x, worldPt.y, nowMs)) {
+            added = true;
+          }
+        }
+        if (added) {
+          this._ensureVanishingAnimation();
         }
         return;
       }
@@ -462,6 +746,20 @@
         return;
       }
 
+      if (this.isDraggingLasso) {
+        this.isDraggingLasso = false;
+        this.dragLastWorld = null;
+        this.updatePointerPassthrough();
+        if (this.dragMovedStrokes) {
+          this.dragMovedStrokes = false;
+          this.redoStack = [];
+          this.callbacks.onStrokesModified();
+        } else {
+          this.undoStack.pop();
+        }
+        return;
+      }
+
       if (!this.isDrawing || !this.page) return;
       this.isDrawing = false;
 
@@ -473,35 +771,52 @@
         return;
       }
 
+      if (this.tool === 'laser') {
+        const nowMs = performance.now();
+        pruneTimedPointsInPlace(this.activeLaserPoints, nowMs, LASER_TTL_MS);
+        if (this.activeLaserPoints.length >= 2) {
+          this.vanishingTrails.push({
+            points: this.activeLaserPoints.slice(),
+            width: Math.max(5, this.strokeWidth + 2)
+          });
+          this.vanishingTrails = pruneCompletedLaserTrails(
+            this.vanishingTrails,
+            nowMs,
+            LASER_TTL_MS,
+            LASER_MAX_COMPLETED_TRAILS
+          );
+        }
+        this.activeLaserPoints = [];
+        this._ensureVanishingAnimation();
+        return;
+      }
+
       const rawPts = this.activeStrokePoints;
       this.activeStrokePoints = [];
 
-      if (rawPts.length < 2) {
-        this.redrawLive();
-        return;
-      }
-
-      if (this.tool === 'laser') {
-        this.vanishingTrails.push({
-          points: rawPts,
-          startTime: performance.now(),
-          width: Math.max(5, this.strokeWidth + 2)
-        });
-        this._ensureVanishingAnimation();
-        this.redrawLive();
-        return;
-      }
-
       if (this.tool === 'lasso') {
-        this.selectedStrokeIds.clear();
-        for (const s of (this.page.strokes || [])) {
-          if (s.points && s.points.some((p) => pointInPolygon(p, rawPts))) {
-            this.selectedStrokeIds.add(s.id);
+        if (rawPts.length >= 3) {
+          this.selectedStrokeIds.clear();
+          for (const s of (this.page.strokes || [])) {
+            if (strokeIntersectsPolygon(s, rawPts)) {
+              this.selectedStrokeIds.add(s.id);
+            }
           }
+          if (this.selectedStrokeIds.size === 0) {
+            this.setLassoMoveMode(false);
+          }
+        } else {
+          this.selectedStrokeIds.clear();
+          this.setLassoMoveMode(false);
         }
         this.callbacks.onSelectionChanged(this.selectedStrokeIds.size);
         this.redrawLive();
         this.redrawStatic();
+        return;
+      }
+
+      if (rawPts.length < 2) {
+        this.redrawLive();
         return;
       }
 
@@ -552,15 +867,16 @@
 
     _pushUndoSnapshot() {
       if (!this.page) return;
-      this.undoStack.push(JSON.stringify(this.page.strokes));
+      this.undoStack.push(cloneStrokesShallow(this.page.strokes));
       if (this.undoStack.length > 40) this.undoStack.shift();
     }
 
     undo() {
       if (!this.page || this.undoStack.length === 0) return false;
-      this.redoStack.push(JSON.stringify(this.page.strokes));
-      this.page.strokes = JSON.parse(this.undoStack.pop());
+      this.redoStack.push(cloneStrokesShallow(this.page.strokes));
+      this.page.strokes = this.undoStack.pop();
       this.selectedStrokeIds.clear();
+      this.setLassoMoveMode(false);
       this.callbacks.onSelectionChanged(0);
       this.redrawStatic();
       this.callbacks.onStrokesModified();
@@ -569,9 +885,10 @@
 
     redo() {
       if (!this.page || this.redoStack.length === 0) return false;
-      this.undoStack.push(JSON.stringify(this.page.strokes));
-      this.page.strokes = JSON.parse(this.redoStack.pop());
+      this.undoStack.push(cloneStrokesShallow(this.page.strokes));
+      this.page.strokes = this.redoStack.pop();
       this.selectedStrokeIds.clear();
+      this.setLassoMoveMode(false);
       this.callbacks.onSelectionChanged(0);
       this.redrawStatic();
       this.callbacks.onStrokesModified();
@@ -583,6 +900,7 @@
       this._pushUndoSnapshot();
       this.page.strokes = this.page.strokes.filter((s) => !this.selectedStrokeIds.has(s.id));
       this.selectedStrokeIds.clear();
+      this.setLassoMoveMode(false);
       this.callbacks.onSelectionChanged(0);
       this.redrawStatic();
       this.callbacks.onStrokesModified();
@@ -605,6 +923,7 @@
       this._pushUndoSnapshot();
       this.page.strokes = [];
       this.selectedStrokeIds.clear();
+      this.setLassoMoveMode(false);
       this.callbacks.onSelectionChanged(0);
       this.redrawStatic();
       this.callbacks.onStrokesModified();
@@ -615,9 +934,21 @@
       this.vanishingLoopActive = true;
       const step = () => {
         const now = performance.now();
-        this.vanishingTrails = this.vanishingTrails.filter((t) => now - t.startTime < 1500);
+        this.vanishingTrails = pruneCompletedLaserTrails(
+          this.vanishingTrails,
+          now,
+          LASER_TTL_MS,
+          LASER_MAX_COMPLETED_TRAILS
+        );
+        if (this.activeLaserPoints.length > 0) {
+          pruneTimedPointsInPlace(this.activeLaserPoints, now, LASER_TTL_MS);
+        }
         this.redrawLive();
-        if (this.vanishingTrails.length > 0 || (this.isDrawing && this.tool === 'laser')) {
+        if (
+          this.vanishingTrails.length > 0 ||
+          this.activeLaserPoints.length > 0 ||
+          (this.isDrawing && this.tool === 'laser')
+        ) {
           this.animFrameId = requestAnimationFrame(step);
         } else {
           this.vanishingLoopActive = false;
@@ -821,6 +1152,35 @@
         drawSmoothStroke(ctx, s, this.themeMode, this.selectedStrokeIds.has(s.id));
       }
 
+      // 3. Draw unified dashed bounding box & handles around lasso selection
+      const selBounds = computeSelectedStrokesBounds(this.page.strokes, this.selectedStrokeIds);
+      if (selBounds) {
+        const pad = 12;
+        const left = selBounds.minX - pad;
+        const top = selBounds.minY - pad;
+        const w = Math.max(16, selBounds.maxX - selBounds.minX + pad * 2);
+        const h = Math.max(16, selBounds.maxY - selBounds.minY + pad * 2);
+        const boxColor = this.themeMode === 'KINDLE_PARCHMENT' ? '#0284C7' : '#00E5FF';
+
+        ctx.save();
+        ctx.fillStyle = this.isDraggingLasso ? hexToRgba(boxColor, 0.14) : hexToRgba(boxColor, 0.07);
+        ctx.fillRect(left, top, w, h);
+        ctx.setLineDash([10, 7]);
+        ctx.lineWidth = (this.isDraggingLasso ? 2.4 : 1.75) / Math.max(0.25, vp.zoom);
+        ctx.strokeStyle = boxColor;
+        ctx.strokeRect(left, top, w, h);
+        ctx.setLineDash([]);
+
+        const handleR = 4.2 / Math.max(0.4, vp.zoom);
+        ctx.fillStyle = boxColor;
+        for (const [cx, cy] of [[left, top], [left + w, top], [left, top + h], [left + w, top + h]]) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, handleR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
       ctx.restore();
     }
 
@@ -885,21 +1245,21 @@
       ctx.translate(vp.x, vp.y);
       ctx.scale(vp.zoom, vp.zoom);
 
-      // 1. Draw Rainbow Vanishing Laser Trails
+      // 1. Draw Rainbow Vanishing Laser Trails (batched 24 hue bins, zero per-segment strings)
       const now = performance.now();
-      for (const trail of this.vanishingTrails) {
-        const age = now - trail.startTime;
-        if (age >= 1500 || trail.points.length < 2) continue;
-        const progress = age / 1500;
-        const alpha = (1 - progress) * 0.95;
-        this._drawRainbowTrail(ctx, trail.points, trail.width * (1 - progress * 0.35), alpha, trail.startTime);
+      for (let t = 0; t < this.vanishingTrails.length; t++) {
+        const trail = this.vanishingTrails[t];
+        if (trail && trail.points && trail.points.length >= 2) {
+          this._drawRainbowTrailBatched(ctx, trail.points, trail.width, now);
+        }
+      }
+      if (this.activeLaserPoints.length >= 2) {
+        this._drawRainbowTrailBatched(ctx, this.activeLaserPoints, Math.max(5, this.strokeWidth + 2), now);
       }
 
       // 2. Draw In-Progress Active Stroke
-      if (this.isDrawing && this.activeStrokePoints.length >= 2) {
-        if (this.tool === 'laser') {
-          this._drawRainbowTrail(ctx, this.activeStrokePoints, Math.max(5, this.strokeWidth + 2), 0.96, now);
-        } else if (this.tool === 'lasso') {
+      if (this.isDrawing && this.tool !== 'laser' && this.activeStrokePoints.length >= 2) {
+        if (this.tool === 'lasso') {
           ctx.save();
           ctx.setLineDash([10, 7]);
           ctx.strokeStyle = '#00FFFF';
@@ -933,16 +1293,52 @@
       ctx.restore();
     }
 
-    _drawRainbowTrail(ctx, points, width, alpha, seedTime) {
+    _drawRainbowTrailBatched(ctx, points, baseWidth, nowMs) {
+      if (!points || points.length < 2) return;
+      const buckets = this._laserBuckets;
+      for (let b = 0; b < LASER_HUE_BINS; b++) {
+        buckets[b].length = 0;
+      }
+
+      const len = points.length;
+      const phase = nowMs * 0.0025;
+      let totalAlpha = 0;
+      let segCount = 0;
+
+      for (let i = 1; i < len; i++) {
+        const p0 = points[i - 1];
+        const p1 = points[i];
+        const age = nowMs - p1.t;
+        if (age >= LASER_TTL_MS) continue;
+        const life = 1 - Math.max(0, age) / LASER_TTL_MS;
+        totalAlpha += life;
+        segCount++;
+        const hueNorm = ((i * 0.042 + phase) % 1 + 1) % 1;
+        const bin = Math.min(LASER_HUE_BINS - 1, Math.floor(hueNorm * LASER_HUE_BINS));
+        buckets[bin].push(p0.x, p0.y, p1.x, p1.y);
+      }
+
+      if (segCount === 0) return;
+      const avgLife = totalAlpha / segCount;
+      const alphaStep = Math.max(
+        0,
+        Math.min(LASER_ALPHA_STEPS - 1, Math.floor(avgLife * (LASER_ALPHA_STEPS - 0.01)))
+      );
+
       ctx.save();
       ctx.lineCap = 'round';
-      ctx.lineWidth = width;
-      for (let i = 1; i < points.length; i++) {
-        const hue = (i * 14 + seedTime * 0.12) % 360;
-        ctx.strokeStyle = `hsla(${hue}, 100%, 58%, ${alpha})`;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, baseWidth * (0.65 + 0.35 * avgLife));
+
+      for (let b = 0; b < LASER_HUE_BINS; b++) {
+        const arr = buckets[b];
+        if (arr.length === 0) continue;
+        ctx.strokeStyle = LASER_COLOR_LUT[b][alphaStep];
         ctx.beginPath();
-        ctx.moveTo(points[i - 1].x, points[i - 1].y);
-        ctx.lineTo(points[i].x, points[i].y);
+        for (let k = 0; k < arr.length; k += 4) {
+          ctx.moveTo(arr[k], arr[k + 1]);
+          ctx.lineTo(arr[k + 2], arr[k + 3]);
+        }
         ctx.stroke();
       }
       ctx.restore();
@@ -1060,5 +1456,32 @@
     }
   }
 
+  const BoardLassoUtils = {
+    computeSelectedStrokesBounds,
+    translateSelectedStrokes,
+    strokeIntersectsPolygon,
+    pointInPolygon
+  };
+
+  const BoardLaserUtils = {
+    LASER_TTL_MS,
+    LASER_MAX_ACTIVE_POINTS,
+    LASER_MAX_COMPLETED_TRAILS,
+    LASER_MIN_SPACING,
+    LASER_HUE_BINS,
+    LASER_ALPHA_STEPS,
+    LASER_COLOR_LUT,
+    appendLaserPoint,
+    pruneTimedPointsInPlace,
+    pruneCompletedLaserTrails,
+    cloneStrokesShallow
+  };
+
   global.BoardCanvasEngine = BoardCanvasEngine;
+  global.BoardLassoUtils = BoardLassoUtils;
+  global.BoardLaserUtils = BoardLaserUtils;
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { BoardCanvasEngine, BoardLassoUtils, BoardLaserUtils };
+  }
 })(typeof window !== 'undefined' ? window : globalThis);

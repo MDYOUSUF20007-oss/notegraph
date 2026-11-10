@@ -19,6 +19,7 @@ import com.notegraph.app.ui.reader.ReaderViewModel
 import com.notegraph.app.ui.search.SearchScreen
 import com.notegraph.app.ui.settings.SettingsScreen
 import com.notegraph.app.ui.tags.TagsScreen
+import com.notegraph.app.ui.tutorial.TutorialScreen
 
 @Composable
 fun NoteGraphNavGraph(
@@ -50,7 +51,11 @@ fun NoteGraphNavGraph(
                 onNavigateGraph = { navController.navigate("graph") },
                 onNavigateTags = { navController.navigate("tags") },
                 onNavigateSettings = { navController.navigate("settings") },
-                onNavigateReader = { navController.navigate("reader") }
+                onNavigateReader = { navController.navigate("reader") },
+                onNavigateTutorial = { section ->
+                    val targetSection = section ?: "ALL"
+                    navController.navigate("tutorial?section=$targetSection")
+                }
             )
         }
         composable(
@@ -71,7 +76,8 @@ fun NoteGraphNavGraph(
         composable("graph") {
             GraphScreen(
                 onBack = { navController.popBackStack() },
-                onNoteClick = { noteId -> navController.navigate("editor/$noteId") }
+                onNoteClick = { noteId -> navController.navigate("editor/$noteId") },
+                onNavigateTutorial = { navController.navigate("tutorial?section=GRAPH") }
             )
         }
         composable("search") {
@@ -87,7 +93,30 @@ fun NoteGraphNavGraph(
             )
         }
         composable("settings") {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateTutorial = { navController.navigate("tutorial?section=ALL") }
+            )
+        }
+        composable(
+            route = "tutorial?section={section}",
+            arguments = listOf(navArgument("section") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = "ALL"
+            })
+        ) { backStackEntry ->
+            val section = backStackEntry.arguments?.getString("section")
+            TutorialScreen(
+                initialSection = section,
+                onBack = { navController.popBackStack() },
+                onOpenGraph = {
+                    val popped = navController.popBackStack("graph", inclusive = false)
+                    if (!popped) {
+                        navController.navigate("graph") { launchSingleTop = true }
+                    }
+                }
+            )
         }
         composable(
             route = "reader?noteId={noteId}",

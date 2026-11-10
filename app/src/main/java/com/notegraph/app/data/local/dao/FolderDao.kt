@@ -15,6 +15,9 @@ interface FolderDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFolder(folder: FolderEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFolders(folders: List<FolderEntity>)
+
     @Update
     suspend fun updateFolder(folder: FolderEntity)
 

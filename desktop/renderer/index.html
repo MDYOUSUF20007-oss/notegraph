@@ -91,6 +91,16 @@
           </div>
         </div>
 
+        <button id="openTutorialBtn" class="pill-btn" title="Open App Guide &amp; Graph Tutorial">
+          <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Guide</span>
+        </button>
+
+        <button id="openSyncModalBtn" class="pill-btn" title="Cross-OS Node Sync (Windows, macOS &amp; Android)">
+          <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span>Sync</span>
+        </button>
+
         <button id="zenModeBtn" class="pill-btn" title="Fullscreen Classroom Zen Mode (F11)">
           <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
           <span>Zen</span>
@@ -263,10 +273,11 @@
           <!-- Floating Lasso Selection Bar -->
           <div id="lassoBar" class="lasso-bar hidden">
             <span id="lassoCountLabel">0 strokes selected</span>
-            <button id="nudgeLeftBtn" class="dock-btn" title="Move Left">←</button>
-            <button id="nudgeUpBtn" class="dock-btn" title="Move Up">↑</button>
-            <button id="nudgeDownBtn" class="dock-btn" title="Move Down">↓</button>
-            <button id="nudgeRightBtn" class="dock-btn" title="Move Right">→</button>
+            <button id="lassoMoveModeBtn" class="dock-btn toggle-btn" title="Drag anywhere on canvas to move selected strokes">Drag Move</button>
+            <button id="nudgeLeftBtn" class="dock-btn" title="Nudge Left">←</button>
+            <button id="nudgeUpBtn" class="dock-btn" title="Nudge Up">↑</button>
+            <button id="nudgeDownBtn" class="dock-btn" title="Nudge Down">↓</button>
+            <button id="nudgeRightBtn" class="dock-btn" title="Nudge Right">→</button>
             <button id="deleteLassoBtn" class="dock-btn danger-text">Delete</button>
             <button id="clearSlideInkBtn" class="dock-btn">Clear Ink</button>
           </div>
@@ -336,6 +347,7 @@
           <div class="graph-hud">
             <input id="graphFilterInput" type="search" placeholder="Highlight node by title..." />
             <button id="graphResetLayoutBtn" class="pill-btn">Re-Layout</button>
+            <button id="graphGuideBtn" class="pill-btn">How Nodes Link</button>
             <span class="graph-hint">Drag nodes · Scroll to zoom · Click any node to open</span>
           </div>
           <canvas id="graphCanvas" class="graph-canvas"></canvas>
@@ -458,6 +470,153 @@
       <div class="modal-footer">
         <button class="btn-ghost" data-close-modal="connectLabelModal">Cancel</button>
         <button id="confirmConnectBtn" class="btn-primary">Create Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Interactive Field Guide / Tutorial Modal -->
+  <div id="tutorialModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-tutorial">
+      <div class="modal-header">
+        <h3>NoteGraph Board &amp; Graph Field Guide</h3>
+        <button class="modal-close-x" data-close-modal="tutorialModal">✕</button>
+      </div>
+      <div class="tutorial-tabs" id="tutorialTabs">
+        <button type="button" class="tutorial-tab active" data-tut-tab="all">All</button>
+        <button type="button" class="tutorial-tab" data-tut-tab="graph">Graph Nodes</button>
+        <button type="button" class="tutorial-tab" data-tut-tab="board">Board &amp; Lasso</button>
+        <button type="button" class="tutorial-tab" data-tut-tab="sync">Shortcuts &amp; Sync</button>
+      </div>
+      <div class="modal-body tutorial-body" id="tutorialBody">
+        <div class="tutorial-section" data-tut-section="graph">
+          <div class="tutorial-badge-row">
+            <span class="tutorial-badge">KNOWLEDGE GRAPH</span>
+            <strong>How to Make &amp; Connect Graph Nodes</strong>
+          </div>
+          <svg class="tutorial-graph-svg" viewBox="0 0 460 120" aria-hidden="true">
+            <line x1="95" y1="45" x2="245" y2="38" stroke="var(--accent)" stroke-width="2.5"/>
+            <line x1="95" y1="45" x2="185" y2="92" stroke="var(--accent-end)" stroke-width="2.2"/>
+            <line x1="245" y1="38" x2="185" y2="92" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4"/>
+            <text x="148" y="30" fill="var(--accent)" font-size="10" font-family="monospace">[[Calculus Basics]]</text>
+            <circle cx="95" cy="45" r="16" fill="var(--accent)" fill-opacity="0.22"/>
+            <circle cx="95" cy="45" r="9" fill="var(--accent)"/>
+            <text x="58" y="72" fill="var(--text-primary)" font-size="11" font-weight="700">Physics (Hub)</text>
+            <circle cx="245" cy="38" r="14" fill="var(--accent-end)" fill-opacity="0.22"/>
+            <circle cx="245" cy="38" r="8" fill="var(--accent-end)"/>
+            <text x="215" y="64" fill="var(--text-primary)" font-size="10.5">Calculus Basics</text>
+            <circle cx="185" cy="92" r="12" fill="var(--accent)" fill-opacity="0.22"/>
+            <circle cx="185" cy="92" r="7" fill="var(--accent)"/>
+            <text x="150" y="114" fill="var(--text-primary)" font-size="10.5">Wave Equations</text>
+            <circle cx="385" cy="70" r="9" fill="none" stroke="var(--text-secondary)" stroke-dasharray="3 3"/>
+            <circle cx="385" cy="70" r="6" fill="var(--text-secondary)" fill-opacity="0.45"/>
+            <text x="352" y="92" fill="var(--text-secondary)" font-size="10">Isolated Note</text>
+          </svg>
+          <ul class="tutorial-list">
+            <li><strong>Every Board / Note is a Node:</strong> Click <em>+ New Board</em> to create a node. Give every note a real title (&ge; 2 characters) instead of leaving it as Untitled.</li>
+            <li><strong>Link with [[Wiki-Links]]:</strong> Switch to <em>Notes</em> (<code>Ctrl+2</code>) and click <strong>[[ Link Note</strong> or type <code>[[Target Title]]</code> anywhere inside your note or inside a Sticky Note card on the Infinite Board.</li>
+            <li><strong>Create Missing Targets on Click:</strong> Click any unresolved chip in <em>Outgoing Links</em> to auto-create and link that note right away. Mentioning another note's exact title also generates edges &amp; Backlinks automatically.</li>
+            <li><strong>Graph Navigation:</strong> Drag any node circle to reorganize clusters, scroll to zoom, drag empty space to pan, or click a node to open its board.</li>
+          </ul>
+        </div>
+
+        <div class="tutorial-section" data-tut-section="board">
+          <div class="tutorial-badge-row">
+            <span class="tutorial-badge">CANVAS &amp; LASSO</span>
+            <strong>Infinite Board, Lasso Drag Move &amp; Connectors</strong>
+          </div>
+          <ul class="tutorial-list">
+            <li><strong>Smooth Lasso Drag &amp; Move:</strong> Select the <em>Lasso</em> tool (<code>S</code>) and circle strokes. Drag directly inside the dashed selection box to glide strokes freely in any direction — or click <strong>Drag Move</strong> in the toolbar to drag from anywhere on the canvas. Use <code>← ↑ ↓ →</code> arrows for pixel-precise nudges.</li>
+            <li><strong>Card Connectors (Mind Maps):</strong> Click <em>Select</em> (<code>V</code>) to add/drag Sticky Notes &amp; Checklists, or press <em>Connect</em> (<code>C</code>) and click two cards to draw a labeled curved arrow between them.</li>
+            <li><strong>PDF Markup &amp; Slides:</strong> Import PDFs as multi-slide lecture decks or laid out side-by-side on one canvas, then draw with Pen, Highlighter, Snap shapes, or Rainbow Laser (<code>L</code>).</li>
+          </ul>
+        </div>
+
+        <div class="tutorial-section" data-tut-section="sync">
+          <div class="tutorial-badge-row">
+            <span class="tutorial-badge">WORKFLOW &amp; SYNC</span>
+            <strong>Shortcuts, Themes &amp; Android .zip Transfer</strong>
+          </div>
+          <ul class="tutorial-list">
+            <li><strong>Quick Keys:</strong> <code>Ctrl/Cmd+K</code> Quick Switcher · <code>Space+Drag</code> Pan · <code>F11</code> Classroom Zen Mode · <code>Ctrl/Cmd+V</code> Paste Screenshot onto Board · <code>PageUp/PageDown</code> Next/Prev Slide.</li>
+            <li><strong>Themes &amp; Gradients:</strong> Switch between AMOLED, Kindle, Matte/Mac, and Blackboard, plus independent per-theme Gradient presets.</li>
+            <li><strong>Cross-OS Node Sync:</strong> Open <strong>Sync</strong> in the top bar to sync every note, folder, checklist, ink stroke, PDF annotation, graph link &amp; deletion across <strong>Windows, macOS &amp; Android</strong> via Shared Cloud Folder (iCloud/OneDrive/Dropbox/Drive), Direct Wi-Fi LAN, or Sync v2 <code>.zip</code>.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" id="tutOpenGraphBtn">Open Knowledge Graph</button>
+        <div class="spacer"></div>
+        <button class="btn-primary" data-close-modal="tutorialModal">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. Cross-OS Node Sync Hub Modal -->
+  <div id="syncModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-wide modal-sync">
+      <div class="modal-header">
+        <h3>Cross-OS Node Sync (Win · macOS · Android)</h3>
+        <button class="modal-close-x" data-close-modal="syncModal">✕</button>
+      </div>
+      <div class="modal-body sync-modal-body">
+        <div class="sync-status-card">
+          <div>
+            <div class="sync-status-title" id="syncDeviceSummary">This Device • Offline First</div>
+            <div class="sync-status-sub" id="syncLastStatusLabel">Ready to sync notes, folders, ink strokes, boards, links &amp; deletions</div>
+          </div>
+          <span class="tutorial-badge">SYNC v2</span>
+        </div>
+
+        <!-- 1. Shared Cloud Folder Auto-Sync -->
+        <div class="sync-section">
+          <div class="sync-section-head">
+            <strong>1. Shared Cloud Folder (Auto-Sync across Windows, Mac &amp; Android)</strong>
+            <button id="syncAutoFolderToggle" class="mini-pill-toggle active" type="button">Auto-Sync On</button>
+          </div>
+          <p class="sync-desc">Point NoteGraph to an iCloud Drive, OneDrive, Dropbox, Google Drive, or Syncthing folder. Edits merge automatically across devices using Last-Write-Wins + tombstones.</p>
+          <div id="syncCloudSuggestions" class="sync-suggestions"></div>
+          <div id="syncFolderPathLabel" class="sync-path-box">No shared folder selected</div>
+          <div class="sync-row">
+            <button id="syncChooseFolderBtn" class="btn-ghost" type="button">Choose Folder…</button>
+            <button id="syncFolderNowBtn" class="btn-primary" type="button">Sync Folder Now</button>
+          </div>
+        </div>
+
+        <!-- 2. Direct Wi-Fi LAN Sync -->
+        <div class="sync-section">
+          <div class="sync-section-head">
+            <strong>2. Direct Wi-Fi LAN Sync (Instant Peer-to-Peer, Zero Cloud)</strong>
+            <button id="syncLanHostToggle" class="mini-pill-toggle" type="button">Start Host Server</button>
+          </div>
+          <div id="syncLanHostInfo" class="sync-host-info hidden">
+            <div class="sync-host-addr" id="syncLanHostAddrLabel">Waiting for Wi-Fi…</div>
+            <div class="sync-pin-row">
+              <span class="sync-pin-badge" id="syncLanPinBadge">PIN: ----</span>
+              <button id="syncLanRegenPinBtn" class="mini-text-btn" type="button">New PIN</button>
+            </div>
+          </div>
+          <div class="sync-peer-form">
+            <input id="syncLanPeerInput" class="field-input" type="text" placeholder="Peer IP:Port (e.g. 192.168.1.24:8765)" />
+            <input id="syncLanPeerPinInput" class="field-input sync-pin-input" type="text" placeholder="PIN" maxlength="8" />
+            <button id="syncLanConnectBtn" class="btn-primary" type="button">Sync Wi-Fi</button>
+          </div>
+        </div>
+
+        <!-- 3. Portable Sync v2 Archive (.zip) -->
+        <div class="sync-section">
+          <div class="sync-section-head">
+            <strong>3. Portable Sync Package (.zip Merge Archive)</strong>
+          </div>
+          <div class="sync-row">
+            <button id="syncZipExportBtn" class="btn-ghost" type="button">Export Sync v2 (.zip)…</button>
+            <button id="syncZipImportBtn" class="btn-ghost" type="button">Merge Sync Archive (.zip)…</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="palette-row-sub">Zero telemetry · Bidirectional merge · Backwards-compatible with Android</span>
+        <div class="spacer"></div>
+        <button class="btn-primary" data-close-modal="syncModal">Done</button>
       </div>
     </div>
   </div>

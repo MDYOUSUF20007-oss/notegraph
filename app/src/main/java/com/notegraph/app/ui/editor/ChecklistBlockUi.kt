@@ -1,5 +1,6 @@
 package com.notegraph.app.ui.editor
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
@@ -41,6 +43,9 @@ fun ChecklistBlockUi(
     val checkedCount = block.items.count { it.isChecked }
     val progress = if (totalCount > 0) checkedCount.toFloat() / totalCount.toFloat() else 0f
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val accent = if (isLuxury) lux.accent else activePreset.accentStart
 
     var localTitle by remember(block.id) { mutableStateOf(block.title) }
 
@@ -63,10 +68,10 @@ fun ChecklistBlockUi(
                 },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.titleSmall.copy(
-                    color = activePreset.accentStart,
+                    color = if (isLuxury) lux.textPrimary else accent,
                     fontWeight = FontWeight.SemiBold
                 ),
-                cursorBrush = SolidColor(activePreset.accentStart),
+                cursorBrush = SolidColor(accent),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
                     if (localTitle.isEmpty()) {
@@ -81,13 +86,15 @@ fun ChecklistBlockUi(
             )
 
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = activePreset.accentStart.copy(alpha = 0.14f)
+                shape = RoundedCornerShape(if (isLuxury) 6.dp else 10.dp),
+                color = if (isLuxury) lux.recessedSurface else accent.copy(alpha = 0.14f),
+                border = if (isLuxury) BorderStroke(1.dp, lux.borderHairline) else null
             ) {
                 Text(
-                    text = if (totalCount == 0) "0 tasks" else "$checkedCount / $totalCount",
+                    text = if (totalCount == 0) "0 TASKS" else "$checkedCount / $totalCount",
+                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                     style = MaterialTheme.typography.labelSmall,
-                    color = activePreset.accentStart,
+                    color = accent,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                 )
@@ -99,15 +106,15 @@ fun ChecklistBlockUi(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp)
+                    .height(if (isLuxury) 2.dp else 4.dp)
                     .clip(CircleShape)
-                    .background(ThemeManager.cardBorderColor)
+                    .background(if (isLuxury) lux.dividerRule else ThemeManager.cardBorderColor)
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(progress.coerceIn(0f, 1f))
                         .fillMaxHeight()
-                        .background(ThemeManager.activeAccentBrush)
+                        .background(if (isLuxury) SolidColor(accent) else ThemeManager.activeAccentBrush)
                 )
             }
         }

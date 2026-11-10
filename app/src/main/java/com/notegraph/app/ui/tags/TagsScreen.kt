@@ -1,7 +1,9 @@
 package com.notegraph.app.ui.tags
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
@@ -36,9 +39,6 @@ import com.notegraph.app.ui.components.ObsidianStatTile
 import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 data class TagTreeNode(
     val name: String,
@@ -61,6 +61,8 @@ fun TagsScreen(
     val tagTree = remember(notes) { buildTagTree(notes) }
     var selectedTag by remember { mutableStateOf<String?>(null) }
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
 
     val filteredNotes = remember(selectedTag, notes) {
         if (selectedTag == null) emptyList()
@@ -79,19 +81,31 @@ fun TagsScreen(
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                    title = { Text("Tags", style = MaterialTheme.typography.titleLarge) },
+                    title = {
+                        if (isLuxury) {
+                            Text(
+                                text = "Tags",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontFamily = FontFamily.Serif,
+                                color = lux.textPrimary
+                            )
+                        } else {
+                            Text("Tags", style = MaterialTheme.typography.titleLarge)
+                        }
+                    },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back"
+                                contentDescription = "Back",
+                                tint = if (isLuxury) lux.textPrimary else LocalContentColor.current
                             )
                         }
                     }
                 )
             }
         ) { padding ->
-            val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+            val obsidianAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
             val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
 
             Column(
@@ -240,12 +254,13 @@ fun TagsScreen(
                         if (selectedTag != null) {
                             item {
                                 Spacer(Modifier.height(14.dp))
-                                HorizontalDivider(color = ThemeManager.cardBorderColor)
+                                HorizontalDivider(color = if (isLuxury) lux.dividerRule else ThemeManager.cardBorderColor)
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    text = "#${selectedTag} · ${filteredNotes.size}",
+                                    text = if (isLuxury) "#${selectedTag} // ${filteredNotes.size}" else "#${selectedTag} · ${filteredNotes.size}",
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = activePreset.accentStart,
+                                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                    color = if (isLuxury) lux.accent else activePreset.accentStart,
                                     modifier = Modifier.padding(bottom = 6.dp)
                                 )
                             }
@@ -261,7 +276,6 @@ fun TagsScreen(
                                 }
                             } else {
                                 items(filteredNotes, key = { it.id }) { note ->
-                                    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
 
                                     ObsidianCard(
                                         accentColor = obsidianAccent,
@@ -326,7 +340,7 @@ fun TagsScreen(
                                         },
                                         footerContent = {
                                             Text(
-                                                text = "Updated ${dateFormat.format(Date(note.updatedAt))} • Matched #${selectedTag} • Local Room storage",
+                                                text = "Updated ${NoteJson.formatShortDateTime(note.updatedAt)} • Matched #${selectedTag} • Local Room storage",
                                                 fontFamily = FontFamily.Monospace,
                                                 fontSize = 10.5.sp,
                                                 lineHeight = 15.sp,
@@ -369,13 +383,25 @@ fun TagNodeRow(
     val hasChildren = node.children.isNotEmpty()
     val isSelected = selectedTag == node.fullPath
     val activePreset = ThemeManager.currentGradient
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val rowShape = RoundedCornerShape(if (isLuxury) 6.dp else 12.dp)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(rowShape)
             .background(
-                if (isSelected) activePreset.accentStart.copy(alpha = 0.13f) else Color.Transparent
+                when {
+                    isSelected && isLuxury -> lux.elevatedSurface
+                    isSelected -> activePreset.accentStart.copy(alpha = 0.13f)
+                    else -> Color.Transparent
+                }
+            )
+            .then(
+                if (isLuxury && isSelected) {
+                    Modifier.border(1.dp, lux.accent.copy(alpha = 0.65f), rowShape)
+                } else Modifier
             )
             .clickable {
                 if (hasChildren) {
@@ -395,7 +421,7 @@ fun TagNodeRow(
             Icon(
                 imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowRight,
                 contentDescription = if (isExpanded) "Collapse" else "Expand",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
         } else {
@@ -407,20 +433,32 @@ fun TagNodeRow(
         Text(
             text = "#${node.name}",
             style = MaterialTheme.typography.bodyMedium,
+            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isSelected) activePreset.accentStart else MaterialTheme.colorScheme.onSurface
+            color = if (isSelected) {
+                if (isLuxury) lux.accent else activePreset.accentStart
+            } else {
+                if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
+            }
         )
 
         Spacer(Modifier.weight(1f))
 
         Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = activePreset.accentStart.copy(alpha = 0.14f)
+            shape = RoundedCornerShape(if (isLuxury) 4.dp else 10.dp),
+            color = if (isLuxury) lux.recessedSurface else activePreset.accentStart.copy(alpha = 0.14f),
+            border = if (isLuxury) {
+                BorderStroke(1.dp, if (isSelected) lux.accent.copy(alpha = 0.65f) else lux.borderHairline)
+            } else null,
+            shadowElevation = 0.dp
         ) {
             Text(
                 text = "${node.noteIds.size}",
                 style = MaterialTheme.typography.labelSmall,
-                color = activePreset.accentStart,
+                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                color = if (isLuxury) {
+                    if (isSelected) lux.accent else lux.textSecondary
+                } else activePreset.accentStart,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
             )
         }

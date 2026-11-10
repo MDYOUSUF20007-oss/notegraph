@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.dao.LinkDao
 import com.notegraph.app.data.local.dao.NoteDao
 import com.notegraph.app.data.local.entity.ChecklistItem
@@ -21,8 +22,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 
@@ -41,8 +40,6 @@ class EditorViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val noteId: String = checkNotNull(savedStateHandle["noteId"])
-
-    val json = Json { ignoreUnknownKeys = true }
 
     private val _note = MutableStateFlow<NoteEntity?>(null)
     val note: StateFlow<NoteEntity?> = _note.asStateFlow()
@@ -99,8 +96,9 @@ class EditorViewModel @Inject constructor(
                     for (other in allNotes) {
                         if (other.id != currentNote.id && !seenSourceIds.contains(other.id)) {
                             val otherText = other.content + " " + other.blocksJson
-                            if (otherText.contains("[[$targetTitle]]", ignoreCase = true) ||
-                                pattern.containsMatchIn(otherText)
+                            if (otherText.contains(targetTitle, ignoreCase = true) &&
+                                (otherText.contains("[[$targetTitle]]", ignoreCase = true) ||
+                                    pattern.containsMatchIn(otherText))
                             ) {
                                 seenSourceIds.add(other.id)
                                 resultList.add(
@@ -115,7 +113,7 @@ class EditorViewModel @Inject constructor(
                 }
 
                 resultList.toList()
-            }
+            }.flowOn(Dispatchers.Default)
         } else {
             flowOf(emptyList<BacklinkItem>())
         }
@@ -126,11 +124,7 @@ class EditorViewModel @Inject constructor(
             val loaded = noteDao.getNoteById(noteId)
             _note.value = loaded
             loaded?.let {
-                _blocks.value = try {
-                    json.decodeFromString<List<NoteBlock>>(it.blocksJson)
-                } catch (e: Exception) {
-                    emptyList()
-                }
+                _blocks.value = NoteJson.decodeBlocks(it.blocksJson)
                 parseAndSaveLinks(it.id)
             }
         }
@@ -314,7 +308,7 @@ class EditorViewModel @Inject constructor(
     fun updateInkStrokes(blockId: String, strokes: List<InkStroke>) {
         val block = _blocks.value.find { it.id == blockId }
         if (block is NoteBlock.InkBlock) {
-            val strokesJson = json.encodeToString(strokes)
+            val strokesJson = NoteJson.encodeStrokes(strokes)
             updateBlock(block.copy(strokesJson = strokesJson))
         }
     }
@@ -353,7 +347,7 @@ class EditorViewModel @Inject constructor(
 
     private fun syncBlocksToNote() {
         _note.value?.let { current ->
-            val blocksJsonStr = json.encodeToString(_blocks.value)
+            val blocksJsonStr = NoteJson.encodeBlocks(_blocks.value)
             _note.value = current.copy(
                 blocksJson = blocksJsonStr,
                 updatedAt = System.currentTimeMillis()
@@ -404,45 +398,49 @@ class EditorViewModel @Inject constructor(
     private suspend fun parseAndSaveLinks(sourceNoteId: String) {
         val fullText = getCombinedNoteText()
         val allNotes = noteDao.getAllNotesOnce()
-        val otherNotes = allNotes.filter { it.id != sourceNoteId }
 
-        val foundTargetTitles = mutableSetOf<String>()
+        val links = withContext(Dispatchers.Default) {
+            val otherNotes = allNotes.filter { it.id != sourceNoteId }
+            val foundTargetTitles = mutableSetOf<String>()
 
-        // 1. Explicit [[Wiki-Links]]
-        val wikiRegex = """\[\[(.*?)]]""".toRegex()
-        wikiRegex.findAll(fullText).forEach { match ->
-            val t = match.groupValues[1].trim()
-            if (t.isNotBlank()) {
-                foundTargetTitles.add(t)
-            }
-        }
-
-        // 2. Mentions of other existing note titles (e.g. "Test 1", "Test 2")
-        for (other in otherNotes) {
-            val title = other.title.trim()
-            if (title.isBlank() ||
-                title.equals("Untitled", ignoreCase = true) ||
-                title.equals("Untitled Note", ignoreCase = true) ||
-                title.length < 2
-            ) {
-                continue
+            // 1. Explicit [[Wiki-Links]]
+            val wikiRegex = """\[\[(.*?)]]""".toRegex()
+            wikiRegex.findAll(fullText).forEach { match ->
+                val t = match.groupValues[1].trim()
+                if (t.isNotBlank()) {
+                    foundTargetTitles.add(t)
+                }
             }
 
-            val pattern = Regex("""(?i)\b${Regex.escape(title)}\b""")
-            if (pattern.containsMatchIn(fullText)) {
-                foundTargetTitles.add(title)
-            }
-        }
+            // 2. Mentions of other existing note titles (prefilter before regex compile)
+            for (other in otherNotes) {
+                val title = other.title.trim()
+                if (title.isBlank() ||
+                    title.equals("Untitled", ignoreCase = true) ||
+                    title.equals("Untitled Note", ignoreCase = true) ||
+                    title.length < 2
+                ) {
+                    continue
+                }
 
-        // Map titles to LinkEntity with resolved targetNoteId
-        val links = foundTargetTitles.map { targetTitle ->
-            val resolvedNote = otherNotes.find { it.title.trim().equals(targetTitle, ignoreCase = true) }
-            LinkEntity(
-                sourceNoteId = sourceNoteId,
-                targetNoteTitle = resolvedNote?.title ?: targetTitle,
-                targetNoteId = resolvedNote?.id,
-                isResolved = resolvedNote != null
-            )
+                if (fullText.contains(title, ignoreCase = true)) {
+                    val pattern = Regex("""(?i)\b${Regex.escape(title)}\b""")
+                    if (pattern.containsMatchIn(fullText)) {
+                        foundTargetTitles.add(title)
+                    }
+                }
+            }
+
+            // Map titles to LinkEntity with resolved targetNoteId
+            foundTargetTitles.map { targetTitle ->
+                val resolvedNote = otherNotes.find { it.title.trim().equals(targetTitle, ignoreCase = true) }
+                LinkEntity(
+                    sourceNoteId = sourceNoteId,
+                    targetNoteTitle = resolvedNote?.title ?: targetTitle,
+                    targetNoteId = resolvedNote?.id,
+                    isResolved = resolvedNote != null
+                )
+            }
         }
 
         linkDao.deleteLinksForNote(sourceNoteId)

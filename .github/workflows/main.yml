@@ -144,22 +144,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "NoteGraph v2.0 — PDF OCR, Swipe-Toss Pages, Voice Visualizer & PPTX Fix"
+          name: "NoteGraph v2.0 — Bespoke Luxury UI, Runtime Engine Switcher & Cross-OS Sync"
           make_latest: true
           prerelease: false
           body: |
             Automated cross-platform builds from the latest `main` commit.
 
             ### What's New
-            - **Frosted Two-Tier Obsidian Card System (Android):** Upgraded note list cards, Search & Tag cards, Canvas Graph Node Inspector, Appearance/Vault panels, and Note Graph Metadata views with `ObsidianCard` — deep `#1A1A1E -> #0C0C0E` surfaces, dynamic active accent borders & specular edge highlights (`#8B5CF6` purple / Obsidian Gold / active palette), illuminated icon badges & stat tiles, and untruncated Tier 2 sync/timestamp/storage footers.
-            - **Offline PDF OCR Window (Android):** Extract text from imported PDFs in a dedicated window — scan the current page, a custom page range, or all pages (`Extract All`), pick individual text blocks or edit/trim before copying or inserting straight into your note.
-            - **Reader Upward Throw-Away Page Gesture:** Turn horizontally/diagonally from any corner like a book (`Corner Fold`, `3D Curl`, `Slide Stack`) OR swipe up to physically toss the page away and advance to the next note.
-            - **Theme-Matched Voice Visualizer:** Live microphone level bars and interactive waveform playback scrubbing synced dynamically to your active **AMOLED**, **Kindle Paper**, or **Matte / Mac** gradient palette.
-            - **Remade PPTX Slide Deck Export:** Rebuilt OpenXML `.pptx` engine with full slide masters, blank layouts, widescreen `16:9` paginated cards, and embedded vector ink, image, & PDF visuals compatible with both Microsoft PowerPoint and Apple Keynote.
-            - **Minimalist UI & Gradients:** Choosable accents for AMOLED, Kindle Paper, Matte / Mac, and Blackboard with rollback tag `pre-ui-remake` (`82e6f03`, code `NG-REVERT-82E6F03`).
+            - **Bespoke Luxury UI & Strict Curated Theme Architecture (Android):** Replaced glowing neon patterns, chunky cards, drop shadows, and ambient gradients with a strict flat architecture across **AMOLED Black** (`#000000` / `#121212`, `1px` `#262626` borders, `#8B5CF6` accent), **Kindle Parchment** (`#F4F1EA`), and **Matte Minimalist** (`#1E2229`).
+            - **Technical Blueprint Knowledge Graph (Android):** Clean minimalist circle & rounded-rectangle cluster hub nodes with `#8B5CF6` restraint, `1px` `30%`-opacity smooth curved Bezier edges over a drafting grid, monospace labels & `[x,y]` coordinates, and anti-overlap spacing.
+            - **Edge-to-Edge Canvas, Restrained Toolbars & Spine-Hinged Physics (Android):** Full-bleed ink & PDF drawing surfaces, razor-thin `1.dp` hairline floating pills with `0.dp` shadow, Serif prose paired with Monospace chrome, and physically anchored 3D spine-hinge page curls.
+            - **Runtime Interface Engine Switcher (Android):** Switch live between **Bespoke Luxury (Default)** and **Classic UI** (`ObsidianCard`) at the bottom of Appearance & Vault Settings with zero app restart.
+            - **Cross-OS Node Sync, Lasso Fix, Laser Optimizer & Field Guide (Android, Windows, macOS):** Symmetric two-way LWW sync across Shared Cloud Folders, Direct Wi-Fi LAN peer-to-peer sync, and Sync Package `.zip` v2; directional Lasso drag fix; O(1) bounded Rainbow Vanishing Laser; and built-in interactive Field Guide tutorial with 1-tap demo graph.
+            - **Previously in v2.0:** Offline ML Kit PDF OCR window, upward swipe-toss Reader gesture, theme-matched voice visualizer, and PowerPoint/Keynote-compatible `.pptx` export.
 
             ### Downloads
-            - **Android (`notegraph.apk`):** Offline PDF OCR Extractor window, Samsung Notes-style PDF markup (Zoom/Pan, Highlighter, Shape Snap, S-Pen Palm Rejection, Night PDF, Margin Notes), Book Reader (`Corner Fold` / `3D Curl` / `Slide Stack` + upward swipe-up page toss), Theme-Matched Voice Visualizer, rebuilt PowerPoint & Keynote `.pptx` export, live `[[Wiki-Link]]` autocomplete, Fullscreen Sketch Studio, Vault PIN lock, Trash, AMOLED/Kindle/Matte gradients, and drag-and-drop folders with checklists.
-            - **Windows x64 (`NoteGraph-Board-2.0.0-Windows-x64-Setup.exe` & `NoteGraph-Board-2.0.0-Windows-x64-Portable.exe`):** Low-latency infinite classroom board (`F11` Zen mode, Rainbow Vanishing Laser, Dots/Cornell/XY/Blackboard grids, PDF slide markup, `Ctrl+V` screenshot paste, interactive checklist cards, Follow-Up reminders, `Ctrl+K` Command Palette, 2D Knowledge Graph, Gradient Studio, & Android `.zip` vault sync).
-            - **macOS Apple Silicon (`arm64`) & Intel (`x64`) (`NoteGraph-Board-2.0.0-macOS-arm64.dmg`, `NoteGraph-Board-2.0.0-macOS-x64.dmg`, & `.zip`):** Native Electron builds of NoteGraph Board with Matte / Mac Studio gradients and atmospheric canvas themes. *(Unsigned CI build: on first launch, right-click → Open if Gatekeeper warns you.)*
+            - **Android (`notegraph.apk`):** Bespoke Luxury UI + Classic UI runtime switcher, Blueprint Knowledge Graph, Edge-to-Edge Sketch & PDF Markup + Offline OCR, Cross-OS LAN/Folder/ZIP Node Sync, Book Reader (`Corner Fold` / `3D Curl` / `Slide Stack` + swipe-up page toss), Interactive Tutorial, Vault PIN lock, Trash, and `.pptx`/`.pdf`/`.docx`/`.png`/`.md`/`.zip` export.
+            - **Windows x64 (`NoteGraph-Board-2.0.0-Windows-x64-Setup.exe` & `NoteGraph-Board-2.0.0-Windows-x64-Portable.exe`):** Low-latency infinite classroom board (`F11` Zen mode, O(1) Rainbow Vanishing Laser, directional Lasso move, Dots/Cornell/XY/Blackboard grids, PDF slide markup, `Ctrl+V` screenshot paste, interactive checklists, `Ctrl+K` Command Palette, 2D Graph, & Cross-OS LAN/Folder/ZIP sync).
+            - **macOS Apple Silicon (`arm64`) & Intel (`x64`) (`NoteGraph-Board-2.0.0-macOS-arm64.dmg`, `NoteGraph-Board-2.0.0-macOS-x64.dmg`, & `.zip`):** Native Electron builds of NoteGraph Board with full Cross-OS sync and board tools. *(Unsigned CI build: on first launch, right-click → Open if Gatekeeper warns you.)*
           files: release-assets/*

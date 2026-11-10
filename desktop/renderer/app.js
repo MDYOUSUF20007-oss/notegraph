@@ -425,6 +425,9 @@
   let searchQuery = '';
   let saveTimer = null;
   let isZenMode = false;
+  let isMacOS = false;
+  let syncConfigCache = null;
+  let lastSyncToastAt = 0;
 
   // Connect workflow state
   let pendingConnectSourceId = null;
@@ -475,6 +478,8 @@
     gradientToggleBtn: document.getElementById('gradientToggleBtn'),
     gradientOrbsGrid: document.getElementById('gradientOrbsGrid'),
     gradientResetBtn: document.getElementById('gradientResetBtn'),
+    openTutorialBtn: document.getElementById('openTutorialBtn'),
+    openSyncModalBtn: document.getElementById('openSyncModalBtn'),
     importMenuBtn: document.getElementById('importMenuBtn'),
     importMenu: document.getElementById('importMenu'),
     exportMenuBtn: document.getElementById('exportMenuBtn'),
@@ -503,6 +508,7 @@
     gridCycleBtn: document.getElementById('gridCycleBtn'),
     lassoBar: document.getElementById('lassoBar'),
     lassoCountLabel: document.getElementById('lassoCountLabel'),
+    lassoMoveModeBtn: document.getElementById('lassoMoveModeBtn'),
     connectHintPill: document.getElementById('connectHintPill'),
     slideTabsContainer: document.getElementById('slideTabsContainer'),
     addSlideBtn: document.getElementById('addSlideBtn'),
@@ -518,7 +524,11 @@
     noteViewChecklists: document.getElementById('noteViewChecklists'),
     graphFilterInput: document.getElementById('graphFilterInput'),
     graphResetLayoutBtn: document.getElementById('graphResetLayoutBtn'),
+    graphGuideBtn: document.getElementById('graphGuideBtn'),
     graphCanvas: document.getElementById('graphCanvas'),
+    tutorialModal: document.getElementById('tutorialModal'),
+    tutorialBody: document.getElementById('tutorialBody'),
+    tutOpenGraphBtn: document.getElementById('tutOpenGraphBtn'),
     cmdPaletteModal: document.getElementById('cmdPaletteModal'),
     cmdPaletteInput: document.getElementById('cmdPaletteInput'),
     cmdPaletteResults: document.getElementById('cmdPaletteResults'),
@@ -537,6 +547,24 @@
     linkPickerResults: document.getElementById('linkPickerResults'),
     connectLabelModal: document.getElementById('connectLabelModal'),
     connectLabelInput: document.getElementById('connectLabelInput'),
+    syncModal: document.getElementById('syncModal'),
+    syncDeviceSummary: document.getElementById('syncDeviceSummary'),
+    syncLastStatusLabel: document.getElementById('syncLastStatusLabel'),
+    syncAutoFolderToggle: document.getElementById('syncAutoFolderToggle'),
+    syncCloudSuggestions: document.getElementById('syncCloudSuggestions'),
+    syncFolderPathLabel: document.getElementById('syncFolderPathLabel'),
+    syncChooseFolderBtn: document.getElementById('syncChooseFolderBtn'),
+    syncFolderNowBtn: document.getElementById('syncFolderNowBtn'),
+    syncLanHostToggle: document.getElementById('syncLanHostToggle'),
+    syncLanHostInfo: document.getElementById('syncLanHostInfo'),
+    syncLanHostAddrLabel: document.getElementById('syncLanHostAddrLabel'),
+    syncLanPinBadge: document.getElementById('syncLanPinBadge'),
+    syncLanRegenPinBtn: document.getElementById('syncLanRegenPinBtn'),
+    syncLanPeerInput: document.getElementById('syncLanPeerInput'),
+    syncLanPeerPinInput: document.getElementById('syncLanPeerPinInput'),
+    syncLanConnectBtn: document.getElementById('syncLanConnectBtn'),
+    syncZipExportBtn: document.getElementById('syncZipExportBtn'),
+    syncZipImportBtn: document.getElementById('syncZipImportBtn'),
     toastContainer: document.getElementById('toastContainer')
   };
 
@@ -979,8 +1007,13 @@
     const activeNotes = vault.notes.filter((n) => !n.isTrash);
     const target = vault.notes.find((n) => n.id === noteId);
     if (!target) return;
+    const now = Date.now();
     target.isTrash = true;
-    target.trashTimestamp = Date.now();
+    target.trashTimestamp = now;
+    target.updatedAt = now;
+    if (typeof VaultBridge.recordTombstone === 'function') {
+      VaultBridge.recordTombstone(vault, noteId, 'note', now);
+    }
 
     if (activeNotes.length <= 1) {
       const fresh = VaultBridge.createNoteRecord({ title: 'New Board' });
@@ -1563,7 +1596,9 @@
     isPanning: false,
     panStart: { x: 0, y: 0 },
     hoverId: null,
-    rafId: null
+    rafId: null,
+    settleFrames: 0,
+    ticks: 0
   };
 
   function rebuildGraphSimulation() {
@@ -1596,14 +1631,28 @@
 
   function startGraphLoop() {
     if (graphState.rafId) cancelAnimationFrame(graphState.rafId);
+    graphState.settleFrames = 0;
+    graphState.ticks = 0;
 
     const step = () => {
       if (activeView !== 'graph') {
         graphState.rafId = null;
         return;
       }
-      stepGraphPhysics();
+      const motion = stepGraphPhysics();
+      graphState.ticks += 1;
       drawGraphCanvas();
+
+      const interacting = Boolean(graphState.dragNode || graphState.isPanning);
+      if (!interacting && (motion < 0.12 || (graphState.ticks > 300 && motion < 0.35))) {
+        graphState.settleFrames += 1;
+      } else {
+        graphState.settleFrames = 0;
+      }
+      if (graphState.settleFrames >= 12) {
+        graphState.rafId = null;
+        return;
+      }
       graphState.rafId = requestAnimationFrame(step);
     };
     graphState.rafId = requestAnimationFrame(step);
@@ -1611,6 +1660,7 @@
 
   function stepGraphPhysics() {
     const nodes = graphState.nodes;
+    if (!nodes.length) return 0;
     const rect = el.graphCanvas.getBoundingClientRect();
     const cx = (rect.width || 800) * 0.5;
     const cy = (rect.height || 600) * 0.5;
@@ -1652,6 +1702,7 @@
     }
 
     // Gravity toward center + damping
+    let totalMotion = 0;
     for (const n of nodes) {
       if (graphState.dragNode && graphState.dragNode.id === n.id) continue;
       n.vx += (cx - n.x) * 0.0028;
@@ -1660,13 +1711,15 @@
       n.vy *= 0.85;
       n.x += n.vx;
       n.y += n.vy;
+      totalMotion += Math.abs(n.vx) + Math.abs(n.vy);
     }
+    return totalMotion;
   }
 
   function drawGraphCanvas() {
     const cv = el.graphCanvas;
     const rect = cv.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(200, Math.floor(rect.width));
     const h = Math.max(200, Math.floor(rect.height));
     if (cv.width !== Math.floor(w * dpr) || cv.height !== Math.floor(h * dpr)) {
@@ -1695,23 +1748,33 @@
     const nodeMap = new Map(graphState.nodes.map((n) => [n.id, n]));
     const filterTxt = (el.graphFilterInput.value || '').trim().toLowerCase();
 
-    // Edges
+    // Edges: batch large graphs in a single draw call to eliminate gradient churn
     ctx.lineWidth = 1.6;
-    for (const e of graphState.edges) {
-      const a = nodeMap.get(e.sourceId);
-      const b = nodeMap.get(e.targetId);
-      if (!a || !b) continue;
-      if (vault && vault.gradientsEnabled !== false) {
+    const usePerEdgeGradient = vault && vault.gradientsEnabled !== false && graphState.edges.length <= 80;
+    if (usePerEdgeGradient) {
+      for (const e of graphState.edges) {
+        const a = nodeMap.get(e.sourceId);
+        const b = nodeMap.get(e.targetId);
+        if (!a || !b) continue;
         const eg = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
         eg.addColorStop(0, hexToRgbaCss(pal.accent, 0.42));
         eg.addColorStop(1, hexToRgbaCss(pal.accentEnd || pal.accent, 0.42));
         ctx.strokeStyle = eg;
-      } else {
-        ctx.strokeStyle = hexToRgbaCss(pal.accent, 0.36);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
       }
+    } else {
+      ctx.strokeStyle = hexToRgbaCss(pal.accent, 0.36);
       ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
+      for (const e of graphState.edges) {
+        const a = nodeMap.get(e.sourceId);
+        const b = nodeMap.get(e.targetId);
+        if (!a || !b) continue;
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
       ctx.stroke();
     }
 
@@ -1779,6 +1842,7 @@
         graphState.isPanning = true;
         graphState.panStart = { x: e.clientX - graphState.panX, y: e.clientY - graphState.panY };
       }
+      if (!graphState.rafId) startGraphLoop();
     });
 
     window.addEventListener('pointermove', (e) => {
@@ -1787,12 +1851,18 @@
       if (graphState.dragNode) {
         graphState.dragNode.x = w.x;
         graphState.dragNode.y = w.y;
+        if (!graphState.rafId) startGraphLoop();
       } else if (graphState.isPanning) {
         graphState.panX = e.clientX - graphState.panStart.x;
         graphState.panY = e.clientY - graphState.panStart.y;
+        if (!graphState.rafId) drawGraphCanvas();
       } else {
         const hit = hitNode(w.x, w.y);
-        graphState.hoverId = hit ? hit.id : null;
+        const nextHover = hit ? hit.id : null;
+        if (nextHover !== graphState.hoverId) {
+          graphState.hoverId = nextHover;
+          if (!graphState.rafId) drawGraphCanvas();
+        }
         cv.style.cursor = hit ? 'pointer' : 'grab';
       }
     });
@@ -1805,14 +1875,17 @@
         switchWorkspaceView('board');
         return;
       }
+      const wasDraggingNode = Boolean(graphState.dragNode);
       graphState.dragNode = null;
       graphState.isPanning = false;
+      if (wasDraggingNode && !graphState.rafId) startGraphLoop();
     });
 
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.1 : 0.91;
       graphState.zoom = Math.max(0.25, Math.min(3.0, graphState.zoom * factor));
+      if (!graphState.rafId) drawGraphCanvas();
     }, { passive: false });
   }
 
@@ -1831,6 +1904,11 @@
     try {
       const picked = await desktop.pickPdf();
       if (!picked) return;
+
+      if (pendingPdfDoc && typeof pendingPdfDoc.destroy === 'function') {
+        await pendingPdfDoc.destroy().catch(() => {});
+        pendingPdfDoc = null;
+      }
 
       const binStr = atob(picked.bytesBase64);
       const uint8 = new Uint8Array(binStr.length);
@@ -1862,22 +1940,37 @@
     el.pdfProgressWrap.classList.remove('hidden');
 
     const renderedPages = [];
-    for (let i = 1; i <= total; i++) {
-      el.pdfProgressFill.style.width = `${Math.round((i / total) * 100)}%`;
-      el.pdfProgressText.textContent = `Rendering page ${i} of ${total} for offline ink markup...`;
-      const page = await pendingPdfDoc.getPage(i);
-      const viewport = page.getViewport({ scale: 1.65 });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(viewport.width);
-      canvas.height = Math.round(viewport.height);
-      const ctx = canvas.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      renderedPages.push({
-        pageNum: i,
-        w: Math.round(viewport.width * 0.65),
-        h: Math.round(viewport.height * 0.65),
-        dataUrl: canvas.toDataURL('image/jpeg', 0.88)
-      });
+    const scratchCanvas = document.createElement('canvas');
+    const scratchCtx = scratchCanvas.getContext('2d');
+    const activeDoc = pendingPdfDoc;
+    pendingPdfDoc = null;
+
+    try {
+      for (let i = 1; i <= total; i++) {
+        el.pdfProgressFill.style.width = `${Math.round((i / total) * 100)}%`;
+        el.pdfProgressText.textContent = `Rendering page ${i} of ${total} for offline ink markup...`;
+        const page = await activeDoc.getPage(i);
+        try {
+          const viewport = page.getViewport({ scale: 1.65 });
+          scratchCanvas.width = Math.round(viewport.width);
+          scratchCanvas.height = Math.round(viewport.height);
+          await page.render({ canvasContext: scratchCtx, viewport }).promise;
+          renderedPages.push({
+            pageNum: i,
+            w: Math.round(viewport.width * 0.65),
+            h: Math.round(viewport.height * 0.65),
+            dataUrl: scratchCanvas.toDataURL('image/jpeg', 0.88)
+          });
+        } finally {
+          if (typeof page.cleanup === 'function') page.cleanup();
+        }
+      }
+    } finally {
+      scratchCanvas.width = 0;
+      scratchCanvas.height = 0;
+      if (typeof activeDoc.destroy === 'function') {
+        await activeDoc.destroy().catch(() => {});
+      }
     }
 
     if (mode === 'slides') {
@@ -1925,7 +2018,6 @@
       });
     }
 
-    pendingPdfDoc = null;
     el.pdfImportModal.classList.add('hidden');
     note.updatedAt = Date.now();
     scheduleSave(true);
@@ -1986,11 +2078,164 @@
     if (saved) showToast('Exported Markdown file!');
   }
 
+  function hydrateSyncedImageCards(targetVault, assetImages) {
+    if (!targetVault || !Array.isArray(targetVault.notes) || !assetImages) return;
+    for (const note of targetVault.notes) {
+      if (!Array.isArray(note.extraBlocks) || !note.board || !Array.isArray(note.board.pages)) continue;
+      for (const blk of note.extraBlocks) {
+        if (!blk || blk.type !== 'image') continue;
+        const rawRef = String(blk.uriString || blk.filePath || '');
+        const baseName = rawRef.split(/[\\/]/).pop();
+        const dataUrl = baseName ? assetImages[baseName] : null;
+        if (!dataUrl) continue;
+        for (const p of note.board.pages) {
+          const card = (p.cards || []).find((c) => c.id === blk.id);
+          if (card) {
+            card.kind = 'image';
+            card.imageDataUrl = dataUrl;
+          }
+        }
+      }
+    }
+  }
+
+  function applyIncomingSyncedVault(incomingVault, summary = null, showRemoteToast = false) {
+    if (!incomingVault || !Array.isArray(incomingVault.notes)) return;
+    const prevActive = getActiveNote();
+    const focused = document.activeElement;
+    const isEditingTitle = focused === el.activeTitleInput || focused === el.noteViewTitleInput;
+    const isEditingBody = focused === el.noteViewBodyInput;
+
+    vault = incomingVault;
+    ensureVaultGradientState();
+    renderFolders();
+    renderNotesList();
+
+    const nextActive = getActiveNote();
+    if (isEditingTitle && prevActive && nextActive && prevActive.id === nextActive.id && focused.value === (nextActive.title || '')) {
+      if (focused !== el.activeTitleInput && el.activeTitleInput) el.activeTitleInput.value = nextActive.title || '';
+      if (focused !== el.noteViewTitleInput && el.noteViewTitleInput) el.noteViewTitleInput.value = nextActive.title || '';
+    } else if (!isEditingBody || !prevActive || !nextActive || prevActive.id !== nextActive.id || el.noteViewBodyInput.value !== (nextActive.content || '')) {
+      syncTopBar();
+      renderNoteView();
+    } else {
+      syncTopBar();
+      renderWikiLinkChips(nextActive);
+      renderNoteViewChecklists();
+    }
+
+    if (activeView === 'board') {
+      renderActiveBoard();
+    } else if (activeView === 'graph') {
+      renderGraphIfVisible();
+    }
+
+    if (el.syncLastStatusLabel && summary) {
+      el.syncLastStatusLabel.textContent = `Synced with ${summary.remoteDevice || 'Peer'} (${summary.notesMerged || 0} merged, ${summary.newNotesAdded || 0} added, ${summary.linksRebuilt || 0} links)`;
+    }
+
+    if (showRemoteToast && summary && (summary.notesMerged > 0 || summary.newNotesAdded > 0 || summary.deletionsApplied > 0)) {
+      const now = Date.now();
+      if (now - lastSyncToastAt > 1200) {
+        lastSyncToastAt = now;
+        showToast(`Synced ${summary.notesMerged + summary.newNotesAdded} nodes from ${summary.remoteDevice || 'remote device'}`);
+      }
+    }
+  }
+
+  function refreshSyncModal(cfg) {
+    if (!cfg) return;
+    syncConfigCache = cfg;
+    const osBadge = cfg.platform === 'macos' ? 'macOS' : cfg.platform === 'windows' ? 'Windows' : (cfg.platform || 'Desktop').toUpperCase();
+    const lanRunning = Boolean(cfg.lan && cfg.lan.isRunning);
+    if (el.syncDeviceSummary) {
+      el.syncDeviceSummary.textContent = `${cfg.deviceName || 'Desktop'} (${osBadge}) • ${lanRunning ? 'Wi-Fi Host On' : 'Offline-First'}`;
+    }
+    if (el.syncLastStatusLabel) {
+      el.syncLastStatusLabel.textContent = cfg.lastSyncMessage || 'Ready to sync every node across Windows, macOS & Android';
+    }
+    if (el.syncAutoFolderToggle) {
+      el.syncAutoFolderToggle.classList.toggle('active', Boolean(cfg.autoSyncFolder));
+      el.syncAutoFolderToggle.textContent = cfg.autoSyncFolder ? 'Auto-Sync On' : 'Auto-Sync Off';
+    }
+    if (el.syncFolderPathLabel) {
+      el.syncFolderPathLabel.textContent = cfg.sharedFolderPath || 'No shared folder selected';
+    }
+    if (el.syncFolderNowBtn) {
+      el.syncFolderNowBtn.disabled = !cfg.sharedFolderPath;
+    }
+    if (el.syncCloudSuggestions) {
+      el.syncCloudSuggestions.innerHTML = '';
+      const suggestions = Array.isArray(cfg.suggestedFolders) ? cfg.suggestedFolders : [];
+      if (suggestions.length === 0) {
+        el.syncCloudSuggestions.innerHTML = '<span class="palette-row-sub">Tip: Select iCloud Drive, OneDrive, Dropbox, Google Drive, or Syncthing folder below</span>';
+      } else {
+        for (const s of suggestions) {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = `sync-suggest-chip${cfg.sharedFolderPath === s.path ? ' active' : ''}`;
+          chip.textContent = `${s.label}${cfg.sharedFolderPath === s.path ? ' ✓' : ''}`;
+          chip.title = s.path;
+          chip.addEventListener('click', async () => {
+            if (!desktop || typeof desktop.setSyncFolderConfig !== 'function') return;
+            try {
+              await persistNow();
+              const res = await desktop.setSyncFolderConfig({ folderPath: s.path, autoSync: cfg.autoSyncFolder });
+              if (res && res.vault) applyIncomingSyncedVault(res.vault, res.summary, false);
+              if (res && res.config) refreshSyncModal(res.config);
+              showToast(`Connected shared folder: ${s.label}`);
+            } catch (err) {
+              showToast(`Folder sync failed: ${err.message || err}`);
+            }
+          });
+          el.syncCloudSuggestions.appendChild(chip);
+        }
+      }
+    }
+    if (el.syncLanHostToggle && el.syncLanHostInfo) {
+      el.syncLanHostToggle.classList.toggle('active', lanRunning);
+      el.syncLanHostToggle.textContent = lanRunning ? 'Stop Host Server' : 'Start Host Server';
+      el.syncLanHostInfo.classList.toggle('hidden', !lanRunning);
+      if (lanRunning && cfg.lan) {
+        const addrs = Array.isArray(cfg.lan.addresses) ? cfg.lan.addresses : [];
+        const endpointStr = addrs.length
+          ? addrs.map((ip) => `${ip}:${cfg.lan.port}`).join('  ·  ')
+          : `0.0.0.0:${cfg.lan.port}`;
+        if (el.syncLanHostAddrLabel) el.syncLanHostAddrLabel.textContent = `Wi-Fi IP: ${endpointStr}`;
+        if (el.syncLanPinBadge) el.syncLanPinBadge.textContent = `PIN: ${cfg.lan.pin || '----'}`;
+      }
+    }
+    if (el.syncLanPeerInput && !el.syncLanPeerInput.value && cfg.lastPeer) {
+      el.syncLanPeerInput.value = cfg.lastPeer;
+    }
+  }
+
+  async function openSyncModal() {
+    closeDropdowns();
+    if (!el.syncModal) return;
+    el.syncModal.classList.remove('hidden');
+    if (desktop && typeof desktop.getSyncConfig === 'function') {
+      try {
+        const cfg = await desktop.getSyncConfig();
+        refreshSyncModal(cfg);
+      } catch (err) {
+        console.warn('Could not load sync config:', err);
+      }
+    }
+  }
+
   async function exportAndroidZip() {
     closeDropdowns();
+    const meta = syncConfigCache || {
+      deviceName: 'Desktop',
+      platform: isMacOS ? 'macos' : 'windows'
+    };
+    const pkgV2 = typeof VaultBridge.buildSyncPackage === 'function'
+      ? VaultBridge.buildSyncPackage(vault, meta)
+      : null;
     const androidNotes = VaultBridge.exportToAndroidNotesArray(vault);
-    const res = await desktop.exportVaultZip(androidNotes);
-    if (res) showToast(`Exported ${res.count} notes to NoteGraph Android .zip!`);
+    const res = await desktop.exportVaultZip(pkgV2 ? { pkgV2, androidNotes } : androidNotes);
+    if (res) showToast(`Exported ${res.count} synced nodes to NoteGraph .zip!`);
   }
 
   async function importAndroidZip() {
@@ -1998,12 +2243,22 @@
     try {
       const res = await desktop.importVaultZip();
       if (!res) return;
-      vault = VaultBridge.importAndroidNotesArray(res.androidNotes, vault);
-      scheduleSave(true);
-      renderFolders();
-      renderNotesList();
-      renderAllActiveViews();
-      showToast(`Imported ${res.androidNotes.length} notes from Android backup!`);
+      if (res.syncPackage && typeof VaultBridge.mergeSyncPackage === 'function') {
+        const { vault: mergedVault, summary } = VaultBridge.mergeSyncPackage(vault, res.syncPackage);
+        hydrateSyncedImageCards(mergedVault, res.assetImages);
+        applyIncomingSyncedVault(mergedVault, summary, false);
+        await persistNow();
+        showToast(
+          `Synced archive: ${summary.notesMerged} merged, ${summary.newNotesAdded} added, ${summary.linksRebuilt} links`
+        );
+      } else {
+        vault = VaultBridge.importAndroidNotesArray(res.androidNotes, vault);
+        scheduleSave(true);
+        renderFolders();
+        renderNotesList();
+        renderAllActiveViews();
+        showToast(`Imported ${(res.androidNotes || []).length} notes from Android backup!`);
+      }
     } catch (err) {
       showToast(`Import failed: ${err.message || err}`);
     }
@@ -2046,11 +2301,14 @@
     el.cmdPaletteResults.innerHTML = '';
     const notes = VaultBridge.searchNotes(vault, q).slice(0, 12);
 
+    const modHint = isMacOS ? '⌘' : 'Ctrl+';
     const commands = [
-      { label: 'Create New Class Board', hint: 'Ctrl+N', run: () => createNewBoard() },
+      { label: 'Create New Class Board', hint: `${modHint}N`, run: () => createNewBoard() },
       { label: 'Open Today Daily Board', hint: 'Journal', run: () => openOrCreateTodayJournal() },
+      { label: 'Open Cross-OS Node Sync Hub', hint: 'Win·Mac·Android', run: () => openSyncModal() },
       { label: 'Import PDF Slides onto Board', hint: 'PDF Markup', run: () => handlePdfPick() },
       { label: 'Toggle Classroom Zen Mode', hint: 'F11', run: () => toggleZenMode() },
+      { label: 'Open App & Graph Field Guide (Tutorial)', hint: 'Guide', run: () => openTutorialModal('all') },
       { label: 'Export All Slides to Multi-Page PDF', hint: 'PDF', run: () => exportAllSlidesPdf() }
     ].filter((c) => !q.trim() || c.label.toLowerCase().includes(q.trim().toLowerCase()));
 
@@ -2143,6 +2401,26 @@
     updateConnectHint();
     el.connectLabelModal.classList.add('hidden');
     renderActiveBoard();
+  }
+
+  function setTutorialTab(tabKey = 'all') {
+    const resolved = tabKey || 'all';
+    document.querySelectorAll('#tutorialTabs .tutorial-tab').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.tutTab === resolved);
+    });
+    document.querySelectorAll('#tutorialBody .tutorial-section').forEach((sec) => {
+      const show = resolved === 'all' || sec.dataset.tutSection === resolved;
+      sec.classList.toggle('hidden', !show);
+    });
+  }
+
+  function openTutorialModal(initialTab = 'all') {
+    closeDropdowns();
+    setTutorialTab(initialTab);
+    if (el.tutorialModal) {
+      el.tutorialModal.classList.remove('hidden');
+      if (el.tutorialBody) el.tutorialBody.scrollTop = 0;
+    }
   }
 
   // ==================== CLASSROOM TIMER & ZEN MODE ====================
@@ -2383,7 +2661,112 @@
       });
     }
 
-    // Zen mode
+    // Guide, Sync Hub & Zen mode
+    if (el.openTutorialBtn) {
+      el.openTutorialBtn.addEventListener('click', () => openTutorialModal('all'));
+    }
+    if (el.openSyncModalBtn) {
+      el.openSyncModalBtn.addEventListener('click', openSyncModal);
+    }
+    if (el.syncAutoFolderToggle) {
+      el.syncAutoFolderToggle.addEventListener('click', async () => {
+        if (!desktop || typeof desktop.setSyncFolderConfig !== 'function') return;
+        try {
+          const nextAuto = !Boolean(syncConfigCache && syncConfigCache.autoSyncFolder);
+          await persistNow();
+          const res = await desktop.setSyncFolderConfig({ autoSync: nextAuto });
+          if (res && res.vault) applyIncomingSyncedVault(res.vault, res.summary, false);
+          if (res && res.config) refreshSyncModal(res.config);
+        } catch (err) {
+          showToast(`Sync toggle failed: ${err.message || err}`);
+        }
+      });
+    }
+    if (el.syncChooseFolderBtn) {
+      el.syncChooseFolderBtn.addEventListener('click', async () => {
+        if (!desktop || typeof desktop.chooseSyncFolder !== 'function') return;
+        try {
+          await persistNow();
+          const res = await desktop.chooseSyncFolder();
+          if (!res) return;
+          if (res.vault) applyIncomingSyncedVault(res.vault, res.summary, false);
+          if (res.config) refreshSyncModal(res.config);
+          showToast('Shared sync folder connected & merged!');
+        } catch (err) {
+          showToast(`Could not connect folder: ${err.message || err}`);
+        }
+      });
+    }
+    if (el.syncFolderNowBtn) {
+      el.syncFolderNowBtn.addEventListener('click', async () => {
+        if (!desktop || typeof desktop.syncFolderNow !== 'function') return;
+        try {
+          const res = await desktop.syncFolderNow(vault);
+          if (res && res.vault) applyIncomingSyncedVault(res.vault, res.summary, false);
+          if (res && res.config) refreshSyncModal(res.config);
+          if (res && res.summary) {
+            showToast(`Folder synced: ${res.summary.notesMerged} merged, ${res.summary.newNotesAdded} added`);
+          }
+        } catch (err) {
+          showToast(`Folder sync failed: ${err.message || err}`);
+        }
+      });
+    }
+    if (el.syncLanHostToggle) {
+      el.syncLanHostToggle.addEventListener('click', async () => {
+        if (!desktop) return;
+        try {
+          const running = Boolean(syncConfigCache && syncConfigCache.lan && syncConfigCache.lan.isRunning);
+          const cfg = running
+            ? await desktop.stopLanServer()
+            : await desktop.startLanServer();
+          refreshSyncModal(cfg);
+          showToast(cfg.lan && cfg.lan.isRunning ? 'Wi-Fi LAN Sync Server started!' : 'Wi-Fi LAN Server stopped');
+        } catch (err) {
+          showToast(`Wi-Fi server error: ${err.message || err}`);
+        }
+      });
+    }
+    if (el.syncLanRegenPinBtn) {
+      el.syncLanRegenPinBtn.addEventListener('click', async () => {
+        if (!desktop || typeof desktop.regenLanPin !== 'function') return;
+        const cfg = await desktop.regenLanPin();
+        refreshSyncModal(cfg);
+        showToast('Generated new Wi-Fi sync PIN');
+      });
+    }
+    if (el.syncLanConnectBtn) {
+      el.syncLanConnectBtn.addEventListener('click', async () => {
+        if (!desktop || typeof desktop.syncLanPeer !== 'function') return;
+        const hostPort = (el.syncLanPeerInput && el.syncLanPeerInput.value || '').trim();
+        const pin = (el.syncLanPeerPinInput && el.syncLanPeerPinInput.value || '').trim();
+        if (!hostPort) {
+          showToast('Enter peer IP:Port first (e.g. 192.168.1.24:8765)');
+          return;
+        }
+        try {
+          el.syncLanConnectBtn.disabled = true;
+          el.syncLanConnectBtn.textContent = 'Syncing…';
+          const res = await desktop.syncLanPeer({ hostPort, pin, rendererVault: vault });
+          if (res && res.vault) applyIncomingSyncedVault(res.vault, res.summary, false);
+          if (res && res.config) refreshSyncModal(res.config);
+          if (res && res.summary) {
+            showToast(`Wi-Fi synced with ${res.summary.remoteDevice}: ${res.summary.notesMerged} merged, ${res.summary.newNotesAdded} added`);
+          }
+        } catch (err) {
+          showToast(`Wi-Fi sync failed: ${err.message || err}`);
+        } finally {
+          el.syncLanConnectBtn.disabled = false;
+          el.syncLanConnectBtn.textContent = 'Sync Wi-Fi';
+        }
+      });
+    }
+    if (el.syncZipExportBtn) {
+      el.syncZipExportBtn.addEventListener('click', exportAndroidZip);
+    }
+    if (el.syncZipImportBtn) {
+      el.syncZipImportBtn.addEventListener('click', importAndroidZip);
+    }
     el.zenModeBtn.addEventListener('click', () => toggleZenMode());
     el.exitZenFloatingBtn.addEventListener('click', () => toggleZenMode(false));
 
@@ -2492,6 +2875,9 @@
     document.getElementById('redoBtn').addEventListener('click', () => engine.redo());
 
     // Lasso actions
+    if (el.lassoMoveModeBtn) {
+      el.lassoMoveModeBtn.addEventListener('click', () => engine.toggleLassoMoveMode());
+    }
     document.getElementById('nudgeLeftBtn').addEventListener('click', () => engine.nudgeSelectedStrokes(-20, 0));
     document.getElementById('nudgeRightBtn').addEventListener('click', () => engine.nudgeSelectedStrokes(20, 0));
     document.getElementById('nudgeUpBtn').addEventListener('click', () => engine.nudgeSelectedStrokes(0, -20));
@@ -2577,6 +2963,20 @@
       graphState.zoom = 1;
       rebuildGraphSimulation();
     });
+    if (el.graphGuideBtn) {
+      el.graphGuideBtn.addEventListener('click', () => openTutorialModal('graph'));
+    }
+
+    // Tutorial modal tabs & jump action
+    document.querySelectorAll('#tutorialTabs .tutorial-tab').forEach((tab) => {
+      tab.addEventListener('click', () => setTutorialTab(tab.dataset.tutTab));
+    });
+    if (el.tutOpenGraphBtn) {
+      el.tutOpenGraphBtn.addEventListener('click', () => {
+        if (el.tutorialModal) el.tutorialModal.classList.add('hidden');
+        switchWorkspaceView('graph');
+      });
+    }
 
     // Modals close & submit
     document.querySelectorAll('[data-close-modal]').forEach((btn) => {
@@ -2618,12 +3018,14 @@
     el.saveFolderBtn.addEventListener('click', () => {
       const name = el.folderNameInput.value.trim();
       if (!name) return;
+      const now = Date.now();
       if (editingFolderId) {
         const existing = vault.folders.find((f) => f.id === editingFolderId);
         if (existing) {
           existing.name = name;
           existing.icon = pickedFolderIcon;
           existing.colorHex = pickedFolderColor;
+          existing.updatedAt = now;
         }
       } else {
         vault.folders.push({
@@ -2631,7 +3033,8 @@
           name,
           icon: pickedFolderIcon,
           colorHex: pickedFolderColor,
-          createdAt: Date.now()
+          createdAt: now,
+          updatedAt: now
         });
       }
       el.folderModal.classList.add('hidden');
@@ -2642,9 +3045,16 @@
 
     el.deleteFolderBtn.addEventListener('click', () => {
       if (!editingFolderId) return;
+      const now = Date.now();
       vault.folders = vault.folders.filter((f) => f.id !== editingFolderId);
+      if (typeof VaultBridge.recordTombstone === 'function') {
+        VaultBridge.recordTombstone(vault, editingFolderId, 'folder', now);
+      }
       for (const n of vault.notes) {
-        if (n.folderId === editingFolderId) n.folderId = null;
+        if (n.folderId === editingFolderId) {
+          n.folderId = null;
+          n.updatedAt = now;
+        }
       }
       if (activeFolderFilter === editingFolderId) activeFolderFilter = 'ALL';
       el.folderModal.classList.add('hidden');
@@ -2788,12 +3198,34 @@
   }
 
   async function init() {
+    try {
+      if (desktop && typeof desktop.getAppInfo === 'function') {
+        const info = await desktop.getAppInfo();
+        isMacOS = Boolean(info && info.platform === 'darwin');
+      }
+    } catch (_) {
+      isMacOS = /Mac/i.test(navigator.platform || '');
+    }
+
+    const modHint = isMacOS ? '⌘' : 'Ctrl+';
+    if (el.cmdPaletteBtn) {
+      el.cmdPaletteBtn.textContent = isMacOS ? '⌘K' : 'Ctrl+K';
+      el.cmdPaletteBtn.title = `Quick Switcher & Commands (${modHint}K)`;
+    }
+    if (el.toggleSidebarBtn) {
+      el.toggleSidebarBtn.title = `Toggle Sidebar (${modHint}B)`;
+    }
+
     vault = await desktop.loadVault();
     if (!vault || !Array.isArray(vault.notes) || vault.notes.length === 0) {
       vault = VaultBridge.createStarterVault();
     }
     if (!Array.isArray(vault.folders) || vault.folders.length === 0) {
-      vault.folders = VaultBridge.STARTER_FOLDERS.map((f) => ({ ...f, createdAt: Date.now() }));
+      vault.folders = VaultBridge.STARTER_FOLDERS.map((f, idx) => ({
+        ...f,
+        createdAt: 1 + idx,
+        updatedAt: 1 + idx
+      }));
     }
     ensureVaultGradientState();
 
@@ -2817,9 +3249,14 @@
         updateZoomLabel();
         scheduleSave();
       },
+      onLassoMoveModeChanged: (active) => {
+        if (el.lassoMoveModeBtn) {
+          el.lassoMoveModeBtn.classList.toggle('active', Boolean(active));
+        }
+      },
       onSelectionChanged: (count) => {
         el.lassoBar.classList.toggle('hidden', count === 0);
-        el.lassoCountLabel.textContent = `${count} stroke${count === 1 ? '' : 's'} selected`;
+        el.lassoCountLabel.textContent = `${count} stroke${count === 1 ? '' : 's'} · Drag box or use Drag Move`;
       }
     });
 
@@ -2830,6 +3267,18 @@
     renderNotesList();
     renderAllActiveViews();
     setActiveTool('pen');
+
+    if (desktop && typeof desktop.onVaultUpdated === 'function') {
+      desktop.onVaultUpdated((payload) => {
+        if (!payload || !payload.vault) return;
+        applyIncomingSyncedVault(payload.vault, payload.summary, true);
+      });
+    }
+    if (desktop && typeof desktop.getSyncConfig === 'function') {
+      desktop.getSyncConfig()
+        .then((cfg) => { syncConfigCache = cfg; })
+        .catch(() => {});
+    }
   }
 
   init();

@@ -10,17 +10,18 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import android.util.LruCache
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.PdfPageAnnotation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
@@ -38,22 +39,29 @@ data class ImportedPdfInfo(
  * and serializes PdfRenderer access to respect Android's single-open-page constraint.
  */
 object PdfHelper {
-    private val json = Json { ignoreUnknownKeys = true }
     private val renderLock = Any()
 
-    fun parseAnnotations(annotationsJson: String): List<PdfPageAnnotation> {
-        if (annotationsJson.isBlank()) return emptyList()
-        return try {
-            json.decodeFromString<List<PdfPageAnnotation>>(annotationsJson)
-        } catch (e: Exception) {
-            emptyList()
+    // Bounded in-memory bitmap LRU cache (up to 24 MB or 1/8 of heap) for instant page flipping
+    private val maxCacheKb: Int = minOf(
+        (Runtime.getRuntime().maxMemory() / 1024L).toInt() / 8,
+        24 * 1024
+    ).coerceAtLeast(4 * 1024)
+
+    private val pageBitmapCache = object : LruCache<String, Bitmap>(maxCacheKb) {
+        override fun sizeOf(key: String, value: Bitmap): Int {
+            return (value.allocationByteCount / 1024).coerceAtLeast(1)
         }
+    }
+
+    fun parseAnnotations(annotationsJson: String): List<PdfPageAnnotation> {
+        return NoteJson.decodePdfAnnotations(annotationsJson)
     }
 
     fun encodeAnnotations(list: List<PdfPageAnnotation>): String {
         val cleaned = list.filter { it.strokes.isNotEmpty() || it.pageNote.isNotBlank() }
             .sortedBy { it.pageIndex }
-        return json.encodeToString(cleaned)
+        if (cleaned.isEmpty()) return "[]"
+        return NoteJson.codec.encodeToString(cleaned)
     }
 
     fun getDisplayName(context: Context, uri: Uri): String {
@@ -158,6 +166,34 @@ object PdfHelper {
     }
 
     /**
+     * Cached page rasterizer for interactive viewer UI. Never recycle the returned bitmap.
+     */
+    fun renderPageBitmapCached(filePath: String, pageIndex: Int, targetWidthPx: Int = 1080): Bitmap? {
+        if (filePath.isBlank()) return null
+        val safeTargetWidth = targetWidthPx.coerceIn(320, 1800)
+        val key = "$filePath#$pageIndex#$safeTargetWidth"
+        pageBitmapCache.get(key)?.let { cached ->
+            if (!cached.isRecycled) return cached
+            pageBitmapCache.remove(key)
+        }
+        val rendered = renderPageBitmap(filePath, pageIndex, safeTargetWidth) ?: return null
+        pageBitmapCache.put(key, rendered)
+        return rendered
+    }
+
+    fun clearPdfCache(filePath: String? = null) {
+        if (filePath == null) {
+            pageBitmapCache.evictAll()
+        } else {
+            val prefix = "$filePath#"
+            val keysToRemove = pageBitmapCache.snapshot().keys.filter { it.startsWith(prefix) }
+            for (k in keysToRemove) {
+                pageBitmapCache.remove(k)
+            }
+        }
+    }
+
+    /**
      * Composites normalized [0..1] PDF ink annotations onto an Android Canvas region.
      */
     fun drawNormalizedStrokesOnCanvas(
@@ -175,6 +211,7 @@ object PdfHelper {
             strokeJoin = Paint.Join.ROUND
             isAntiAlias = true
         }
+        val reusablePath = Path()
         val widthScale = width / 1000f
 
         for (stroke in strokes) {
@@ -187,18 +224,18 @@ object PdfHelper {
                 Color.BLACK
             }
 
-            val path = Path()
-            path.moveTo(
+            reusablePath.rewind()
+            reusablePath.moveTo(
                 left + stroke.points[0].x * width,
                 top + stroke.points[0].y * height
             )
             for (i in 1 until stroke.points.size) {
-                path.lineTo(
+                reusablePath.lineTo(
                     left + stroke.points[i].x * width,
                     top + stroke.points[i].y * height
                 )
             }
-            canvas.drawPath(path, inkPaint)
+            canvas.drawPath(reusablePath, inkPaint)
         }
     }
 

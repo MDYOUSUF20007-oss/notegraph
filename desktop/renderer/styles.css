@@ -1175,13 +1175,24 @@ html[data-gradients="off"] .note-list-item.active {
   z-index: 24;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 5px;
+  max-width: calc(100% - 28px);
   padding: 5px 10px;
   border-radius: 12px;
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-float);
+}
+
+#lassoCountLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0 4px;
+  white-space: nowrap;
 }
 
 .danger-text {
@@ -1641,6 +1652,8 @@ html[data-gradients="off"] .inline-checklist-card {
   z-index: 15;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  max-width: calc(100% - 28px);
   gap: 8px;
   background: var(--bg-glass);
   backdrop-filter: blur(18px);
@@ -1893,6 +1906,115 @@ html[data-gradients="off"] .inline-checklist-card {
   transition: width 0.15s;
 }
 
+/* Tutorial / Field Guide Modal */
+.modal-card.modal-tutorial {
+  width: 680px;
+  max-height: calc(100vh - 48px);
+}
+
+.tutorial-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.tutorial-tab {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 99px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+
+.tutorial-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.tutorial-tab.active {
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+
+.tutorial-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  gap: 14px;
+}
+
+.tutorial-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tutorial-badge-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13.5px;
+}
+
+.tutorial-badge {
+  background: var(--accent-soft);
+  border: 1px solid var(--border-strong);
+  color: var(--accent);
+  border-radius: 99px;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.tutorial-graph-svg {
+  width: 100%;
+  height: auto;
+  max-height: 132px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.tutorial-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.tutorial-list strong {
+  color: var(--text-primary);
+}
+
+.tutorial-list code {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--accent);
+}
+
 /* Toasts */
 .toast-container {
   position: fixed;
@@ -1914,4 +2036,154 @@ html[data-gradients="off"] .inline-checklist-card {
   font-weight: 600;
   font-size: 12px;
   box-shadow: var(--shadow-float);
+}
+
+/* Cross-OS Sync Hub Modal */
+.modal-card.modal-sync {
+  width: 640px;
+  max-height: calc(100vh - 48px);
+}
+
+.sync-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+}
+
+.sync-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+}
+
+.sync-status-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sync-status-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.sync-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.sync-desc {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.sync-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sync-suggest-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  border-radius: 99px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sync-suggest-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sync-path-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.sync-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sync-host-info {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sync-host-addr {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sync-pin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-pin-badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sync-peer-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-peer-form .field-input {
+  flex: 1;
+}
+
+.sync-peer-form .sync-pin-input {
+  flex: 0 0 92px;
 }

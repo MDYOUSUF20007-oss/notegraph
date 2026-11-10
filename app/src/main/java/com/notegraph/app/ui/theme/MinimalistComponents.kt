@@ -25,13 +25,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Ambient backdrop applying the active theme's vertical gradient and top atmospheric glow.
+ * Ambient backdrop applying the active theme's vertical gradient and top atmospheric glow
+ * in Classic UI, or a strict flat curated canvas in Bespoke Luxury mode.
  * Wrap transparent-background Scaffolds inside this composable.
  */
 @Composable
@@ -39,8 +41,9 @@ fun MinimalistBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
     val preset = ThemeManager.currentGradient
-    val gradientsOn = ThemeManager.gradientsEnabled
+    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
 
     Box(
         modifier = modifier
@@ -144,7 +147,9 @@ fun ThemeStudioSheetContent(
 ) {
     val activeTheme = ThemeManager.currentTheme
     val activePreset = ThemeManager.currentGradient
-    val gradientsOn = ThemeManager.gradientsEnabled
+    val isLuxury = ThemeManager.isLuxuryUi
+    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
+    val lux = ThemeManager.luxuryTokens
 
     Column(
         modifier = Modifier
@@ -165,7 +170,7 @@ fun ThemeStudioSheetContent(
                 Box(
                     modifier = Modifier
                         .size(28.dp)
-                        .clip(CircleShape)
+                        .clip(if (isLuxury) RoundedCornerShape(6.dp) else CircleShape)
                         .background(ThemeManager.activeAccentBrush),
                     contentAlignment = Alignment.Center
                 ) {
@@ -178,12 +183,16 @@ fun ThemeStudioSheetContent(
                 }
                 Column {
                     Text(
-                        text = "Appearance",
+                        text = if (isLuxury) "Luxury Appearance" else "Appearance",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "${activeTheme.displayName} • ${activePreset.name}",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = if (isLuxury) {
+                            "${activeTheme.luxuryName} // Flat 1px System"
+                        } else {
+                            "${activeTheme.displayName} • ${activePreset.name}"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -211,6 +220,7 @@ fun ThemeStudioSheetContent(
             AppThemeMode.values().forEach { mode ->
                 val selected = mode == activeTheme
                 val modePreset = ThemeManager.presetFor(mode)
+                val modeLux = LuxuryTokens.forMode(mode)
                 val icon = when (mode) {
                     AppThemeMode.DEEP_PURPLE_AMOLED -> Icons.Rounded.DarkMode
                     AppThemeMode.KINDLE_PARCHMENT -> Icons.Rounded.MenuBook
@@ -219,86 +229,177 @@ fun ThemeStudioSheetContent(
                 Surface(
                     onClick = { ThemeManager.setTheme(mode) },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (selected) modePreset.cardTint else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(if (isLuxury) 8.dp else 14.dp),
+                    color = if (isLuxury) {
+                        if (selected) modeLux.recessedSurface else modeLux.elevatedSurface
+                    } else {
+                        if (selected) modePreset.cardTint else MaterialTheme.colorScheme.surfaceVariant
+                    },
                     border = BorderStroke(
-                        width = if (selected) 1.5.dp else 0.75.dp,
-                        color = if (selected) modePreset.accentStart else ThemeManager.cardBorderColor
+                        width = if (isLuxury) 1.dp else if (selected) 1.5.dp else 0.75.dp,
+                        color = when {
+                            isLuxury && selected -> modeLux.accent
+                            isLuxury -> lux.borderHairline
+                            selected -> modePreset.accentStart
+                            else -> ThemeManager.cardBorderColor
+                        }
                     )
                 ) {
                     Column(
                         modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Icon(
                             imageVector = icon,
-                            contentDescription = mode.displayName,
-                            tint = if (selected) modePreset.accentStart else MaterialTheme.colorScheme.onSurfaceVariant,
+                            contentDescription = mode.labelFor(isLuxury),
+                            tint = when {
+                                isLuxury && selected -> modeLux.accent
+                                isLuxury -> MaterialTheme.colorScheme.onSurfaceVariant
+                                selected -> modePreset.accentStart
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = mode.shortLabel,
+                            text = mode.shortLabelFor(isLuxury),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        if (isLuxury) {
+                            Text(
+                                text = mode.luxurySubtitle,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Per-Theme Choosable Gradient Orbs
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "${activeTheme.shortLabel} Accent Gradient",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            GradientSwatchRow(
-                mode = activeTheme,
-                selectedId = ThemeManager.selectedGradientIdFor(activeTheme),
-                onSelect = { chosen ->
-                    ThemeManager.setGradient(activeTheme, chosen.id)
+        if (!isLuxury) {
+            // Classic Per-Theme Choosable Gradient Orbs
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "${activeTheme.shortLabel} Accent Gradient",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                GradientSwatchRow(
+                    mode = activeTheme,
+                    selectedId = ThemeManager.selectedGradientIdFor(activeTheme),
+                    onSelect = { chosen ->
+                        ThemeManager.setGradient(activeTheme, chosen.id)
+                    }
+                )
+            }
+
+            // Gradient Finish vs Flat Minimal Toggle
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Ambient Gradients",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = if (gradientsOn) "Atmospheric gradient cards & controls" else "Clean solid classic surfaces",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = gradientsOn,
+                        onCheckedChange = { ThemeManager.setGradientsEnabledState(it) }
+                    )
                 }
-            )
+            }
         }
 
-        // Gradient Finish vs Flat Minimal Toggle
+        // Interface Engine Quick Runtime Toggle
         Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+            shape = RoundedCornerShape(if (isLuxury) 8.dp else 14.dp),
+            color = if (isLuxury) lux.recessedSurface else MaterialTheme.colorScheme.surfaceVariant,
+            border = BorderStroke(if (isLuxury) 1.dp else 0.75.dp, ThemeManager.cardBorderColor)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Ambient Gradients",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Text(
-                        text = if (gradientsOn) "Atmospheric gradient cards & controls" else "Clean solid classic surfaces",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(
-                    checked = gradientsOn,
-                    onCheckedChange = { ThemeManager.setGradientsEnabledState(it) }
+                Text(
+                    text = "INTERFACE ENGINE // RUNTIME",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.7.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    UiEngineMode.entries.forEach { engine ->
+                        val active = ThemeManager.uiEngine == engine
+                        Surface(
+                            onClick = { ThemeManager.setUiEngine(engine) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (active) {
+                                if (isLuxury) lux.accent.copy(alpha = 0.14f) else MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                Color.Transparent
+                            },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (active) {
+                                    if (isLuxury) lux.accent else MaterialTheme.colorScheme.primary
+                                } else {
+                                    ThemeManager.cardBorderColor
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = engine.displayName,
+                                fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                fontSize = 11.sp,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (active) {
+                                    if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * Minimalist gradient-backed capsule FAB.
+ * Minimalist capsule FAB:
+ * - Bespoke Luxury: razor-thin 1px border, flat curated #8B5CF6 accent, zero drop shadow.
+ * - Classic UI: gradient-backed capsule FAB with 10dp ambient shadow.
  */
 @Composable
 fun GradientFloatingActionButton(
@@ -307,6 +408,44 @@ fun GradientFloatingActionButton(
     label: String? = null,
     modifier: Modifier = Modifier
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    if (isLuxury) {
+        val t = ThemeManager.luxuryTokens
+        val shape = if (label != null) RoundedCornerShape(100.dp) else CircleShape
+        Box(
+            modifier = modifier
+                .clip(shape)
+                .background(t.accent)
+                .border(1.dp, t.borderHairline, shape)
+                .clickable(onClick = onClick)
+                .padding(
+                    horizontal = if (label != null) 16.dp else 14.dp,
+                    vertical = 12.dp
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            CompositionLocalProvider(LocalContentColor provides t.onAccent) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    icon()
+                    if (label != null) {
+                        Text(
+                            text = label.uppercase(),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.5.sp,
+                            letterSpacing = 0.8.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = t.onAccent
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
     val preset = ThemeManager.currentGradient
     val shape = if (label != null) RoundedCornerShape(20.dp) else CircleShape
     Box(

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const VaultBridge = require('../renderer/vault-bridge');
+const { BoardLassoUtils, BoardLaserUtils } = require('../renderer/board-engine');
 const { buildMultiPagePdfFromJpegs } = require('../pdf-writer');
 
 test('createStarterVault creates 5 category folders and starter boards', () => {
@@ -134,4 +135,221 @@ test('createStarterVault includes per-theme choosable gradient defaults', () => 
   assert.equal(vault.themeGradients.KINDLE_PARCHMENT, 'warm_sepia');
   assert.equal(vault.themeGradients.MATTE_STUDIO, 'studio_cyan');
   assert.equal(vault.themeGradients.BLACKBOARD_GREEN, 'emerald_chalk');
+});
+
+test('BoardLassoUtils translates selected strokes freely in any direction without affecting others', () => {
+  const strokes = [
+    { id: 's1', points: [{ x: 100, y: 120 }, { x: 160, y: 180 }] },
+    { id: 's2', points: [{ x: 400, y: 400 }, { x: 450, y: 460 }] }
+  ];
+  const selected = new Set(['s1']);
+  const moved = BoardLassoUtils.translateSelectedStrokes(strokes, selected, -40, -60);
+
+  assert.deepEqual(moved[0].points, [{ x: 60, y: 60 }, { x: 120, y: 120 }]);
+  assert.deepEqual(moved[1].points, [{ x: 400, y: 400 }, { x: 450, y: 460 }]);
+});
+
+test('BoardLassoUtils computes combined selection bounding box across multiple strokes', () => {
+  const strokes = [
+    { id: 's1', points: [{ x: 40, y: 80 }, { x: 90, y: 30 }] },
+    { id: 's2', points: [{ x: 120, y: 140 }, { x: 20, y: 200 }] },
+    { id: 's3', points: [{ x: 999, y: 999 }, { x: 1050, y: 1050 }] }
+  ];
+  const bounds = BoardLassoUtils.computeSelectedStrokesBounds(strokes, new Set(['s1', 's2']));
+  assert.deepEqual(bounds, { minX: 20, minY: 30, maxX: 120, maxY: 200 });
+});
+
+test('BoardLassoUtils detects 2-point straight lines crossed by lasso polygon even if endpoints sit outside', () => {
+  const longLine = { id: 'line1', points: [{ x: 0, y: 100 }, { x: 300, y: 100 }] };
+  const centerLasso = [
+    { x: 120, y: 70 },
+    { x: 180, y: 70 },
+    { x: 180, y: 130 },
+    { x: 120, y: 130 }
+  ];
+  assert.equal(BoardLassoUtils.strokeIntersectsPolygon(longLine, centerLasso), true);
+
+  const farLasso = [
+    { x: 120, y: 200 },
+    { x: 180, y: 200 },
+    { x: 180, y: 250 },
+    { x: 120, y: 250 }
+  ];
+  assert.equal(BoardLassoUtils.strokeIntersectsPolygon(longLine, farLasso), false);
+});
+
+test('BoardLaserUtils enforces spatial decimation, rolling active TTL, and 140pt cap', () => {
+  const pts = [{ x: 100, y: 100, t: 0 }];
+  // Sub-threshold jitter (< 6px) must be rejected
+  assert.equal(BoardLaserUtils.appendLaserPoint(pts, 102, 103, 16), false);
+  assert.equal(pts.length, 1);
+
+  // >= 6px accepted
+  assert.equal(BoardLaserUtils.appendLaserPoint(pts, 120, 100, 300), true);
+  assert.equal(pts.length, 2);
+
+  // At t=1300 (ttlMs=1250), cutoff is 50 so t=0 expires WHILE still drawing
+  assert.equal(BoardLaserUtils.appendLaserPoint(pts, 150, 100, 1300), true);
+  assert.equal(pts.length, 2);
+  assert.equal(pts[0].t, 300);
+
+  // Hard cap at maxPoints (e.g. 140) prevents unbounded RAM growth
+  const longPts = [{ x: 0, y: 0, t: 10_000 }];
+  for (let i = 1; i <= 200; i++) {
+    BoardLaserUtils.appendLaserPoint(longPts, i * 10, 0, 10_000 + i);
+  }
+  assert.equal(longPts.length, BoardLaserUtils.LASER_MAX_ACTIVE_POINTS);
+});
+
+test('BoardLaserUtils prunes expired trails, enforces 6-trail cap, preallocates LUT, and clones strokes safely', () => {
+  assert.equal(BoardLaserUtils.LASER_COLOR_LUT.length, 24);
+  assert.equal(BoardLaserUtils.LASER_COLOR_LUT[0].length, 5);
+  assert.match(BoardLaserUtils.LASER_COLOR_LUT[0][0], /^hsla\(/);
+
+  const trails = Array.from({ length: 8 }, (_, idx) => ({
+    points: [
+      { x: idx * 20, y: 0, t: 1000 + idx * 50 },
+      { x: idx * 20 + 20, y: 20, t: 1010 + idx * 50 }
+    ]
+  }));
+
+  const aliveAt1500 = BoardLaserUtils.pruneCompletedLaserTrails(trails, 1500);
+  assert.equal(aliveAt1500.length, BoardLaserUtils.LASER_MAX_COMPLETED_TRAILS);
+
+  const aliveAt3000 = BoardLaserUtils.pruneCompletedLaserTrails(aliveAt1500, 3000);
+  assert.equal(aliveAt3000.length, 0);
+
+  const original = [{ id: 's1', colorHex: '#FFF', points: [{ x: 1, y: 2 }] }];
+  const cloned = BoardLaserUtils.cloneStrokesShallow(original);
+  cloned[0].points[0].x = 999;
+  assert.equal(original[0].points[0].x, 1);
+});
+
+test('VaultBridge buildSyncPackage & mergeSyncPackage sync notes, folders, tombstones, and graph edges symmetrically', () => {
+  const localVault = VaultBridge.createStarterVault();
+  const baseTs = 5_000;
+  localVault.notes.forEach((n) => {
+    n.createdAt = 1000;
+    n.updatedAt = baseTs;
+  });
+
+  const pkg = VaultBridge.buildSyncPackage(localVault, {
+    deviceId: 'dev_win',
+    deviceName: 'Windows Workstation',
+    platform: 'win32'
+  });
+
+  // Exact schema parity with Android SyncPackageV2
+  assert.equal(pkg.schemaVersion, 2);
+  assert.equal(pkg.platform, 'win32');
+  assert.ok(Array.isArray(pkg.folders));
+  assert.ok(Array.isArray(pkg.notes));
+  assert.ok(Array.isArray(pkg.links));
+  assert.ok(Array.isArray(pkg.tombstones));
+  assert.equal(typeof pkg.notes[0].blocksJson, 'string');
+
+  // Remote Android payload: edits 1 note, adds 1 new note, deletes starter folder & second note via tombstone
+  const targetDeleteNoteId = localVault.notes[1].id;
+  const targetDeleteFolderId = 'folder_gaming';
+  const androidRemote = {
+    schemaVersion: 2,
+    exportedAt: 9_000,
+    deviceId: 'dev_pixel',
+    deviceName: 'Pixel 9',
+    platform: 'android',
+    folders: [
+      ...localVault.folders,
+      { id: 'folder_android', name: 'Android Lab', parentId: null, icon: '🤖', colorHex: '#10B981', createdAt: 7000, updatedAt: 7000 }
+    ],
+    notes: [
+      {
+        id: localVault.notes[0].id,
+        title: localVault.notes[0].title,
+        content: 'Updated from Android linking [[Mobile Field Note]]',
+        folderId: targetDeleteFolderId, // note inside deleted folder must be unfiled to null
+        isPinned: true,
+        isFavorite: false,
+        isLocked: false,
+        isTrash: false,
+        createdAt: 1000,
+        updatedAt: 8500,
+        templateType: 'BLANK',
+        blocksJson: JSON.stringify([{ type: 'text', id: 'blk_a', text: 'Fresh mobile edit' }])
+      },
+      {
+        id: 'android_new_1',
+        title: 'Mobile Field Note',
+        content: 'Captured offline on Android',
+        folderId: 'folder_android',
+        isPinned: false,
+        isFavorite: true,
+        isLocked: false,
+        isTrash: false,
+        createdAt: 8000,
+        updatedAt: 8600,
+        templateType: 'BLANK',
+        blocksJson: JSON.stringify([
+          {
+            type: 'checklist',
+            id: 'chk_mob',
+            title: 'Field Tasks',
+            items: [{ id: 'it1', text: 'Sync back to Mac', isChecked: true }]
+          }
+        ])
+      }
+    ],
+    links: [],
+    tombstones: [
+      { id: targetDeleteNoteId, kind: 'note', deletedAt: 7500 },
+      { id: targetDeleteFolderId, kind: 'folder', deletedAt: 7500 }
+    ]
+  };
+
+  const merged = VaultBridge.mergeSyncPackage(localVault, androidRemote, 10_000);
+  assert.equal(merged.summary.newNotesAdded, 1);
+  assert.equal(merged.summary.deletionsApplied, 2);
+  assert.ok(merged.summary.linksRebuilt >= 1);
+
+  assert.equal(merged.vault.folders.some((f) => f.id === targetDeleteFolderId), false);
+  assert.equal(merged.vault.folders.some((f) => f.id === 'folder_android'), true);
+  assert.equal(merged.vault.notes.some((n) => n.id === targetDeleteNoteId), false);
+
+  const updatedFirst = merged.vault.notes.find((n) => n.id === localVault.notes[0].id);
+  assert.equal(updatedFirst.folderId, null);
+  assert.ok(updatedFirst.content.includes('Updated from Android'));
+
+  const mobileNote = merged.vault.notes.find((n) => n.id === 'android_new_1');
+  assert.ok(mobileNote);
+  assert.ok(mobileNote.board.pages[0].cards.some((c) => c.kind === 'checklist'));
+});
+
+test('VaultBridge recordTombstone & revival work cleanly and parseSyncPackage handles legacy arrays', () => {
+  const vault = VaultBridge.createStarterVault();
+  const targetId = vault.notes[0].id;
+  vault.notes[0].createdAt = 1000;
+  vault.notes[0].updatedAt = 2000;
+  VaultBridge.recordTombstone(vault, targetId, 'note', 3000);
+
+  // Older note is suppressed by tombstone at t=3000
+  const afterDelete = VaultBridge.mergeSyncPackage(vault, { schemaVersion: 2, notes: [], folders: [], tombstones: [] }, 4000);
+  assert.equal(afterDelete.vault.notes.some((n) => n.id === targetId), false);
+
+  // Note recreated at t=5000 (> tombstone deletedAt=3000) revives and clears tombstone
+  const revived = VaultBridge.mergeSyncPackage(
+    afterDelete.vault,
+    {
+      schemaVersion: 2,
+      notes: [{ id: targetId, title: 'Reborn Node', content: 'New life', createdAt: 5000, updatedAt: 5000, blocksJson: '[]' }],
+      folders: [],
+      tombstones: []
+    },
+    6000
+  );
+  assert.equal(revived.vault.notes.some((n) => n.id === targetId && n.title === 'Reborn Node'), true);
+  assert.equal(revived.vault.tombstones.some((t) => t.id === targetId), false);
+
+  // Legacy array parsing
+  const legacyParsed = VaultBridge.parseSyncPackage(JSON.stringify([{ id: 'leg1', title: 'Old JSON Array' }]));
+  assert.equal(legacyParsed.schemaVersion, 1);
+  assert.equal(legacyParsed.notes.length, 1);
 });

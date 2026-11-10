@@ -14,7 +14,7 @@ import com.notegraph.app.data.local.entity.*
         PropertyEntity::class,
         FolderEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class NoteGraphDatabase : RoomDatabase() {

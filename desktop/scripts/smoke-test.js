@@ -56,6 +56,17 @@ app.whenReady().then(async () => {
     savedVaultCount += 1;
     return { ok: true };
   });
+  ipcMain.handle('sync:get-config', () => ({
+    deviceId: 'smoke-dev',
+    deviceName: 'Smoke Test Machine',
+    platform: process.platform === 'darwin' ? 'macos' : 'windows',
+    sharedFolderPath: null,
+    autoSyncFolder: true,
+    lastSyncAt: 0,
+    lastSyncMessage: 'Ready in smoke test',
+    suggestedFolders: [],
+    lan: { isRunning: false, port: 8765, addresses: ['127.0.0.1'], pin: '1234' }
+  }));
 
   const win = new BrowserWindow({
     width: 1280,
@@ -101,6 +112,16 @@ app.whenReady().then(async () => {
     document.querySelector('[data-view-target="graph"]').click();
     const graphViewActive = document.getElementById('graphView').classList.contains('active');
 
+    // Test Laser tool switch and Sync Hub modal
+    document.querySelector('[data-view-target="board"]').click();
+    document.querySelector('[data-tool="laser"]').click();
+    const laserActive = document.querySelector('[data-tool="laser"]').classList.contains('active');
+    document.getElementById('openSyncModalBtn').click();
+    await new Promise((r) => setTimeout(r, 80));
+    const syncModalOpened = !document.getElementById('syncModal').classList.contains('hidden');
+    const syncDeviceText = document.getElementById('syncDeviceSummary').textContent;
+    document.querySelector('[data-close-modal="syncModal"]').click();
+
     // Test PDF.js offline module import inside app:// bundle protocol
     const pdfjs = await import('./vendor/pdf.min.mjs');
     return {
@@ -113,6 +134,9 @@ app.whenReady().then(async () => {
       checklistToggled: prevChecked !== afterChecked,
       noteViewActive,
       graphViewActive,
+      laserActive,
+      syncModalOpened,
+      syncDeviceText,
       hasPdfJsGetDoc: typeof pdfjs.getDocument === 'function'
     };
   })()`);
@@ -137,6 +161,9 @@ app.whenReady().then(async () => {
     report.checklistToggled &&
     report.noteViewActive &&
     report.graphViewActive &&
+    report.laserActive &&
+    report.syncModalOpened &&
+    report.syncDeviceText.includes('Smoke Test Machine') &&
     report.hasPdfJsGetDoc &&
     savedVaultCount >= 1;
 

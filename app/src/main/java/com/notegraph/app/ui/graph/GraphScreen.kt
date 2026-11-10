@@ -31,13 +31,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -47,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
@@ -57,11 +64,11 @@ import com.notegraph.app.ui.components.ObsidianStatTile
 import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import kotlinx.coroutines.withContext
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -80,6 +87,7 @@ data class GraphNode(
 fun GraphScreen(
     onBack: () -> Unit,
     onNoteClick: (String) -> Unit = {},
+    onNavigateTutorial: () -> Unit = {},
     viewModel: GraphViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -96,9 +104,10 @@ fun GraphScreen(
     val notesById = remember(notes) { notes.associateBy { it.id } }
     val foldersById = remember(folders) { folders.associateBy { it.id } }
     val activePreset = ThemeManager.currentGradient
-    val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
+    val obsidianAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
     val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
-    val inspectorDateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
 
     fun handleNodeOpen(noteId: String) {
         val target = notesById[noteId]
@@ -110,7 +119,8 @@ fun GraphScreen(
     }
 
     val textMeasurer = rememberTextMeasurer()
-    val labelColor = MaterialTheme.colorScheme.onSurface
+    val labelColor = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
+    val coordLabelColor = if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant
     val folderColorsById = remember(folders) {
         folders.associate { f ->
             val col = try {
@@ -129,17 +139,61 @@ fun GraphScreen(
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                     title = {
-                        Text(
-                            text = "Graph · ${notes.size}",
-                            style = MaterialTheme.typography.titleLarge
-                        )
+                        if (isLuxury) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Knowledge Graph",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = lux.textPrimary
+                                )
+                                Text(
+                                    text = "${notes.size} NODES",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.sp,
+                                    letterSpacing = 0.8.sp,
+                                    color = lux.textMuted
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "Graph · ${notes.size}",
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
                     },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back"
+                                contentDescription = "Back",
+                                tint = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
                             )
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = onNavigateTutorial) {
+                            Box(
+                                modifier = Modifier
+                                    .size(23.dp)
+                                    .clip(CircleShape)
+                                    .border(
+                                        width = if (isLuxury) 1.dp else 1.5.dp,
+                                        color = if (isLuxury) lux.borderHairline else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "?",
+                                    fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isLuxury) lux.textSecondary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 )
@@ -170,58 +224,68 @@ fun GraphScreen(
                     }.toMutableList()
                 }
 
-                val edges = remember(links, nodes, notes) {
-                    val nodeById = nodes.associateBy { it.noteId }
-                    val nodeByTitle = nodes.associateBy { it.title.trim().lowercase() }
-                    val edgeSet = mutableSetOf<Pair<String, String>>()
-                    val result = mutableListOf<Pair<GraphNode, GraphNode>>()
+                val edges by produceState(
+                    initialValue = emptyList<Pair<GraphNode, GraphNode>>(),
+                    links,
+                    nodes,
+                    notes
+                ) {
+                    value = withContext(Dispatchers.Default) {
+                        val nodeById = nodes.associateBy { it.noteId }
+                        val nodeByTitle = nodes.associateBy { it.title.trim().lowercase() }
+                        val edgeSet = mutableSetOf<Pair<String, String>>()
+                        val result = mutableListOf<Pair<GraphNode, GraphNode>>()
 
-                    fun addEdge(a: GraphNode?, b: GraphNode?) {
-                        if (a == null || b == null || a.noteId == b.noteId) return
-                        val key = if (a.noteId < b.noteId) a.noteId to b.noteId else b.noteId to a.noteId
-                        if (edgeSet.add(key)) {
-                            result.add(a to b)
-                        }
-                    }
-
-                    for (link in links) {
-                        val src = nodeById[link.sourceNoteId]
-                        val dst = (if (link.targetNoteId != null) nodeById[link.targetNoteId] else null)
-                            ?: nodeByTitle[link.targetNoteTitle.trim().lowercase()]
-                        addEdge(src, dst)
-                    }
-
-                    for (note in notes) {
-                        val src = nodeById[note.id] ?: continue
-                        val fullText = note.content + " " + note.blocksJson
-
-                        for (other in notes) {
-                            if (other.id == note.id) continue
-                            val otherTitle = other.title.trim()
-                            if (otherTitle.isBlank() ||
-                                otherTitle.equals("Untitled", ignoreCase = true) ||
-                                otherTitle.equals("Untitled Note", ignoreCase = true) ||
-                                otherTitle.length < 2
-                            ) continue
-
-                            val isMentioned = fullText.contains("[[$otherTitle]]", ignoreCase = true) ||
-                                    Regex("""(?i)\b${Regex.escape(otherTitle)}\b""").containsMatchIn(fullText)
-
-                            if (isMentioned) {
-                                val dst = nodeById[other.id]
-                                addEdge(src, dst)
+                        fun addEdge(a: GraphNode?, b: GraphNode?) {
+                            if (a == null || b == null || a.noteId == b.noteId) return
+                            val key = if (a.noteId < b.noteId) a.noteId to b.noteId else b.noteId to a.noteId
+                            if (edgeSet.add(key)) {
+                                result.add(a to b)
                             }
                         }
-                    }
 
-                    result
+                        for (link in links) {
+                            val src = nodeById[link.sourceNoteId]
+                            val dst = (if (link.targetNoteId != null) nodeById[link.targetNoteId] else null)
+                                ?: nodeByTitle[link.targetNoteTitle.trim().lowercase()]
+                            addEdge(src, dst)
+                        }
+
+                        for (note in notes) {
+                            val src = nodeById[note.id] ?: continue
+                            val fullText = note.content + " " + note.blocksJson
+
+                            for (other in notes) {
+                                if (other.id == note.id) continue
+                                val otherTitle = other.title.trim()
+                                if (otherTitle.isBlank() ||
+                                    otherTitle.equals("Untitled", ignoreCase = true) ||
+                                    otherTitle.equals("Untitled Note", ignoreCase = true) ||
+                                    otherTitle.length < 2
+                                ) continue
+
+                                if (fullText.contains(otherTitle, ignoreCase = true)) {
+                                    val isMentioned = fullText.contains("[[$otherTitle]]", ignoreCase = true) ||
+                                        Regex("""(?i)\b${Regex.escape(otherTitle)}\b""").containsMatchIn(fullText)
+                                    if (isMentioned) {
+                                        val dst = nodeById[other.id]
+                                        addEdge(src, dst)
+                                    }
+                                }
+                            }
+                        }
+
+                        result
+                    }
                 }
 
                 var simTick by remember { mutableIntStateOf(0) }
 
-                LaunchedEffect(nodes, edges, defaultCenterX, defaultCenterY) {
+                LaunchedEffect(nodes, edges, defaultCenterX, defaultCenterY, isLuxury) {
                     if (nodes.size < 2) return@LaunchedEffect
-                    repeat(90) {
+                    val repulsionConstant = if (isLuxury) 8400f else 6500f
+                    val springRestLength = if (isLuxury) 200f else 160f
+                    for (step in 0 until 90) {
                         for (i in nodes.indices) {
                             for (j in i + 1 until nodes.size) {
                                 val a = nodes[i]
@@ -229,7 +293,7 @@ fun GraphScreen(
                                 val dx = a.x - b.x
                                 val dy = a.y - b.y
                                 val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(10f)
-                                val force = 6500f / (dist * dist)
+                                val force = repulsionConstant / (dist * dist)
                                 val fx = force * (dx / dist)
                                 val fy = force * (dy / dist)
                                 a.vx += fx
@@ -243,7 +307,7 @@ fun GraphScreen(
                             val dx = dst.x - src.x
                             val dy = dst.y - src.y
                             val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                            val force = (dist - 160f) * 0.05f
+                            val force = (dist - springRestLength) * 0.05f
                             val fx = force * (dx / dist)
                             val fy = force * (dy / dist)
                             src.vx += fx
@@ -257,14 +321,20 @@ fun GraphScreen(
                             node.vy += (defaultCenterY - node.y) * 0.005f
                         }
 
+                        var maxStepSq = 0f
                         for (node in nodes) {
                             node.vx *= 0.82f
                             node.vy *= 0.82f
                             node.x += node.vx
                             node.y += node.vy
+                            val stepSq = node.vx * node.vx + node.vy * node.vy
+                            if (stepSq > maxStepSq) maxStepSq = stepSq
                         }
 
                         simTick++
+                        if (step >= 12 && maxStepSq < 0.015f) {
+                            break
+                        }
                         delay(16L)
                     }
                 }
@@ -272,9 +342,74 @@ fun GraphScreen(
                 val connectedNodeIds = remember(edges) {
                     edges.flatMap { listOf(it.first.noteId, it.second.noteId) }.toSet()
                 }
+                val nodeDegreeMap = remember(edges) {
+                    buildMap<String, Int> {
+                        for ((a, b) in edges) {
+                            put(a.noteId, (get(a.noteId) ?: 0) + 1)
+                            put(b.noteId, (get(b.noteId) ?: 0) + 1)
+                        }
+                    }
+                }
                 val qTrim = searchQuery.trim().lowercase()
                 val visibleNodes = remember(nodes, connectedNodeIds, hideOrphans) {
                     if (hideOrphans) nodes.filter { it.noteId in connectedNodeIds } else nodes
+                }
+                val labelLayouts: Map<String, TextLayoutResult> = remember(visibleNodes, labelColor, qTrim, isLuxury) {
+                    visibleNodes.associate { node ->
+                        val label = if (node.title.length > 15) node.title.take(14) + "…" else node.title
+                        val isMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
+                        node.noteId to textMeasurer.measure(
+                            text = label,
+                            style = if (isLuxury) {
+                                TextStyle(
+                                    color = labelColor,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 10.5.sp,
+                                    letterSpacing = 0.35.sp,
+                                    fontWeight = if (isMatch) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                            } else {
+                                TextStyle(
+                                    color = labelColor,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isMatch) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                            }
+                        )
+                    }
+                }
+                val coordLayouts: Map<String, TextLayoutResult> = remember(
+                    visibleNodes,
+                    inspectedNodeId,
+                    nodeDegreeMap,
+                    simTick,
+                    isLuxury,
+                    coordLabelColor,
+                    qTrim
+                ) {
+                    if (!isLuxury) {
+                        emptyMap()
+                    } else {
+                        visibleNodes
+                            .filter { node ->
+                                val degree = nodeDegreeMap[node.noteId] ?: 0
+                                val isCoreHub = degree >= GraphBlueprintSpec.HUB_DEGREE_THRESHOLD
+                                val isMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
+                                node.noteId == inspectedNodeId || isMatch || isCoreHub
+                            }
+                            .take(16)
+                            .associate { node ->
+                                node.noteId to textMeasurer.measure(
+                                    text = GraphBlueprintSpec.formatCoordinateTag(node.x, node.y),
+                                    style = TextStyle(
+                                        color = coordLabelColor,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 8.5.sp,
+                                        letterSpacing = 0.3.sp
+                                    )
+                                )
+                            }
+                    }
                 }
 
                 Canvas(
@@ -366,81 +501,289 @@ fun GraphScreen(
                         }
                 ) {
                     val _tick = simTick
+                    val safeScale = scale.coerceAtLeast(0.05f)
+                    val viewLeft = (-offset.x) / safeScale - 140f
+                    val viewTop = (-offset.y) / safeScale - 140f
+                    val viewRight = (size.width - offset.x) / safeScale + 140f
+                    val viewBottom = (size.height - offset.y) / safeScale + 140f
 
                     withTransform({
                         translate(offset.x, offset.y)
                         scale(scale, scale, Offset.Zero)
                     }) {
-                        for ((src, dst) in edges) {
-                            if (hideOrphans && (src.noteId !in connectedNodeIds || dst.noteId !in connectedNodeIds)) continue
-                            val edgeMatchesSearch = qTrim.isNotEmpty() &&
-                                (src.title.lowercase().contains(qTrim) || dst.title.lowercase().contains(qTrim))
-                            val edgeTouchesInspected = inspectedNodeId != null &&
-                                (src.noteId == inspectedNodeId || dst.noteId == inspectedNodeId)
-                            drawLine(
-                                color = when {
-                                    edgeTouchesInspected -> activePreset.accentEnd.copy(alpha = 0.95f)
-                                    edgeMatchesSearch -> activePreset.accentEnd.copy(alpha = 0.9f)
-                                    else -> activePreset.accentStart.copy(alpha = if (qTrim.isEmpty()) 0.55f else 0.18f)
-                                },
-                                start = Offset(src.x, src.y),
-                                end = Offset(dst.x, dst.y),
-                                strokeWidth = if (edgeTouchesInspected || edgeMatchesSearch) 3.5f else 2f
-                            )
-                        }
-
-                        for (node in visibleNodes) {
-                            val isConnected = connectedNodeIds.contains(node.noteId)
-                            val isSearchMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
-                            val isInspected = inspectedNodeId == node.noteId
-                            val dimAlpha = if (qTrim.isNotEmpty() && !isSearchMatch) 0.25f else 1f
-                            val nodeColor = (node.folderColor ?: if (isConnected) activePreset.accentStart else activePreset.accentEnd)
-                                .copy(alpha = dimAlpha)
-                            val haloColor = nodeColor.copy(alpha = 0.2f * dimAlpha)
-
-                            if (isInspected) {
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    radius = 38f,
-                                    center = Offset(node.x, node.y),
-                                    style = Stroke(width = 3f)
+                        if (isLuxury) {
+                            // Subtle architectural blueprint drafting grid (razor-thin 1px)
+                            val gridStep = 120f
+                            val onePxStroke = 1f / safeScale
+                            val gridColor = lux.textMuted.copy(alpha = 0.06f)
+                            val startX = floor(viewLeft / gridStep) * gridStep
+                            val startY = floor(viewTop / gridStep) * gridStep
+                            var gx = startX
+                            while (gx <= viewRight) {
+                                drawLine(
+                                    color = gridColor,
+                                    start = Offset(gx, viewTop),
+                                    end = Offset(gx, viewBottom),
+                                    strokeWidth = onePxStroke
                                 )
-                            } else if (isSearchMatch) {
-                                drawCircle(
-                                    color = activePreset.accentEnd,
-                                    radius = 36f,
-                                    center = Offset(node.x, node.y),
-                                    style = Stroke(width = 2.5f)
+                                gx += gridStep
+                            }
+                            var gy = startY
+                            while (gy <= viewBottom) {
+                                drawLine(
+                                    color = gridColor,
+                                    start = Offset(viewLeft, gy),
+                                    end = Offset(viewRight, gy),
+                                    strokeWidth = onePxStroke
+                                )
+                                gy += gridStep
+                            }
+
+                            // Ultra-thin (1px), 30%-opacity smooth curved Bezier edges
+                            val edgePath = Path()
+                            for ((src, dst) in edges) {
+                                if (hideOrphans && (src.noteId !in connectedNodeIds || dst.noteId !in connectedNodeIds)) continue
+                                if ((src.x < viewLeft && dst.x < viewLeft) ||
+                                    (src.x > viewRight && dst.x > viewRight) ||
+                                    (src.y < viewTop && dst.y < viewTop) ||
+                                    (src.y > viewBottom && dst.y > viewBottom)
+                                ) continue
+
+                                val edgeMatchesSearch = qTrim.isNotEmpty() &&
+                                    (src.title.lowercase().contains(qTrim) || dst.title.lowercase().contains(qTrim))
+                                val edgeTouchesInspected = inspectedNodeId != null &&
+                                    (src.noteId == inspectedNodeId || dst.noteId == inspectedNodeId)
+                                val highlighted = edgeTouchesInspected || edgeMatchesSearch
+
+                                val p0 = Offset(src.x, src.y)
+                                val p1 = Offset(dst.x, dst.y)
+                                val ctrl = GraphBlueprintSpec.bezierControlPoint(p0, p1)
+                                edgePath.reset()
+                                edgePath.moveTo(p0.x, p0.y)
+                                edgePath.quadraticTo(ctrl.x, ctrl.y, p1.x, p1.y)
+
+                                drawPath(
+                                    path = edgePath,
+                                    color = if (highlighted) {
+                                        GraphBlueprintSpec.SignatureAccent.copy(alpha = GraphBlueprintSpec.ACTIVE_EDGE_ALPHA)
+                                    } else {
+                                        lux.textMuted.copy(
+                                            alpha = GraphBlueprintSpec.UNSELECTED_EDGE_ALPHA *
+                                                (if (qTrim.isEmpty()) 1f else 0.35f)
+                                        )
+                                    },
+                                    style = Stroke(
+                                        width = (if (highlighted) GraphBlueprintSpec.ACTIVE_EDGE_STROKE_PX else GraphBlueprintSpec.BASE_EDGE_STROKE_PX) / safeScale,
+                                        cap = StrokeCap.Round
+                                    )
                                 )
                             }
 
-                            drawCircle(
-                                color = haloColor,
-                                radius = if (isConnected) 32f else 26f,
-                                center = Offset(node.x, node.y)
-                            )
-                            drawCircle(
-                                color = nodeColor,
-                                radius = if (isConnected) 20f else 16f,
-                                center = Offset(node.x, node.y)
-                            )
-                            drawCircle(
-                                color = Color.White.copy(alpha = 0.85f * dimAlpha),
-                                radius = 5.5f,
-                                center = Offset(node.x, node.y)
-                            )
+                            // Clean minimalist blueprint shapes (neutral fill + 1px hairline border; #8B5CF6 accent reserved for active selection or core clusters)
+                            val strokeUnit = 1.25f / safeScale
+                            val occupiedLabelBoxes = mutableListOf<Rect>()
+                            val drawOrder = visibleNodes.sortedByDescending { node ->
+                                val deg = nodeDegreeMap[node.noteId] ?: 0
+                                val priority = (inspectedNodeId == node.noteId) ||
+                                    (qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)) ||
+                                    deg >= GraphBlueprintSpec.HUB_DEGREE_THRESHOLD
+                                if (priority) 1 else 0
+                            }
 
-                            val label = if (node.title.length > 15) node.title.take(14) + "…" else node.title
-                            drawText(
-                                textMeasurer = textMeasurer,
-                                text = label,
-                                topLeft = Offset(node.x - 36f, node.y + 24f),
-                                style = TextStyle(
-                                    color = labelColor.copy(alpha = dimAlpha),
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSearchMatch) FontWeight.SemiBold else FontWeight.Medium
+                            for (node in drawOrder) {
+                                if (node.x < viewLeft || node.x > viewRight || node.y < viewTop || node.y > viewBottom) {
+                                    continue
+                                }
+                                val degree = nodeDegreeMap[node.noteId] ?: 0
+                                val isCoreHub = degree >= GraphBlueprintSpec.HUB_DEGREE_THRESHOLD
+                                val isSearchMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
+                                val isInspected = inspectedNodeId == node.noteId
+                                val forceShowLabel = isInspected || isSearchMatch
+                                val dimAlpha = if (qTrim.isNotEmpty() && !isSearchMatch && !isInspected) 0.25f else 1f
+
+                                val strokeColor = when {
+                                    isInspected || isSearchMatch -> GraphBlueprintSpec.SignatureAccent
+                                    isCoreHub -> GraphBlueprintSpec.SignatureAccent.copy(alpha = 0.78f * dimAlpha)
+                                    else -> lux.textMuted.copy(alpha = 0.65f * dimAlpha)
+                                }
+                                val fillColor = lux.elevatedSurface.copy(alpha = dimAlpha)
+
+                                if (isCoreHub) {
+                                    val w = 38f
+                                    val h = 24f
+                                    val topLeft = Offset(node.x - w / 2f, node.y - h / 2f)
+                                    val corner = CornerRadius(5f, 5f)
+                                    if (isInspected) {
+                                        drawRoundRect(
+                                            color = GraphBlueprintSpec.SignatureAccent,
+                                            topLeft = Offset(node.x - (w + 10f) / 2f, node.y - (h + 10f) / 2f),
+                                            size = Size(w + 10f, h + 10f),
+                                            cornerRadius = CornerRadius(7f, 7f),
+                                            style = Stroke(width = 1.5f / safeScale)
+                                        )
+                                    }
+                                    drawRoundRect(
+                                        color = fillColor,
+                                        topLeft = topLeft,
+                                        size = Size(w, h),
+                                        cornerRadius = corner
+                                    )
+                                    drawRoundRect(
+                                        color = strokeColor,
+                                        topLeft = topLeft,
+                                        size = Size(w, h),
+                                        cornerRadius = corner,
+                                        style = Stroke(width = strokeUnit)
+                                    )
+                                    drawCircle(
+                                        color = GraphBlueprintSpec.SignatureAccent.copy(alpha = dimAlpha),
+                                        radius = 2.6f,
+                                        center = Offset(node.x, node.y)
+                                    )
+                                } else {
+                                    val radius = 12f
+                                    if (isInspected || isSearchMatch) {
+                                        drawCircle(
+                                            color = GraphBlueprintSpec.SignatureAccent,
+                                            radius = radius + 6f,
+                                            center = Offset(node.x, node.y),
+                                            style = Stroke(width = 1.5f / safeScale)
+                                        )
+                                    }
+                                    drawCircle(
+                                        color = fillColor,
+                                        radius = radius,
+                                        center = Offset(node.x, node.y)
+                                    )
+                                    drawCircle(
+                                        color = strokeColor,
+                                        radius = radius,
+                                        center = Offset(node.x, node.y),
+                                        style = Stroke(width = strokeUnit)
+                                    )
+                                    drawCircle(
+                                        color = (if (isInspected || isSearchMatch) GraphBlueprintSpec.SignatureAccent else lux.textMuted)
+                                            .copy(alpha = dimAlpha),
+                                        radius = 2.2f,
+                                        center = Offset(node.x, node.y)
+                                    )
+                                }
+
+                                val layout = labelLayouts[node.noteId]
+                                if (layout != null) {
+                                    val labelWorldX = node.x - layout.size.width / 2f
+                                    val labelWorldY = node.y + (if (isCoreHub) 18f else 19f)
+                                    val screenLeft = labelWorldX * safeScale + offset.x
+                                    val screenTop = labelWorldY * safeScale + offset.y
+                                    val candidateScreenBox = Rect(
+                                        left = screenLeft,
+                                        top = screenTop,
+                                        right = screenLeft + layout.size.width * safeScale,
+                                        bottom = screenTop + layout.size.height * safeScale
+                                    )
+                                    if (GraphBlueprintSpec.canPlaceLabelWithoutOverlap(
+                                            candidateScreenBox = candidateScreenBox,
+                                            occupiedScreenBoxes = occupiedLabelBoxes,
+                                            minPaddingPx = 8f,
+                                            isHighPriority = forceShowLabel
+                                        )
+                                    ) {
+                                        occupiedLabelBoxes.add(candidateScreenBox)
+                                        drawText(
+                                            textLayoutResult = layout,
+                                            topLeft = Offset(labelWorldX, labelWorldY),
+                                            alpha = dimAlpha
+                                        )
+                                        val coordLayout = coordLayouts[node.noteId]
+                                        if (coordLayout != null && (safeScale >= 0.72f || isInspected)) {
+                                            val coordWorldX = node.x - coordLayout.size.width / 2f
+                                            val coordWorldY = labelWorldY + layout.size.height + 2f
+                                            drawText(
+                                                textLayoutResult = coordLayout,
+                                                topLeft = Offset(coordWorldX, coordWorldY),
+                                                alpha = dimAlpha * 0.88f
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            for ((src, dst) in edges) {
+                                if (hideOrphans && (src.noteId !in connectedNodeIds || dst.noteId !in connectedNodeIds)) continue
+                                if ((src.x < viewLeft && dst.x < viewLeft) ||
+                                    (src.x > viewRight && dst.x > viewRight) ||
+                                    (src.y < viewTop && dst.y < viewTop) ||
+                                    (src.y > viewBottom && dst.y > viewBottom)
+                                ) continue
+                                val edgeMatchesSearch = qTrim.isNotEmpty() &&
+                                    (src.title.lowercase().contains(qTrim) || dst.title.lowercase().contains(qTrim))
+                                val edgeTouchesInspected = inspectedNodeId != null &&
+                                    (src.noteId == inspectedNodeId || dst.noteId == inspectedNodeId)
+                                drawLine(
+                                    color = when {
+                                        edgeTouchesInspected -> activePreset.accentEnd.copy(alpha = 0.95f)
+                                        edgeMatchesSearch -> activePreset.accentEnd.copy(alpha = 0.9f)
+                                        else -> activePreset.accentStart.copy(alpha = if (qTrim.isEmpty()) 0.55f else 0.18f)
+                                    },
+                                    start = Offset(src.x, src.y),
+                                    end = Offset(dst.x, dst.y),
+                                    strokeWidth = if (edgeTouchesInspected || edgeMatchesSearch) 3.5f else 2f
                                 )
-                            )
+                            }
+
+                            for (node in visibleNodes) {
+                                if (node.x < viewLeft || node.x > viewRight || node.y < viewTop || node.y > viewBottom) {
+                                    continue
+                                }
+                                val isConnected = connectedNodeIds.contains(node.noteId)
+                                val isSearchMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
+                                val isInspected = inspectedNodeId == node.noteId
+                                val dimAlpha = if (qTrim.isNotEmpty() && !isSearchMatch) 0.25f else 1f
+                                val nodeColor = (node.folderColor ?: if (isConnected) activePreset.accentStart else activePreset.accentEnd)
+                                    .copy(alpha = dimAlpha)
+                                val haloColor = nodeColor.copy(alpha = 0.2f * dimAlpha)
+
+                                if (isInspected) {
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        radius = 38f,
+                                        center = Offset(node.x, node.y),
+                                        style = Stroke(width = 3f)
+                                    )
+                                } else if (isSearchMatch) {
+                                    drawCircle(
+                                        color = activePreset.accentEnd,
+                                        radius = 36f,
+                                        center = Offset(node.x, node.y),
+                                        style = Stroke(width = 2.5f)
+                                    )
+                                }
+
+                                drawCircle(
+                                    color = haloColor,
+                                    radius = if (isConnected) 32f else 26f,
+                                    center = Offset(node.x, node.y)
+                                )
+                                drawCircle(
+                                    color = nodeColor,
+                                    radius = if (isConnected) 20f else 16f,
+                                    center = Offset(node.x, node.y)
+                                )
+                                drawCircle(
+                                    color = Color.White.copy(alpha = 0.85f * dimAlpha),
+                                    radius = 5.5f,
+                                    center = Offset(node.x, node.y)
+                                )
+
+                                val layout = labelLayouts[node.noteId]
+                                if (layout != null) {
+                                    drawText(
+                                        textLayoutResult = layout,
+                                        topLeft = Offset(node.x - layout.size.width / 2f, node.y + 24f),
+                                        alpha = dimAlpha
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -454,39 +797,52 @@ fun GraphScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(22.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
-                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
+                        shape = RoundedCornerShape(if (isLuxury) 100.dp else 22.dp),
+                        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+                        border = BorderStroke(
+                            width = if (isLuxury) 1.dp else 0.75.dp,
+                            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+                        ),
                         modifier = Modifier.weight(1f)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = if (isLuxury) 9.dp else 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
-                                tint = activePreset.accentStart,
+                                tint = if (isLuxury) lux.accent else activePreset.accentStart,
                                 modifier = Modifier.size(16.dp)
                             )
                             BasicTextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
                                 singleLine = true,
-                                textStyle = MaterialTheme.typography.bodySmall.copy(
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                cursorBrush = SolidColor(activePreset.accentStart),
+                                textStyle = if (isLuxury) {
+                                    TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp,
+                                        color = lux.textPrimary
+                                    )
+                                } else {
+                                    MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
+                                cursorBrush = SolidColor(if (isLuxury) lux.accent else activePreset.accentStart),
                                 modifier = Modifier.weight(1f),
                                 decorationBox = { inner ->
                                     if (searchQuery.isEmpty()) {
                                         Text(
-                                            text = "Filter nodes…",
+                                            text = if (isLuxury) "FILTER NODES..." else "Filter nodes…",
+                                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                            color = (if (isLuxury) lux.textMuted else MaterialTheme.colorScheme.onSurfaceVariant)
+                                                .copy(alpha = if (isLuxury) 0.78f else 0.55f)
                                         )
                                     }
                                     inner()
@@ -497,17 +853,65 @@ fun GraphScreen(
                                     onClick = { searchQuery = "" },
                                     modifier = Modifier.size(18.dp)
                                 ) {
-                                    Icon(Icons.Rounded.Close, contentDescription = "Clear", modifier = Modifier.size(14.dp))
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = "Clear",
+                                        tint = if (isLuxury) lux.textMuted else LocalContentColor.current,
+                                        modifier = Modifier.size(14.dp)
+                                    )
                                 }
                             }
                         }
                     }
 
-                    FilterChip(
-                        selected = hideOrphans,
-                        onClick = { hideOrphans = !hideOrphans },
-                        label = { Text(if (hideOrphans) "Linked" else "All", fontSize = 12.sp) }
-                    )
+                    if (isLuxury) {
+                        Surface(
+                            onClick = { hideOrphans = !hideOrphans },
+                            shape = RoundedCornerShape(100.dp),
+                            color = if (hideOrphans) lux.accent.copy(alpha = 0.14f) else lux.elevatedSurface,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (hideOrphans) lux.accent else lux.borderHairline
+                            )
+                        ) {
+                            Text(
+                                text = if (hideOrphans) "LINKED" else "ALL",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                letterSpacing = 0.8.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (hideOrphans) lux.accent else lux.textSecondary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+                            )
+                        }
+                    } else {
+                        FilterChip(
+                            selected = hideOrphans,
+                            onClick = { hideOrphans = !hideOrphans },
+                            label = { Text(if (hideOrphans) "Linked" else "All", fontSize = 12.sp) }
+                        )
+                    }
+                }
+
+                if (notes.isNotEmpty() && edges.isEmpty()) {
+                    Surface(
+                        onClick = onNavigateTutorial,
+                        shape = RoundedCornerShape(if (isLuxury) 8.dp else 18.dp),
+                        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f),
+                        border = BorderStroke(1.dp, obsidianAccent.copy(alpha = if (isLuxury) 0.72f else 0.68f)),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(top = 66.dp, start = 14.dp, end = 72.dp)
+                    ) {
+                        Text(
+                            text = if (isLuxury) "NO EDGES // TAP FOR NODE LINKING SPEC →" else "No edges yet? Tap for Graph node linking guide →",
+                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
                 }
 
                 // Floating Clean Vector Zoom Controls
@@ -515,7 +919,7 @@ fun GraphScreen(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 12.dp, end = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (isLuxury) 6.dp else 8.dp),
                     horizontalAlignment = Alignment.End
                 ) {
                     SmallCircleControlButton(
@@ -537,13 +941,18 @@ fun GraphScreen(
                         }
                     )
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.86f),
-                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                        shape = RoundedCornerShape(if (isLuxury) 6.dp else 10.dp),
+                        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.86f),
+                        border = BorderStroke(
+                            width = if (isLuxury) 1.dp else 0.75.dp,
+                            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+                        )
                     ) {
                         Text(
                             text = "${(scale * 100).toInt()}%",
+                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
                             style = MaterialTheme.typography.labelSmall,
+                            color = if (isLuxury) lux.textSecondary else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
@@ -597,6 +1006,16 @@ fun GraphScreen(
                                         label = "GRAPH",
                                         accentColor = obsidianAccent
                                     )
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = onNavigateTutorial,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(0.75.dp, obsidianAccent.copy(alpha = 0.6f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = accentInk)
+                                ) {
+                                    Text("How to Make & Connect Nodes →", fontSize = 12.sp)
                                 }
                             },
                             footerContent = {
@@ -691,16 +1110,19 @@ fun GraphScreen(
                                 items(notes, key = { it.id }) { note ->
                                     val connectionCount = edges.count { it.first.noteId == note.id || it.second.noteId == note.id }
                                     val isNodeSelected = note.id == selectedId
-                                    val chipShape = RoundedCornerShape(10.dp)
+                                    val chipShape = RoundedCornerShape(if (isLuxury) 6.dp else 10.dp)
                                     Row(
                                         modifier = Modifier
                                             .clip(chipShape)
                                             .background(
-                                                if (isNodeSelected) obsidianAccent.copy(alpha = 0.20f)
-                                                else ObsidianTokens.StatTileSurface
+                                                if (isNodeSelected) {
+                                                    if (isLuxury) obsidianAccent.copy(alpha = 0.14f) else obsidianAccent.copy(alpha = 0.20f)
+                                                } else {
+                                                    ObsidianTokens.StatTileSurface
+                                                }
                                             )
                                             .border(
-                                                width = if (isNodeSelected) 1.dp else 0.75.dp,
+                                                width = if (isLuxury || isNodeSelected) 1.dp else 0.75.dp,
                                                 color = if (isNodeSelected) obsidianAccent else ObsidianTokens.DividerRule,
                                                 shape = chipShape
                                             )
@@ -731,7 +1153,8 @@ fun GraphScreen(
                                             } else {
                                                 note.title.ifBlank { "Untitled" }
                                             },
-                                            fontSize = 12.sp,
+                                            fontFamily = if (isLuxury) FontFamily.Monospace else FontFamily.Default,
+                                            fontSize = if (isLuxury) 11.sp else 12.sp,
                                             fontWeight = if (isNodeSelected) FontWeight.SemiBold else FontWeight.Medium,
                                             color = if (isNodeSelected) ObsidianTokens.TextPrimary else ObsidianTokens.TextSecondary
                                         )
@@ -741,7 +1164,7 @@ fun GraphScreen(
                         },
                         footerContent = {
                             Text(
-                                text = "Modified ${inspectorDateFormat.format(Date(inspectedNote.updatedAt))} • ${visibleNodes.size} nodes / ${edges.size} canvas edges indexed locally in Room DB • Tap card or selected chip to open",
+                                text = "Modified ${NoteJson.formatShortDateTime(inspectedNote.updatedAt)} • ${visibleNodes.size} nodes / ${edges.size} canvas edges indexed locally in Room DB • Tap card or selected chip to open",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 10.5.sp,
                                 lineHeight = 15.sp,
@@ -775,19 +1198,25 @@ private fun SmallCircleControlButton(
     contentDescription: String,
     onClick: () -> Unit
 ) {
+    val isLuxury = ThemeManager.isLuxuryUi
+    val lux = ThemeManager.luxuryTokens
     Surface(
         onClick = onClick,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
-        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
-        modifier = Modifier.size(38.dp)
+        shape = if (isLuxury) RoundedCornerShape(8.dp) else CircleShape,
+        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+        border = BorderStroke(
+            width = if (isLuxury) 1.dp else 0.75.dp,
+            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+        ),
+        shadowElevation = 0.dp,
+        modifier = Modifier.size(if (isLuxury) 36.dp else 38.dp)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(18.dp)
+                tint = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(17.dp)
             )
         }
     }

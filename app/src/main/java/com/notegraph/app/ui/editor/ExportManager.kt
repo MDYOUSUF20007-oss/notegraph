@@ -4,10 +4,9 @@ import android.content.Context
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
-import com.notegraph.app.data.local.entity.InkStroke
+import com.notegraph.app.data.local.NoteJson
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
-import kotlinx.serialization.json.Json
 import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -19,13 +18,7 @@ import java.util.zip.ZipOutputStream
  */
 object ExportManager {
 
-    private val json = Json { ignoreUnknownKeys = true }
-
-    fun parseBlocks(note: NoteEntity): List<NoteBlock> = try {
-        json.decodeFromString<List<NoteBlock>>(note.blocksJson)
-    } catch (e: Exception) {
-        emptyList()
-    }
+    fun parseBlocks(note: NoteEntity): List<NoteBlock> = NoteJson.decodeBlocks(note.blocksJson)
 
     private fun escapeXml(s: String): String = s
         .replace("&", "&amp;")
@@ -132,11 +125,7 @@ object ExportManager {
                     }
                 }
                 is NoteBlock.InkBlock -> {
-                    val strokes = try {
-                        json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
+                    val strokes = NoteJson.decodeStrokes(block.strokesJson)
                     val allPoints = strokes.flatMap { it.points }
                     if (allPoints.isNotEmpty()) {
                         val minX = allPoints.minOf { it.x }
@@ -402,11 +391,7 @@ object ExportManager {
             calculatedHeight += when (block) {
                 is NoteBlock.TextBlock -> ((block.text.length / 40) + 2) * 34f + 20f
                 is NoteBlock.InkBlock -> {
-                    val strokes = try {
-                        json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
+                    val strokes = NoteJson.decodeStrokes(block.strokesJson)
                     val allPts = strokes.flatMap { it.points }
                     if (allPts.isNotEmpty()) {
                         val rawW = (allPts.maxOf { it.x } - allPts.minOf { it.x }).coerceAtLeast(10f)
@@ -514,11 +499,7 @@ object ExportManager {
                     }
                 }
                 is NoteBlock.InkBlock -> {
-                    val strokes = try {
-                        json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
+                    val strokes = NoteJson.decodeStrokes(block.strokesJson)
                     val allPoints = strokes.flatMap { it.points }
                     if (allPoints.isNotEmpty()) {
                         canvas.drawText("[Drawing / Ink]", margin, yPos, labelPaint)

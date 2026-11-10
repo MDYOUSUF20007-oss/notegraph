@@ -12,27 +12,143 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 
 /**
+ * Runtime-switchable interface architecture engine.
+ */
+enum class UiEngineMode(
+    val id: String,
+    val displayName: String,
+    val badgeLabel: String,
+    val description: String
+) {
+    CLASSIC(
+        id = "classic",
+        displayName = "Classic UI",
+        badgeLabel = "CLASSIC",
+        description = "Legacy glowing Obsidian cards, gradient flares & framed studio surfaces"
+    ),
+    BESPOKE_LUXURY(
+        id = "bespoke_luxury",
+        displayName = "Bespoke Luxury (Default)",
+        badgeLabel = "LUXURY",
+        description = "Strict flat editorial surfaces, 1px hairline borders, blueprint graph & edge-to-edge canvas"
+    );
+
+    companion object {
+        fun fromIdOrDefault(raw: String?): UiEngineMode =
+            entries.firstOrNull { it.id == raw || it.name == raw } ?: BESPOKE_LUXURY
+    }
+}
+
+val LocalUiEngine = compositionLocalOf { UiEngineMode.BESPOKE_LUXURY }
+
+/**
+ * Curated luxury surface tokens with zero generic gradient fills.
+ */
+data class LuxuryPalette(
+    val canvasBackground: Color,
+    val elevatedSurface: Color,
+    val recessedSurface: Color,
+    val borderHairline: Color,
+    val dividerRule: Color,
+    val accent: Color,
+    val onAccent: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textMuted: Color,
+    val footerText: Color
+)
+
+object LuxuryTokens {
+    val SignatureAccent = Color(0xFF8B5CF6)
+    val AmoledBorder = Color(0xFF262626)
+
+    val AmoledBlack = LuxuryPalette(
+        canvasBackground = Color(0xFF000000),
+        elevatedSurface = Color(0xFF121212),
+        recessedSurface = Color(0xFF0A0A0A),
+        borderHairline = AmoledBorder,
+        dividerRule = Color(0xFF222222),
+        accent = SignatureAccent,
+        onAccent = Color(0xFFFFFFFF),
+        textPrimary = Color(0xFFF4F4F5),
+        textSecondary = Color(0xFFA1A1AA),
+        textMuted = Color(0xFF71717A),
+        footerText = Color(0xFF8E8E93)
+    )
+
+    val KindleParchment = LuxuryPalette(
+        canvasBackground = Color(0xFFF4F1EA),
+        elevatedSurface = Color(0xFFFAF7F0),
+        recessedSurface = Color(0xFFEBE5D8),
+        borderHairline = Color(0xFFD5CEC1),
+        dividerRule = Color(0xFFDCD5C9),
+        accent = SignatureAccent,
+        onAccent = Color(0xFFFFFFFF),
+        textPrimary = Color(0xFF1E1B18),
+        textSecondary = Color(0xFF4E483F),
+        textMuted = Color(0xFF787166),
+        footerText = Color(0xFF696258)
+    )
+
+    val MatteMinimalist = LuxuryPalette(
+        canvasBackground = Color(0xFF1E2229),
+        elevatedSurface = Color(0xFF252A33),
+        recessedSurface = Color(0xFF181B21),
+        borderHairline = Color(0xFF323844),
+        dividerRule = Color(0xFF2D333E),
+        accent = SignatureAccent,
+        onAccent = Color(0xFFFFFFFF),
+        textPrimary = Color(0xFFE6EDF5),
+        textSecondary = Color(0xFFA0AAB8),
+        textMuted = Color(0xFF6F7A89),
+        footerText = Color(0xFF8C96A6)
+    )
+
+    fun forMode(mode: AppThemeMode): LuxuryPalette = when (mode) {
+        AppThemeMode.DEEP_PURPLE_AMOLED -> AmoledBlack
+        AppThemeMode.KINDLE_PARCHMENT -> KindleParchment
+        AppThemeMode.MATTE_STUDIO -> MatteMinimalist
+    }
+}
+
+/**
  * Supported minimalist theme modes for NoteGraph.
  */
-enum class AppThemeMode(val displayName: String, val shortLabel: String) {
-    DEEP_PURPLE_AMOLED("AMOLED", "AMOLED"),
-    KINDLE_PARCHMENT("Kindle Paper", "Kindle"),
-    MATTE_STUDIO("Matte / Mac", "Matte")
+enum class AppThemeMode(
+    val displayName: String,
+    val shortLabel: String,
+    val luxuryName: String,
+    val luxurySubtitle: String
+) {
+    DEEP_PURPLE_AMOLED("AMOLED", "AMOLED", "AMOLED Black", "#000000 · #121212"),
+    KINDLE_PARCHMENT("Kindle Paper", "Kindle", "Kindle Parchment", "#F4F1EA Paper"),
+    MATTE_STUDIO("Matte / Mac", "Matte", "Matte Minimalist", "#1E2229 Slate");
+
+    fun labelFor(isLuxury: Boolean): String = if (isLuxury) luxuryName else displayName
+    fun shortLabelFor(isLuxury: Boolean): String = when {
+        !isLuxury -> shortLabel
+        this == KINDLE_PARCHMENT -> "Parchment"
+        else -> shortLabel
+    }
 }
 
 /**
@@ -294,6 +410,12 @@ object NoteGraphGradients {
 object ThemeManager {
     private var prefs: SharedPreferences? = null
 
+    var uiEngine by mutableStateOf(UiEngineMode.BESPOKE_LUXURY)
+        private set
+
+    val isLuxuryUi: Boolean
+        get() = uiEngine == UiEngineMode.BESPOKE_LUXURY
+
     var currentTheme by mutableStateOf(AppThemeMode.DEEP_PURPLE_AMOLED)
         private set
 
@@ -312,6 +434,7 @@ object ThemeManager {
     fun init(context: Context) {
         val sp = context.getSharedPreferences("notegraph_prefs", Context.MODE_PRIVATE)
         prefs = sp
+        uiEngine = UiEngineMode.fromIdOrDefault(sp.getString("ui_engine", UiEngineMode.BESPOKE_LUXURY.id))
         val savedName = sp.getString("app_theme", AppThemeMode.DEEP_PURPLE_AMOLED.name)
         currentTheme = try {
             AppThemeMode.valueOf(savedName ?: AppThemeMode.DEEP_PURPLE_AMOLED.name)
@@ -325,6 +448,11 @@ object ThemeManager {
             ?: NoteGraphGradients.defaultIdFor(AppThemeMode.KINDLE_PARCHMENT)
         matteGradientId = sp.getString("grad_MATTE_STUDIO", NoteGraphGradients.defaultIdFor(AppThemeMode.MATTE_STUDIO))
             ?: NoteGraphGradients.defaultIdFor(AppThemeMode.MATTE_STUDIO)
+    }
+
+    fun setUiEngine(engine: UiEngineMode) {
+        uiEngine = engine
+        prefs?.edit()?.putString("ui_engine", engine.id)?.apply()
     }
 
     fun setTheme(mode: AppThemeMode) {
@@ -355,8 +483,26 @@ object ThemeManager {
         return list.firstOrNull { it.id == id } ?: list.first()
     }
 
+    val luxuryTokens: LuxuryPalette
+        get() = LuxuryTokens.forMode(currentTheme)
+
+    fun luxuryPresetFor(mode: AppThemeMode = currentTheme): ThemeGradientPreset {
+        val p = LuxuryTokens.forMode(mode)
+        return ThemeGradientPreset(
+            id = "luxury_${mode.name.lowercase()}",
+            name = mode.luxuryName,
+            accentStart = p.accent,
+            accentEnd = p.accent,
+            onAccent = p.onAccent,
+            backgroundColors = listOf(p.canvasBackground, p.canvasBackground, p.canvasBackground),
+            cardSurface = p.elevatedSurface,
+            cardTint = p.elevatedSurface,
+            borderColor = p.borderHairline
+        )
+    }
+
     val currentGradient: ThemeGradientPreset
-        get() = presetFor(currentTheme)
+        get() = if (isLuxuryUi) luxuryPresetFor(currentTheme) else presetFor(currentTheme)
 
     fun setGradient(mode: AppThemeMode, presetId: String) {
         val valid = presetsFor(mode).firstOrNull { it.id == presetId }?.id ?: return
@@ -387,7 +533,9 @@ object ThemeManager {
     }
 
     val flatBackgroundColor: Color
-        get() = when (currentTheme) {
+        get() = if (isLuxuryUi) {
+            luxuryTokens.canvasBackground
+        } else when (currentTheme) {
             AppThemeMode.DEEP_PURPLE_AMOLED -> NoteGraphColors.DeepPurpleAmoledBackground
             AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentBackground
             AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioBackground
@@ -395,29 +543,39 @@ object ThemeManager {
 
     val activeScreenBrush: Brush
         get() {
+            if (isLuxuryUi) {
+                return SolidColor(luxuryTokens.canvasBackground)
+            }
             val g = currentGradient
             return if (gradientsEnabled) {
                 Brush.verticalGradient(g.backgroundColors)
             } else {
-                Brush.verticalGradient(listOf(flatBackgroundColor, flatBackgroundColor))
+                SolidColor(flatBackgroundColor)
             }
         }
 
     val activeAccentBrush: Brush
         get() {
+            if (isLuxuryUi) {
+                return SolidColor(luxuryTokens.accent)
+            }
             val g = currentGradient
             return if (gradientsEnabled) {
                 Brush.linearGradient(listOf(g.accentStart, g.accentEnd))
             } else {
-                Brush.linearGradient(listOf(g.accentStart, g.accentStart))
+                SolidColor(g.accentStart)
             }
         }
 
     fun activeCardBrush(highlighted: Boolean = false): Brush {
+        if (isLuxuryUi) {
+            val t = luxuryTokens
+            return SolidColor(if (highlighted) t.recessedSurface else t.elevatedSurface)
+        }
         val g = currentGradient
         return if (!gradientsEnabled) {
             val solid = if (highlighted) g.cardTint else g.cardSurface
-            Brush.linearGradient(listOf(solid, solid))
+            SolidColor(solid)
         } else if (highlighted) {
             Brush.linearGradient(
                 listOf(
@@ -443,10 +601,57 @@ object ThemeManager {
         }
 
     val cardBorderColor: Color
-        get() = currentGradient.borderColor.copy(alpha = 0.72f)
+        get() = if (isLuxuryUi) {
+            luxuryTokens.borderHairline
+        } else {
+            currentGradient.borderColor.copy(alpha = 0.72f)
+        }
 }
 
 // ─── Dynamic Color Schemes ───────────────────────────────────────
+
+private fun buildLuxuryColorScheme(mode: AppThemeMode): ColorScheme {
+    val t = LuxuryTokens.forMode(mode)
+    return if (mode == AppThemeMode.KINDLE_PARCHMENT) {
+        lightColorScheme(
+            primary = t.accent,
+            onPrimary = t.onAccent,
+            primaryContainer = t.accent.copy(alpha = 0.12f),
+            onPrimaryContainer = t.textPrimary,
+            secondary = t.accent,
+            onSecondary = t.onAccent,
+            secondaryContainer = t.recessedSurface,
+            onSecondaryContainer = t.textSecondary,
+            background = t.canvasBackground,
+            onBackground = t.textPrimary,
+            surface = t.canvasBackground,
+            onSurface = t.textPrimary,
+            surfaceVariant = t.elevatedSurface,
+            onSurfaceVariant = t.textSecondary,
+            outline = t.borderHairline,
+            outlineVariant = t.dividerRule
+        )
+    } else {
+        darkColorScheme(
+            primary = t.accent,
+            onPrimary = t.onAccent,
+            primaryContainer = t.accent.copy(alpha = 0.16f),
+            onPrimaryContainer = t.textPrimary,
+            secondary = t.accent,
+            onSecondary = t.onAccent,
+            secondaryContainer = t.recessedSurface,
+            onSecondaryContainer = t.textSecondary,
+            background = t.canvasBackground,
+            onBackground = t.textPrimary,
+            surface = t.canvasBackground,
+            onSurface = t.textPrimary,
+            surfaceVariant = t.elevatedSurface,
+            onSurfaceVariant = t.textSecondary,
+            outline = t.borderHairline,
+            outlineVariant = t.dividerRule
+        )
+    }
+}
 
 private fun buildColorScheme(
     mode: AppThemeMode,
@@ -548,6 +753,14 @@ private val MinimalistShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp)
 )
 
+private val LuxuryShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(12.dp),
+    extraLarge = RoundedCornerShape(16.dp)
+)
+
 private val MinimalistTypography = Typography(
     headlineMedium = TextStyle(
         fontWeight = FontWeight.SemiBold,
@@ -601,22 +814,106 @@ private val MinimalistTypography = Typography(
     )
 )
 
+private val LuxuryTypography = Typography(
+    headlineMedium = TextStyle(
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 28.sp,
+        lineHeight = 35.sp,
+        letterSpacing = (-0.4).sp
+    ),
+    titleLarge = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 19.sp,
+        lineHeight = 25.sp,
+        letterSpacing = (-0.25).sp
+    ),
+    titleMedium = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 15.5.sp,
+        lineHeight = 21.sp,
+        letterSpacing = (-0.15).sp
+    ),
+    titleSmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 19.sp
+    ),
+    bodyLarge = TextStyle(
+        fontFamily = FontFamily.Serif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 25.sp
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 21.sp
+    ),
+    bodySmall = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 18.sp
+    ),
+    labelLarge = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp
+    ),
+    labelMedium = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 15.sp,
+        letterSpacing = 0.45.sp
+    ),
+    labelSmall = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.sp,
+        lineHeight = 13.sp,
+        letterSpacing = 0.55.sp
+    )
+)
+
 @Composable
 fun NoteGraphTheme(
     themeMode: AppThemeMode = ThemeManager.currentTheme,
+    uiEngine: UiEngineMode = ThemeManager.uiEngine,
     content: @Composable () -> Unit
 ) {
+    val isLuxury = uiEngine == UiEngineMode.BESPOKE_LUXURY
     val activePreset = ThemeManager.presetFor(themeMode)
-    val gradientsOn = ThemeManager.gradientsEnabled
-    val colorScheme = buildColorScheme(themeMode, activePreset, gradientsOn)
+    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
+    val colorScheme = if (isLuxury) {
+        buildLuxuryColorScheme(themeMode)
+    } else {
+        buildColorScheme(themeMode, activePreset, gradientsOn)
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = view.context.findActivity()?.window ?: return@SideEffect
             val isLightPaper = themeMode == AppThemeMode.KINDLE_PARCHMENT
-            val topBarCol = if (gradientsOn) activePreset.backgroundColors.first() else ThemeManager.flatBackgroundColor
-            val navBarCol = if (gradientsOn) activePreset.backgroundColors.last() else ThemeManager.flatBackgroundColor
+            val luxuryBg = LuxuryTokens.forMode(themeMode).canvasBackground
+            val topBarCol = when {
+                isLuxury -> luxuryBg
+                gradientsOn -> activePreset.backgroundColors.first()
+                else -> ThemeManager.flatBackgroundColor
+            }
+            val navBarCol = when {
+                isLuxury -> luxuryBg
+                gradientsOn -> activePreset.backgroundColors.last()
+                else -> ThemeManager.flatBackgroundColor
+            }
             window.statusBarColor = topBarCol.toArgb()
             window.navigationBarColor = navBarCol.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
@@ -626,12 +923,14 @@ fun NoteGraphTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        shapes = MinimalistShapes,
-        typography = MinimalistTypography,
-        content = content
-    )
+    CompositionLocalProvider(LocalUiEngine provides uiEngine) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            shapes = if (isLuxury) LuxuryShapes else MinimalistShapes,
+            typography = if (isLuxury) LuxuryTypography else MinimalistTypography,
+            content = content
+        )
+    }
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {

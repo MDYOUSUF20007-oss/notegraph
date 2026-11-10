@@ -18,6 +18,9 @@ interface LinkDao {
     @Query("DELETE FROM links WHERE sourceNoteId = :noteId")
     suspend fun deleteLinksForNote(noteId: String)
 
+    @Query("DELETE FROM links")
+    suspend fun deleteAllLinks()
+
     @Query("SELECT * FROM links")
     fun getAllLinks(): Flow<List<LinkEntity>>
 }
