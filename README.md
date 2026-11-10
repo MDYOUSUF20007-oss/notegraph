@@ -1,48 +1,53 @@
 # NoteGraph
 
-This is my app. I've been trying to build a solid note-taking app from scratch, and it's still pretty new. Test it out and give me honest feedback. I've been reading through Reddit posts to see what people actually want and what annoys them in other apps, and I'm trying to add as many of those fixes as I can. Anyone is welcome to contribute.
+This is my app. I've been trying to build a solid note-taking app from scratch, and it's still pretty new. Test it out and give me honest feedback. I've been reading through Reddit posts to see what people actually want and what annoys them in other apps, and I'm trying to add as many of those fixes as I can. You all can contribute.
 
-Everything stays local and offline on your device. No login, no subscription, no forced cloud.
+Everything works offline on your device. No login, no subscription, and no forced cloud.
 
 ## Why build another note app?
 
-Most apps get one part right and leave out the rest:
-- PDF and stylus apps are great for drawing, but they rarely give you proper note linking or a knowledge graph.
-- Markdown graph apps are great for connecting ideas, but they aren't built for fast handwriting, PDF scribbling, or live teaching.
-- Heavy online whiteboards start lagging right in the middle of a class or long derivation.
+Most apps get one part right and miss the rest:
+- PDF and stylus apps are great for writing, but they rarely include proper note linking or a graph view.
+- Markdown graph apps are great for linking notes, but they feel clunky for live teaching, sketches, or scribbling on PDFs.
+- Browser whiteboards get sluggish halfway through a long lecture or math derivation.
 
-NoteGraph puts an **Android app (`app/`)** and a **Windows/macOS whiteboard (`desktop/`)** in the same project, with manual `.zip` vault export/import to move notes between them.
+NoteGraph keeps an **Android app (`app/`)** and a **Windows / macOS board app (`desktop/`)** in one repo, with manual `.zip` vault export/import to move your notes and boards between them.
 
 ## Downloads
 
-Prebuilt APKs and desktop installers are on the [Releases page](https://github.com/MDYOUSUF20007-oss/notegraph/releases/latest):
+Prebuilt installers and APKs are on the [Releases page](https://github.com/MDYOUSUF20007-oss/notegraph/releases/latest):
 - **Android:** `notegraph.apk`
-- **Windows (x64):** `NoteGraph-Board-*-Windows-x64-Setup.exe` or `*-Portable.exe`
-- **macOS (Apple Silicon & Intel):** `.dmg` and `.zip` *(unsigned CI build, so right-click -> Open on first launch if macOS warns you)*
+- **Windows (x64):** `NoteGraph-Board-2.0.0-Windows-x64-Setup.exe` or `NoteGraph-Board-2.0.0-Windows-x64-Portable.exe`
+- **macOS (Apple Silicon & Intel):** `NoteGraph-Board-2.0.0-macOS-arm64.dmg` / `NoteGraph-Board-2.0.0-macOS-x64.dmg` (plus `.zip` builds — unsigned CI builds, so right-click -> Open on first launch if macOS prompts you)
 
 ## What works right now
 
-### Desktop - NoteGraph Board (`desktop/`)
-Built for online classes, math/physics derivations, and freeform boards:
-- Infinite canvas with `Space` + drag (or middle mouse) to pan, scroll zoom, sticky notes, checklist cards, and connector lines
-- Pen, highlighter, shape snapping (lines, circles, boxes), lasso selection, and a fading rainbow laser pointer
-- Switchable board backgrounds: Dots, Cornell ruled, XY graph axes, or Blackboard green
-- Import PDFs onto slides to write directly on top, paste screenshots with `Ctrl+V`, and export as PNG or multi-page PDF
-- `F11` fullscreen mode, a stopwatch / 25-min class timer, follow-up reminder dates, `Ctrl+K` quick search, and a 2D link graph
+### Clean UI + Themes & Choosable Gradients
+- **One app, multiple themes:** Switch anytime between **AMOLED** (true black), **Kindle** (warm e-ink paper), **Matte / Mac** (graphite slate), and **Board** (desktop blackboard).
+- **Choosable gradients per theme:** Each theme lets you pick its own accent and background gradient (for example Obsidian Violet, Aurora Cyan, Emerald Flux, Warm Sepia, Sage Folio, Studio Cyan, Nord Indigo), or turn gradients off for flat solid colors.
+- **Quieter interface:** Cleaned up toolbar clutter, borderless note writing on Android, translucent toolbars on PC/Mac, and a quick theme switcher on Home and the top bar.
+
+### Desktop & Mac - NoteGraph Board (`desktop/`)
+Built for online classes, derivations, and freeform boards:
+- Infinite canvas with `Space` + drag (or middle mouse) to pan, scroll zoom, sticky notes, interactive checklist cards, and card connectors
+- Pen, highlighter, shape snapping (straight lines, circles, rectangles), lasso move/delete, and a fading rainbow laser pointer
+- Switchable grids: Dots, Cornell ruled, XY graph axes, or Blank
+- Import PDFs as separate lecture slides or side-by-side canvas pages, paste screenshots with `Ctrl+V`, and export to PNG, multi-page PDF, or Markdown
+- `F11` fullscreen Zen mode, class stopwatch / 25-min timer, follow-up reminder dates, `Ctrl+K` quick command palette, and a 2D link graph
 
 ### Android App (`app/`)
-- **PDF import and markup:** Open PDFs directly (or use Android "Open with -> NoteGraph"), pinch to zoom, write or highlight on each page, invert colors for Night PDF, turn on S-Pen-only mode for palm rejection, and keep notes per page
-- **Folders and checklists:** Custom folders (editable name, icon, and color) with drag-and-drop sorting, plus interactive to-do checklists inside notes and reader mode
-- **Links and graph:** Live `[[Wiki-link]]` autocomplete while typing, backlinks, nested `#tags`, and a 2D graph where you can drag nodes around and filter by title
-- **Book reading mode:** Corner-fold page turn animation (swipe from any corner or edge, or switch to 3D curl / slide)
-- **Themes, privacy, and exports:** 3 themes in one app (AMOLED black, Kindle paper, Matte slate), ink paper templates, voice recording with jump-to-timestamp chips, offline image OCR, PIN lock for private notes, trash recovery, and export to `.pdf`, `.docx`, `.pptx`, `.png`, `.md`, or `.zip`
+- **PDF import and markup:** Import PDFs in-app (or via Android "Open with -> NoteGraph"), pinch to zoom, draw or highlight right on the pages, toggle Night PDF, enable S-Pen-only mode for palm rejection, and save per-page margin notes
+- **Folders and checklists:** Custom folders (editable name, icon, and color) with long-press drag-and-drop sorting, plus checkable to-do lists inside notes and reader mode
+- **Links and graph:** Live `[[Wiki-link]]` autocomplete as you type, backlinks, `#tags`, and a 2D knowledge graph with node dragging and search filtering
+- **Book reading mode:** Geometric corner-fold page turn animation when dragging from any corner or edge (or switch between Corner Fold, 3D Curl, and Slide Stack)
+- **Privacy and exports:** Voice recording with timestamp jumps, offline image OCR, PIN lock for sensitive notes, Trash recovery, and export to `.pdf`, `.docx`, `.pptx`, `.png`, `.md`, or `.zip`
 
 ## Still missing
 
-To keep expectations realistic, a few things aren't finished yet:
-- Automatic background cloud sync (moving data between Android and PC uses manual `.zip` export/import right now)
-- Handwriting-stroke-to-text conversion or live math equation solving
-- Full Markdown live preview, LaTeX/Mermaid rendering, and YAML frontmatter property editing
+A few things are still not built yet:
+- Automatic background cloud sync (moving vaults between Android and PC currently uses `.zip` export/import)
+- Converting handwritten ink strokes into typed text or solving equations automatically
+- Full live Markdown rendering, LaTeX math preview, and YAML frontmatter editing
 
 ## Build from source
 
@@ -61,6 +66,6 @@ gradle assembleDebug
 
 ## Contributing & License
 
-If something breaks, lags, or feels awkward to use, open an issue or pull request on [GitHub](https://github.com/MDYOUSUF20007-oss/notegraph/issues).
+If you hit a bug, UI glitch, or performance issue while testing, open an issue or pull request on [GitHub](https://github.com/MDYOUSUF20007-oss/notegraph/issues).
 
 Licensed under the [MIT License](LICENSE.txt).

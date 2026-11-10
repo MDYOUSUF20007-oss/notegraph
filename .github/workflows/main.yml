@@ -144,13 +144,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: "NoteGraph v2.0 — Android, Windows & macOS"
+          name: "NoteGraph v2.0 — Minimalist UI & Gradients (Android, Windows & macOS)"
           make_latest: true
           prerelease: false
           body: |
-            Automated cross-platform builds from the latest `main` commit:
+            Automated cross-platform builds from the latest `main` commit.
 
-            - **Android APK:** `notegraph.apk` — Samsung Notes-style PDF Import & Direct On-Page Markup (Zoom/Pan, Highlighter, Shape Snap, S-Pen Palm Rejection, Night PDF, Page Notes, "Open With -> NoteGraph"), reMarkable-style geometric Corner-Fold page turn physics (`Corner Fold`, `3D Curl`, `Slide Stack`), live `[[Wiki-Link]]` autocomplete, Ink paper templates & Fullscreen Sketch Studio, Vault PIN lock, Templates & Trash recovery, Tri-Theme Matrix (AMOLED, Kindle Parchment, Matte Studio), and customizable drag-and-drop folders.
-            - **Windows (x64):** `NoteGraph-Board-*-Windows-x64-Setup.exe` & `NoteGraph-Board-*-Windows-x64-Portable.exe` — Low-latency Classroom Whiteboard (`F11` Zen mode, Rainbow Vanishing Laser, Cornell/XY grids, PDF slide markup, `Ctrl+V` screenshot paste, interactive checklists, Follow-Up CRM dates, `Ctrl+K` Command Palette, 2D Knowledge Graph, & Android `.zip` vault sync).
-            - **macOS (Apple Silicon arm64 & Intel x64):** `.dmg` & `.zip` builds of NoteGraph Board. *(Unsigned CI build: on macOS first launch, right-click → Open if Gatekeeper prompts.)*
+            ### What's New
+            - **Minimalist UI Overhaul (Android, Windows & macOS):** Borderless writing mode, frosted translucent glass toolbars, hairline card framing, and clean vector icons replacing toolbar clutter.
+            - **Choosable Gradients Per Theme:** Independently customize color gradients for **AMOLED** (*Obsidian Violet, Aurora Cyan, Crimson Velvet, Emerald Flux, Solar Ember, OLED Stealth*), **Kindle Paper** (*Warm Sepia, Sage Folio, Dusty Rose, Oxford Ink, Classic Ink*), **Matte / Mac** (*Studio Cyan, Nord Indigo, Titanium Sage, Warm Copper, Anodized Gray*), and **Blackboard** (*Emerald Chalk, Matcha Slate, Lecture Cobalt*) — or toggle **Ambient Gradients** off anytime for classic flat surfaces.
+            - **Live Appearance Studio:** Switch themes and gradient orbs directly from the Android Home header/Settings or the top bar Gradient Studio in the Windows/Mac app.
+            - **Rollback Safety:** Previous UI baseline preserved at git tag `pre-ui-remake` (`82e6f03`, code `NG-REVERT-82E6F03`).
+
+            ### Downloads
+            - **Android (`notegraph.apk`):** Minimalist Home & Editor, Samsung Notes-style PDF import & direct on-page markup (Zoom/Pan, Highlighter, Shape Snap, S-Pen Palm Rejection, Night PDF, Margin Notes, "Open with -> NoteGraph"), reMarkable-style Corner-Fold page turn physics (`Corner Fold`, `3D Curl`, `Slide Stack`), live `[[Wiki-Link]]` autocomplete, ink templates & Fullscreen Sketch Studio, Vault PIN lock, Trash & templates, AMOLED/Kindle/Matte themes with choosable gradients, and drag-and-drop folders with checklists.
+            - **Windows x64 (`NoteGraph-Board-2.0.0-Windows-x64-Setup.exe` & `NoteGraph-Board-2.0.0-Windows-x64-Portable.exe`):** Low-latency infinite classroom board (`F11` Zen mode, Rainbow Vanishing Laser, Dots/Cornell/XY/Blackboard grids, PDF slide markup, `Ctrl+V` screenshot paste, interactive checklist cards, Follow-Up reminders, `Ctrl+K` Command Palette, 2D Knowledge Graph, Gradient Studio, & Android `.zip` vault sync).
+            - **macOS Apple Silicon (`arm64`) & Intel (`x64`) (`NoteGraph-Board-2.0.0-macOS-arm64.dmg`, `NoteGraph-Board-2.0.0-macOS-x64.dmg`, & `.zip`):** Native Electron builds of NoteGraph Board with Matte / Mac Studio gradients and atmospheric canvas themes. *(Unsigned CI build: on first launch, right-click → Open if Gatekeeper warns you.)*
           files: release-assets/*
