@@ -410,11 +410,12 @@ object NoteGraphGradients {
 object ThemeManager {
     private var prefs: SharedPreferences? = null
 
-    var uiEngine by mutableStateOf(UiEngineMode.BESPOKE_LUXURY)
-        private set
+    private var _uiEngine by mutableStateOf(UiEngineMode.BESPOKE_LUXURY)
+    val uiEngine: UiEngineMode
+        get() = _uiEngine
 
     val isLuxuryUi: Boolean
-        get() = uiEngine == UiEngineMode.BESPOKE_LUXURY
+        get() = _uiEngine == UiEngineMode.BESPOKE_LUXURY
 
     var currentTheme by mutableStateOf(AppThemeMode.DEEP_PURPLE_AMOLED)
         private set
@@ -434,7 +435,7 @@ object ThemeManager {
     fun init(context: Context) {
         val sp = context.getSharedPreferences("notegraph_prefs", Context.MODE_PRIVATE)
         prefs = sp
-        uiEngine = UiEngineMode.fromIdOrDefault(sp.getString("ui_engine", UiEngineMode.BESPOKE_LUXURY.id))
+        _uiEngine = UiEngineMode.fromIdOrDefault(sp.getString("ui_engine", UiEngineMode.BESPOKE_LUXURY.id))
         val savedName = sp.getString("app_theme", AppThemeMode.DEEP_PURPLE_AMOLED.name)
         currentTheme = try {
             AppThemeMode.valueOf(savedName ?: AppThemeMode.DEEP_PURPLE_AMOLED.name)
@@ -451,7 +452,7 @@ object ThemeManager {
     }
 
     fun setUiEngine(engine: UiEngineMode) {
-        uiEngine = engine
+        _uiEngine = engine
         prefs?.edit()?.putString("ui_engine", engine.id)?.apply()
     }
 
