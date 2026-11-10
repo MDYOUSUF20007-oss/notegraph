@@ -560,7 +560,7 @@ fun GraphScreen(
                                 val ctrl = GraphBlueprintSpec.bezierControlPoint(p0, p1)
                                 edgePath.reset()
                                 edgePath.moveTo(p0.x, p0.y)
-                                edgePath.quadraticTo(ctrl.x, ctrl.y, p1.x, p1.y)
+                                edgePath.quadraticBezierTo(ctrl.x, ctrl.y, p1.x, p1.y)
 
                                 drawPath(
                                     path = edgePath,

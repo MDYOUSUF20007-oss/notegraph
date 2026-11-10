@@ -576,7 +576,7 @@ private fun GraphDiagramPreview(
                     val ctrl = GraphBlueprintSpec.bezierControlPoint(a, b)
                     val path = Path().apply {
                         moveTo(a.x, a.y)
-                        quadraticTo(ctrl.x, ctrl.y, b.x, b.y)
+                        quadraticBezierTo(ctrl.x, ctrl.y, b.x, b.y)
                     }
                     drawPath(
                         path = path,
