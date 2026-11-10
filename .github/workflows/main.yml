@@ -103,9 +103,10 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           sudo mdutil -a -i off || true
+          for v in /Volumes/NoteGraph*; do [ -e "$v" ] && hdiutil detach "$v" -force || true; done
           for arch in arm64 x64; do
             for attempt in 1 2 3; do
-              npx electron-builder --mac dmg zip --"$arch" --publish never && break
+              npm run "pack:mac:$arch" && break
               if [ "$attempt" -eq 3 ]; then
                 echo "macOS $arch packaging failed after 3 attempts"
                 exit 1

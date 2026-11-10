@@ -11,7 +11,9 @@
     "start": "electron .",
     "test": "node --test test/vault-bridge.test.js",
     "pack:win": "electron-builder --win nsis portable --x64 --publish never",
-    "pack:mac": "electron-builder --mac dmg zip --arm64 --x64 --publish never"
+    "pack:mac:arm64": "electron-builder --mac dmg zip --arm64 --publish never",
+    "pack:mac:x64": "electron-builder --mac dmg zip --x64 --publish never",
+    "pack:mac": "npm run pack:mac:arm64 && npm run pack:mac:x64"
   },
   "dependencies": {
     "jszip": "^3.10.1",

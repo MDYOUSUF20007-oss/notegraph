@@ -48,4 +48,4 @@ mac:
         - x64
   artifactName: NoteGraph-Board-${version}-macOS-${arch}.${ext}
 dmg:
-  title: NoteGraph Board
+  title: "${productName} ${version}${arch}"
