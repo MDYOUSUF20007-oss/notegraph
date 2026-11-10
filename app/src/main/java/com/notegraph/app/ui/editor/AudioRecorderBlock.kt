@@ -58,8 +58,8 @@ fun AudioRecorderBlock(
 
     DisposableEffect(Unit) {
         onDispose {
-            try { recorder?.release() } catch (_: Exception) {}
-            try { player?.release() } catch (_: Exception) {}
+            try { recorder?.release() } catch (e: Exception) {}
+            try { player?.release() } catch (e: Exception) {}
         }
     }
 

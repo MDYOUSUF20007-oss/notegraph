@@ -23,12 +23,12 @@ class SearchViewModel @Inject constructor(
         .flatMapLatest { q ->
             val trimmed = q.trim()
             if (trimmed.isEmpty()) {
-                flowOf(emptyList())
+                flowOf(emptyList<NoteEntity>())
             } else {
                 noteDao.searchNotesWithBlocks(trimmed)
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<NoteEntity>())
 
     fun onQueryChanged(newQuery: String) {
         _query.value = newQuery

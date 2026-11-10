@@ -23,7 +23,7 @@ object ExportManager {
 
     fun parseBlocks(note: NoteEntity): List<NoteBlock> = try {
         json.decodeFromString<List<NoteBlock>>(note.blocksJson)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
         emptyList()
     }
 
@@ -134,7 +134,7 @@ object ExportManager {
                 is NoteBlock.InkBlock -> {
                     val strokes = try {
                         json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
                         emptyList()
                     }
                     val allPoints = strokes.flatMap { it.points }
@@ -170,7 +170,7 @@ object ExportManager {
                             inkPaint.alpha = if (stroke.isHighlighter) 110 else 255
                             inkPaint.color = try {
                                 Color.parseColor(stroke.colorHex)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
                                 Color.BLACK
                             }
                             val path = android.graphics.Path()
@@ -213,7 +213,7 @@ object ExportManager {
                                     bmp.recycle()
                                 }
                             }
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {}
                     }
                     if (!block.extractedOcrText.isNullOrBlank()) {
                         drawWrappedText("OCR Text: ${block.extractedOcrText}", labelPaint, 4f)
@@ -334,7 +334,7 @@ object ExportManager {
                 is NoteBlock.InkBlock -> {
                     val strokes = try {
                         json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
                         emptyList()
                     }
                     slides.add(SlideData(
@@ -534,7 +534,7 @@ object ExportManager {
                 is NoteBlock.InkBlock -> {
                     val strokes = try {
                         json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
                         emptyList()
                     }
                     val allPts = strokes.flatMap { it.points }
@@ -634,7 +634,7 @@ object ExportManager {
                 is NoteBlock.InkBlock -> {
                     val strokes = try {
                         json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
                         emptyList()
                     }
                     val allPoints = strokes.flatMap { it.points }
@@ -670,7 +670,7 @@ object ExportManager {
                             inkPaint.alpha = if (stroke.isHighlighter) 110 else 255
                             inkPaint.color = try {
                                 Color.parseColor(stroke.colorHex)
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
                                 Color.BLACK
                             }
                             val path = android.graphics.Path()
@@ -711,7 +711,7 @@ object ExportManager {
                                     bmp.recycle()
                                 }
                             }
-                        } catch (_: Exception) {}
+                        } catch (e: Exception) {}
                     }
                     if (!block.extractedOcrText.isNullOrBlank()) {
                         drawTextWrapped("OCR: ${block.extractedOcrText}", labelPaint, 6f)

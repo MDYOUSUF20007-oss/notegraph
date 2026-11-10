@@ -104,7 +104,7 @@ class EditorViewModel @Inject constructor(
                     }
                 }
 
-                resultList
+                resultList.toList()
             }
         } else {
             flowOf(emptyList<BacklinkItem>())

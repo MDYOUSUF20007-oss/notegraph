@@ -430,7 +430,7 @@ fun InkCanvas(
                     } else {
                         try {
                             Color(android.graphics.Color.parseColor(stroke.colorHex)).copy(alpha = alpha)
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
                             Color.White.copy(alpha = alpha)
                         }
                     }
@@ -513,7 +513,7 @@ fun InkCanvas(
                         val alpha = if (mode == InkMode.HIGHLIGHTER) 0.4f else 1f
                         val color = try {
                             Color(android.graphics.Color.parseColor(InkPresetColorHex[selectedColorIndex])).copy(alpha = alpha)
-                        } catch (_: Exception) {
+                        } catch (e: Exception) {
                             Color.White.copy(alpha = alpha)
                         }
                         drawPath(
