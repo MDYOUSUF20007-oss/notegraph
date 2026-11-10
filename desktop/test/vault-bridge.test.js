@@ -92,3 +92,37 @@ test('noteToMarkdown exports checklist markdown and buildMultiPagePdfFromJpegs b
   assert.ok(text.includes('/Count 2'));
   assert.ok(text.trimEnd().endsWith('%%EOF'));
 });
+
+test('importAndroidNotesArray converts Android PdfBlock annotations into summary card', () => {
+  const androidPdfNote = {
+    id: 'pdf_note_1',
+    title: 'Thermodynamics Lecture',
+    content: '#study #physics',
+    blocksJson: JSON.stringify([
+      {
+        type: 'pdf',
+        id: 'blk_pdf_1',
+        filePath: '/data/user/0/com.notegraph.app/files/pdfs/sample.pdf',
+        fileName: 'Thermo_Ch3.pdf',
+        pageCount: 14,
+        currentPage: 2,
+        annotationsJson: JSON.stringify([
+          { pageIndex: 2, strokes: [{ points: [{ x: 0.1, y: 0.2 }, { x: 0.4, y: 0.2 }] }], pageNote: 'Key entropy formula' }
+        ])
+      }
+    ])
+  };
+  const imported = VaultBridge.importAndroidNotesArray([androidPdfNote], {
+    version: 2,
+    activeTheme: 'DEEP_PURPLE_AMOLED',
+    activeNoteId: null,
+    folders: [],
+    notes: []
+  });
+  assert.equal(imported.notes.length, 1);
+  const cards = imported.notes[0].board.pages[0].cards;
+  const pdfCard = cards.find((c) => c.title.includes('Thermo_Ch3.pdf'));
+  assert.ok(pdfCard);
+  assert.ok(pdfCard.content.includes('14 pages'));
+  assert.ok(pdfCard.content.includes('Page 3: Key entropy formula'));
+});

@@ -314,6 +314,37 @@
           } catch (e) {
             // Skip malformed stroke JSON safely
           }
+        } else if (blk.type === 'pdf') {
+          let anns = [];
+          try {
+            anns = typeof blk.annotationsJson === 'string'
+              ? JSON.parse(blk.annotationsJson)
+              : Array.isArray(blk.annotationsJson) ? blk.annotationsJson : [];
+          } catch (e) {
+            anns = [];
+          }
+          const annotatedPages = anns.filter((a) => (a && ((a.strokes && a.strokes.length) || (a.pageNote && a.pageNote.trim()))));
+          const notesLines = annotatedPages
+            .filter((a) => a.pageNote && a.pageNote.trim())
+            .map((a) => `Page ${Number(a.pageIndex || 0) + 1}: ${a.pageNote.trim()}`);
+          const summaryParts = [
+            `File: ${blk.fileName || 'Document.pdf'} (${Number(blk.pageCount) || 0} pages)`,
+            `Annotated Pages: ${annotatedPages.length}`,
+            notesLines.length ? '\nMargin Notes:\n' + notesLines.join('\n') : '\nUse Desktop "Import PDF Slides" to render & ink slides on this board.'
+          ];
+          cards.push({
+            id: blk.id || makeId('card'),
+            kind: 'note',
+            x: 90,
+            y: nextY,
+            w: 400,
+            h: 200,
+            title: `📄 ${blk.fileName || 'PDF Document'}`,
+            content: summaryParts.join('\n'),
+            colorHex: '#38BDF8',
+            locked: false
+          });
+          nextY += 225;
         }
       }
 

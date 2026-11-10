@@ -11,8 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.common.NoteSecurityManager
+import com.notegraph.app.ui.common.VaultPinDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -24,8 +28,10 @@ fun SearchScreen(
     onNoteClick: (String) -> Unit,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val query by viewModel.query.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
+    var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -109,32 +115,47 @@ fun SearchScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onNoteClick(note.id) },
+                                .clickable {
+                                    if (note.isLocked && NoteSecurityManager.hasPin(context)) {
+                                        pendingUnlockNote = note
+                                    } else {
+                                        onNoteClick(note.id)
+                                    }
+                                },
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
-                                    text = note.title.ifBlank { "Untitled Note" },
+                                    text = if (note.isLocked) "🔒 ${note.title.ifBlank { "Untitled Note" }}" else note.title.ifBlank { "Untitled Note" },
                                     style = MaterialTheme.typography.titleMedium
                                 )
-                                if (note.content.isNotBlank()) {
+                                if (note.isLocked) {
                                     Spacer(Modifier.height(4.dp))
                                     Text(
-                                        text = note.content.take(160),
+                                        text = "Locked note — tap & enter Vault PIN to view",
                                         style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 3,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (note.blocksJson.length > 2) {
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        text = "Contains multimedia blocks / OCR data",
-                                        style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.secondary
                                     )
+                                } else {
+                                    if (note.content.isNotBlank()) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = note.content.take(160),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 3,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    if (note.blocksJson.length > 2) {
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = "Contains multimedia blocks / PDF / OCR data",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.secondary
+                                        )
+                                    }
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 Text(
@@ -148,5 +169,19 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    pendingUnlockNote?.let { locked ->
+        VaultPinDialog(
+            isSettingNewPin = false,
+            title = "Unlock Note",
+            subtitle = "\"${locked.title.ifBlank { "Untitled" }}\" is protected.",
+            onDismiss = { pendingUnlockNote = null },
+            onVerify = { attempt -> NoteSecurityManager.verifyPin(context, attempt) },
+            onSuccess = {
+                pendingUnlockNote = null
+                onNoteClick(locked.id)
+            }
+        )
     }
 }

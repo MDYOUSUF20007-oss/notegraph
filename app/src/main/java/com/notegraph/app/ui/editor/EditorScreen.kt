@@ -6,8 +6,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
@@ -23,10 +27,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
+import com.notegraph.app.ui.common.NoteSecurityManager
+import com.notegraph.app.ui.common.VaultPinDialog
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.serialization.json.Json
@@ -42,14 +51,45 @@ fun EditorScreen(
     val context = LocalContext.current
     val note by viewModel.note.collectAsState()
     val backlinks by viewModel.backlinks.collectAsState()
+    val outgoingLinks by viewModel.outgoingLinks.collectAsState()
+    val allNotes by viewModel.allNotes.collectAsState()
     val blocks by viewModel.blocks.collectAsState()
 
     var title by remember(note?.id) { mutableStateOf(note?.title ?: "") }
-    var content by remember(note?.id) { mutableStateOf(note?.content ?: "") }
+    var contentField by remember(note?.id) {
+        mutableStateOf(TextFieldValue(note?.content ?: ""))
+    }
     var showExportSheet by remember { mutableStateOf(false) }
+    var showLinkPickerDialog by remember { mutableStateOf(false) }
+    var showPinSetupDialog by remember { mutableStateOf(false) }
+    var pendingAudioSeekMs by remember { mutableStateOf<Long?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val json = remember { Json { ignoreUnknownKeys = true } }
+
+    // Keep editor state initialized once note loads asynchronously from Room
+    LaunchedEffect(note?.id) {
+        val loaded = note
+        if (loaded != null) {
+            if (title.isEmpty() && loaded.title.isNotEmpty()) title = loaded.title
+            if (contentField.text.isEmpty() && loaded.content.isNotEmpty()) {
+                contentField = TextFieldValue(loaded.content, TextRange(loaded.content.length))
+            }
+        }
+    }
+
+    val importPdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        viewModel.importPdfFromUri(uri) { ok ->
+            Toast.makeText(
+                context,
+                if (ok) "PDF imported — draw or highlight right on top!" else "Could not open PDF",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     // Intercept back button to persist immediately
     BackHandler {
@@ -284,6 +324,24 @@ fun EditorScreen(
                     }
                 },
                 actions = {
+                    // Lock / Unlock Note
+                    val isLocked = note?.isLocked == true
+                    IconButton(onClick = {
+                        if (isLocked) {
+                            viewModel.setNoteLocked(false)
+                            Toast.makeText(context, "Note unlocked", Toast.LENGTH_SHORT).show()
+                        } else if (NoteSecurityManager.hasPin(context)) {
+                            viewModel.setNoteLocked(true)
+                            Toast.makeText(context, "Note locked with Vault PIN", Toast.LENGTH_SHORT).show()
+                        } else {
+                            showPinSetupDialog = true
+                        }
+                    }) {
+                        Icon(
+                            if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            contentDescription = if (isLocked) "Unlock Note" else "Lock Note"
+                        )
+                    }
                     // Book Reading Mode
                     IconButton(onClick = {
                         viewModel.saveNow()
@@ -303,7 +361,7 @@ fun EditorScreen(
             )
         },
         bottomBar = {
-            // Multimedia & Checklist Toolbar
+            // Multimedia, PDF & Checklist Toolbar
             BottomAppBar(tonalElevation = 4.dp) {
                 Row(
                     modifier = Modifier
@@ -312,6 +370,9 @@ fun EditorScreen(
                         .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
+                    TextButton(onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) }) {
+                        Text("📄 PDF")
+                    }
                     TextButton(onClick = { viewModel.addChecklistBlock() }) {
                         Text("☑ To-Do")
                     }
@@ -323,6 +384,9 @@ fun EditorScreen(
                     }
                     TextButton(onClick = { viewModel.addImageBlock() }) {
                         Text("🖼 Image/OCR")
+                    }
+                    TextButton(onClick = { showLinkPickerDialog = true }) {
+                        Text("🔗 [[Link]]")
                     }
                 }
             }
@@ -337,16 +401,66 @@ fun EditorScreen(
         ) {
             // Main text editor
             OutlinedTextField(
-                value = content,
-                onValueChange = {
-                    content = it
-                    viewModel.updateContent(it)
+                value = contentField,
+                onValueChange = { updated ->
+                    contentField = updated
+                    viewModel.updateContent(updated.text)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 120.dp),
-                placeholder = { Text("Start typing notes or use [[Wiki-Links]]...") }
+                placeholder = { Text("Start typing notes or type [[ to link notes…") }
             )
+
+            // Live Obsidian [[Wiki-Link]] Autocomplete Bar while typing `[[query`
+            val activeWikiMatch = remember(contentField) {
+                val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
+                val beforeCursor = contentField.text.substring(0, cursor)
+                Regex("""\[\[([^\[\]\n]*)$""").find(beforeCursor)
+            }
+            if (activeWikiMatch != null) {
+                val rawQuery = activeWikiMatch.groupValues[1].trim()
+                val candidates = remember(allNotes, note?.id, rawQuery) {
+                    allNotes
+                        .filter { it.id != note?.id && it.title.isNotBlank() }
+                        .filter { rawQuery.isBlank() || it.title.contains(rawQuery, ignoreCase = true) }
+                        .take(10)
+                }
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Text(
+                            text = if (candidates.isEmpty()) "No matching notes (finish with ]] to create)" else "Tap to link note:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (candidates.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(candidates, key = { it.id }) { candidate ->
+                                    SuggestionChip(
+                                        onClick = {
+                                            val startIdx = activeWikiMatch.range.first
+                                            val cursor = contentField.selection.start.coerceIn(startIdx, contentField.text.length)
+                                            val inserted = "[[${candidate.title}]] "
+                                            val newText = contentField.text.replaceRange(startIdx, cursor, inserted)
+                                            val newCursor = startIdx + inserted.length
+                                            contentField = TextFieldValue(newText, TextRange(newCursor))
+                                            viewModel.updateContent(newText)
+                                        },
+                                        label = { Text("[[${candidate.title}]]") }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -358,18 +472,26 @@ fun EditorScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 AssistChip(
+                    onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) },
+                    label = { Text("📄 Add PDF & Markup") }
+                )
+                AssistChip(
                     onClick = { viewModel.addChecklistBlock() },
-                    label = { Text("☑ Add To-Do Checklist") }
+                    label = { Text("☑ Add To-Do") }
                 )
                 AssistChip(
                     onClick = { viewModel.addInkBlock() },
                     label = { Text("✏️ Add Sketch") }
                 )
+                AssistChip(
+                    onClick = { showLinkPickerDialog = true },
+                    label = { Text("🔗 Link Note") }
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Multimedia & Checklist blocks
+            // Multimedia, PDF & Checklist blocks
             blocks.forEach { block ->
                 key(block.id) {
                     val blockLabel = when (block) {
@@ -378,6 +500,7 @@ fun EditorScreen(
                         is NoteBlock.AudioBlock -> "Voice Recording"
                         is NoteBlock.ImageBlock -> "Image & OCR"
                         is NoteBlock.ChecklistBlock -> "To-Do Checklist"
+                        is NoteBlock.PdfBlock -> "PDF Document & Markup"
                     }
                     Card(
                         modifier = Modifier
@@ -429,11 +552,10 @@ fun EditorScreen(
                                         placeholder = { Text("Text block…") }
                                     )
                                     block.audioTimestampMs?.let { ts ->
-                                        Text(
-                                            "🔗 Audio @ ${ts / 1000}s",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
-                                            color = MaterialTheme.colorScheme.outline
+                                        AssistChip(
+                                            onClick = { pendingAudioSeekMs = ts },
+                                            label = { Text("▶ Jump to Audio @ ${ts / 1000}s") },
+                                            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
                                         )
                                     }
                                 }
@@ -449,6 +571,10 @@ fun EditorScreen(
                                     InkCanvas(
                                         strokes = strokes,
                                         heightDp = block.heightDp,
+                                        paperTemplate = block.paperTemplate,
+                                        onTemplateChanged = { tmpl ->
+                                            viewModel.updateInkTemplate(block.id, tmpl)
+                                        },
                                         onStrokesChanged = { newStrokes ->
                                             viewModel.updateInkStrokes(block.id, newStrokes)
                                         }
@@ -459,6 +585,8 @@ fun EditorScreen(
                                     AudioRecorderBlock(
                                         audioFilePath = block.filePath,
                                         durationMs = block.durationMs,
+                                        seekToRequestMs = pendingAudioSeekMs,
+                                        onSeekHandled = { pendingAudioSeekMs = null },
                                         onRecordingStarted = { _, startMs ->
                                             viewModel.onAudioRecordingStarted(startMs)
                                         },
@@ -482,10 +610,10 @@ fun EditorScreen(
                                             viewModel.updateBlock(
                                                 block.copy(extractedOcrText = text)
                                             )
-                                            val current = content
+                                            val current = contentField.text
                                             val appended = if (current.isBlank()) text
                                                 else "$current\n\n--- OCR ---\n$text"
-                                            content = appended
+                                            contentField = TextFieldValue(appended, TextRange(appended.length))
                                             viewModel.updateContent(appended)
                                         }
                                     )
@@ -511,6 +639,15 @@ fun EditorScreen(
                                         }
                                     )
                                 }
+
+                                is NoteBlock.PdfBlock -> {
+                                    PdfAnnotationBlock(
+                                        block = block,
+                                        onBlockUpdated = { updatedPdf ->
+                                            viewModel.updateBlock(updatedPdf)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -518,6 +655,39 @@ fun EditorScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            // Outgoing Wiki-Links section (Obsidian parity)
+            if (outgoingLinks.isNotEmpty()) {
+                Text("Linked Notes (${outgoingLinks.size})", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(outgoingLinks, key = { it.id }) { link ->
+                        InputChip(
+                            selected = link.isResolved,
+                            onClick = {
+                                viewModel.saveNow()
+                                if (link.targetNoteId != null) {
+                                    onNoteClick(link.targetNoteId)
+                                } else {
+                                    viewModel.openOrCreateNoteByTitle(link.targetNoteTitle) { targetId ->
+                                        onNoteClick(targetId)
+                                    }
+                                }
+                            },
+                            label = {
+                                Text(
+                                    if (link.isResolved) "[[${link.targetNoteTitle}]]"
+                                    else "[[${link.targetNoteTitle}]] (+ Create)"
+                                )
+                            }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Backlinks section
             Text("Backlinks (${backlinks.size})", style = MaterialTheme.typography.titleSmall)
@@ -557,5 +727,83 @@ fun EditorScreen(
 
             Spacer(modifier = Modifier.height(80.dp))
         }
+    }
+
+    // Searchable [[Wiki-Link]] Picker Dialog
+    if (showLinkPickerDialog) {
+        var linkQuery by remember { mutableStateOf("") }
+        val filtered = remember(allNotes, note?.id, linkQuery) {
+            val q = linkQuery.trim()
+            allNotes
+                .filter { it.id != note?.id }
+                .filter { q.isBlank() || it.title.contains(q, ignoreCase = true) || it.content.contains(q, ignoreCase = true) }
+        }
+        AlertDialog(
+            onDismissRequest = { showLinkPickerDialog = false },
+            title = { Text("Insert [[Wiki-Link]]") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = linkQuery,
+                        onValueChange = { linkQuery = it },
+                        placeholder = { Text("Search note by title or create new…") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LazyColumn(modifier = Modifier.heightIn(max = 260.dp)) {
+                        items(filtered, key = { it.id }) { target ->
+                            ListItem(
+                                headlineContent = { Text(target.title.ifBlank { "Untitled" }) },
+                                supportingContent = if (target.content.isNotBlank()) {
+                                    { Text(target.content.take(60), maxLines = 1) }
+                                } else null,
+                                modifier = Modifier.clickable {
+                                    val insert = "[[${target.title.ifBlank { "Untitled" }}]] "
+                                    val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
+                                    val newText = contentField.text.replaceRange(cursor, cursor, insert)
+                                    contentField = TextFieldValue(newText, TextRange(cursor + insert.length))
+                                    viewModel.updateContent(newText)
+                                    showLinkPickerDialog = false
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (linkQuery.isNotBlank()) {
+                    Button(onClick = {
+                        val insert = "[[${linkQuery.trim()}]] "
+                        val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
+                        val newText = contentField.text.replaceRange(cursor, cursor, insert)
+                        contentField = TextFieldValue(newText, TextRange(cursor + insert.length))
+                        viewModel.updateContent(newText)
+                        showLinkPickerDialog = false
+                    }) {
+                        Text("Link \"${linkQuery.trim()}\"")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLinkPickerDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // First-time Vault PIN setup dialog when locking a note
+    if (showPinSetupDialog) {
+        VaultPinDialog(
+            isSettingNewPin = true,
+            title = "Set Vault PIN",
+            subtitle = "Create a PIN to protect locked notes across Home, Reader, and Search.",
+            onDismiss = { showPinSetupDialog = false },
+            onVerify = { true },
+            onSuccess = { newPin ->
+                NoteSecurityManager.setPin(context, newPin)
+                viewModel.setNoteLocked(true)
+                showPinSetupDialog = false
+                Toast.makeText(context, "PIN saved & note locked", Toast.LENGTH_SHORT).show()
+            }
+        )
     }
 }

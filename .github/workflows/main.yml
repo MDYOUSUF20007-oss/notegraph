@@ -136,7 +136,7 @@ jobs:
           body: |
             Automated cross-platform builds from the latest `main` commit:
 
-            - **Android APK:** `notegraph.apk` — Tri-Theme Matrix (AMOLED, Kindle Parchment, Matte Studio), customizable drag-and-drop folders, interactive checklists, 3D book mode & ink canvas.
+            - **Android APK:** `notegraph.apk` — Samsung Notes-style PDF Import & Direct On-Page Markup (Zoom/Pan, Highlighter, Shape Snap, S-Pen Palm Rejection, Night PDF, Page Notes, "Open With -> NoteGraph"), reMarkable-style geometric Corner-Fold page turn physics (`Corner Fold`, `3D Curl`, `Slide Stack`), live `[[Wiki-Link]]` autocomplete, Ink paper templates & Fullscreen Sketch Studio, Vault PIN lock, Templates & Trash recovery, Tri-Theme Matrix (AMOLED, Kindle Parchment, Matte Studio), and customizable drag-and-drop folders.
             - **Windows (x64):** `NoteGraph-Board-*-Windows-x64-Setup.exe` & `NoteGraph-Board-*-Windows-x64-Portable.exe` — Low-latency Classroom Whiteboard (`F11` Zen mode, Rainbow Vanishing Laser, Cornell/XY grids, PDF slide markup, `Ctrl+V` screenshot paste, interactive checklists, Follow-Up CRM dates, `Ctrl+K` Command Palette, 2D Knowledge Graph, & Android `.zip` vault sync).
             - **macOS (Apple Silicon arm64 & Intel x64):** `.dmg` & `.zip` builds of NoteGraph Board. *(Unsigned CI build: on macOS first launch, right-click → Open if Gatekeeper prompts.)*
           files: release-assets/*

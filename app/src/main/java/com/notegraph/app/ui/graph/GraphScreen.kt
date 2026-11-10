@@ -1,6 +1,7 @@
 package com.notegraph.app.ui.graph
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -12,14 +13,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +31,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.common.NoteSecurityManager
+import com.notegraph.app.ui.common.VaultPinDialog
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -35,6 +42,7 @@ import kotlin.math.sqrt
 data class GraphNode(
     val noteId: String,
     val title: String,
+    val folderColor: Color?,
     var x: Float,
     var y: Float,
     var vx: Float = 0f,
@@ -48,14 +56,39 @@ fun GraphScreen(
     onNoteClick: (String) -> Unit = {},
     viewModel: GraphViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val notes by viewModel.notes.collectAsState()
     val links by viewModel.links.collectAsState()
+    val folders by viewModel.folders.collectAsState()
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    var searchQuery by remember { mutableStateOf("") }
+    var hideOrphans by remember { mutableStateOf(false) }
+    var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
+    val notesById = remember(notes) { notes.associateBy { it.id } }
+
+    fun handleNodeOpen(noteId: String) {
+        val target = notesById[noteId]
+        if (target != null && target.isLocked && NoteSecurityManager.hasPin(context)) {
+            pendingUnlockNote = target
+        } else {
+            onNoteClick(noteId)
+        }
+    }
 
     val textMeasurer = rememberTextMeasurer()
     val labelColor = MaterialTheme.colorScheme.onSurface
+    val folderColorsById = remember(folders) {
+        folders.associate { f ->
+            val col = try {
+                Color(android.graphics.Color.parseColor(f.colorHex))
+            } catch (_: Exception) {
+                null
+            }
+            f.id to col
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -80,7 +113,7 @@ fun GraphScreen(
             val defaultCenterY = if (viewHeight > 0f) viewHeight / 2f else 600f
 
             // Initialize node positions in a circular layout centered on screen
-            val nodes = remember(notes) {
+            val nodes = remember(notes, folderColorsById) {
                 val count = notes.size.coerceAtLeast(1)
                 notes.mapIndexed { index, note ->
                     val angle = (2.0 * Math.PI * index / count).toFloat()
@@ -88,6 +121,7 @@ fun GraphScreen(
                     GraphNode(
                         noteId = note.id,
                         title = note.title.ifBlank { "Untitled" },
+                        folderColor = note.folderId?.let { folderColorsById[it] },
                         x = defaultCenterX + dist * cos(angle),
                         y = defaultCenterY + dist * sin(angle)
                     )
@@ -202,55 +236,58 @@ fun GraphScreen(
                 }
             }
 
+            val connectedNodeIds = remember(edges) {
+                edges.flatMap { listOf(it.first.noteId, it.second.noteId) }.toSet()
+            }
+            val qTrim = searchQuery.trim().lowercase()
+            val visibleNodes = remember(nodes, connectedNodeIds, hideOrphans) {
+                if (hideOrphans) nodes.filter { it.noteId in connectedNodeIds } else nodes
+            }
+
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(nodes) {
+                    .pointerInput(visibleNodes) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             val downPos = down.position
                             val downTime = System.currentTimeMillis()
                             var isTransforming = false
 
+                            // Check if finger touched directly on a node (supports individual node dragging!)
+                            var touchedNode: GraphNode? = null
+                            var minDistSq = Float.MAX_VALUE
+                            for (node in visibleNodes) {
+                                val sx = node.x * scale + offset.x
+                                val sy = node.y * scale + offset.y
+                                val dx = downPos.x - sx
+                                val dy = downPos.y - sy
+                                val dSq = dx * dx + dy * dy
+                                if (dSq < minDistSq) {
+                                    minDistSq = dSq
+                                    touchedNode = node
+                                }
+                            }
+                            val nodeGrabRadius = maxOf(42f * scale, 65f)
+                            val grabbedNode = if (touchedNode != null && minDistSq <= nodeGrabRadius * nodeGrabRadius) touchedNode else null
+
                             do {
                                 val event = awaitPointerEvent()
                                 val activePointers = event.changes.filter { it.pressed }
 
                                 if (activePointers.isEmpty()) {
-                                    // Finger lifted: check if it was a quick tap
                                     val duration = System.currentTimeMillis() - downTime
-                                    if (!isTransforming && duration < 350) {
-                                        var closestNode: GraphNode? = null
-                                        var minDistanceSq = Float.MAX_VALUE
-
-                                        for (node in nodes) {
-                                            val nodeScreenX = node.x * scale + offset.x
-                                            val nodeScreenY = node.y * scale + offset.y
-                                            val dx = downPos.x - nodeScreenX
-                                            val dy = downPos.y - nodeScreenY
-                                            val distSq = dx * dx + dy * dy
-                                            if (distSq < minDistanceSq) {
-                                                minDistanceSq = distSq
-                                                closestNode = node
-                                            }
-                                        }
-
-                                        // Generous hit radius for easy finger tap
-                                        val hitRadius = maxOf(44f * scale, 95f)
-                                        if (closestNode != null && minDistanceSq <= hitRadius * hitRadius) {
-                                            onNoteClick(closestNode.noteId)
-                                        }
+                                    if (!isTransforming && duration < 350 && grabbedNode != null) {
+                                        handleNodeOpen(grabbedNode.noteId)
                                     }
                                     break
                                 }
 
                                 if (activePointers.size > 1) {
-                                    // Multi-touch pinch zoom & pan
                                     isTransforming = true
                                     val zoom = event.calculateZoom()
                                     val pan = event.calculatePan()
 
-                                    // Compute centroid of active touch pointers
                                     var sumX = 0f
                                     var sumY = 0f
                                     for (p in activePointers) {
@@ -265,15 +302,22 @@ fun GraphScreen(
                                     scale = newScale
                                     event.changes.forEach { it.consume() }
                                 } else {
-                                    // Single-finger movement
                                     val pointer = activePointers.first()
                                     val diff = pointer.position - downPos
                                     if (diff.x * diff.x + diff.y * diff.y > 144f) {
                                         isTransforming = true
                                     }
                                     if (isTransforming) {
-                                        val pan = pointer.position - pointer.previousPosition
-                                        offset += pan
+                                        val delta = pointer.position - pointer.previousPosition
+                                        if (grabbedNode != null) {
+                                            grabbedNode.x += delta.x / scale
+                                            grabbedNode.y += delta.y / scale
+                                            grabbedNode.vx = 0f
+                                            grabbedNode.vy = 0f
+                                            simTick++
+                                        } else {
+                                            offset += delta
+                                        }
                                         pointer.consume()
                                     }
                                 }
@@ -281,7 +325,6 @@ fun GraphScreen(
                         }
                     }
             ) {
-                // Read simTick to ensure canvas redraws during physics iterations
                 val _tick = simTick
 
                 withTransform({
@@ -290,52 +333,102 @@ fun GraphScreen(
                 }) {
                     // Draw edge connections
                     for ((src, dst) in edges) {
+                        if (hideOrphans && (src.noteId !in connectedNodeIds || dst.noteId !in connectedNodeIds)) continue
+                        val edgeMatchesSearch = qTrim.isNotEmpty() &&
+                            (src.title.lowercase().contains(qTrim) || dst.title.lowercase().contains(qTrim))
                         drawLine(
-                            color = Color(0xFF8B5CF6).copy(alpha = 0.75f),
+                            color = if (edgeMatchesSearch) Color(0xFF00FFFF).copy(alpha = 0.85f)
+                            else Color(0xFF8B5CF6).copy(alpha = if (qTrim.isEmpty()) 0.72f else 0.25f),
                             start = Offset(src.x, src.y),
                             end = Offset(dst.x, dst.y),
-                            strokeWidth = 3f
+                            strokeWidth = if (edgeMatchesSearch) 4f else 3f
                         )
                     }
 
-                    // Connected node IDs for visual highlighting
-                    val connectedNodeIds = edges.flatMap { listOf(it.first.noteId, it.second.noteId) }.toSet()
-
-                    // Draw nodes
-                    for (node in nodes) {
+                    // Draw nodes (with folder-color tint & search highlight)
+                    for (node in visibleNodes) {
                         val isConnected = connectedNodeIds.contains(node.noteId)
-                        val nodeColor = if (isConnected) Color(0xFF8B5CF6) else Color(0xFF42A5F5)
-                        val haloColor = if (isConnected) Color(0x448B5CF6) else Color(0x3342A5F5)
+                        val isSearchMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
+                        val dimAlpha = if (qTrim.isNotEmpty() && !isSearchMatch) 0.28f else 1f
+                        val nodeColor = (node.folderColor ?: if (isConnected) Color(0xFF8B5CF6) else Color(0xFF42A5F5))
+                            .copy(alpha = dimAlpha)
+                        val haloColor = nodeColor.copy(alpha = 0.26f * dimAlpha)
 
-                        // Outer halo
+                        if (isSearchMatch) {
+                            drawCircle(
+                                color = Color(0xFF00FFFF),
+                                radius = 38f,
+                                center = Offset(node.x, node.y),
+                                style = Stroke(width = 3f)
+                            )
+                        }
+
                         drawCircle(
                             color = haloColor,
-                            radius = 32f,
+                            radius = if (isConnected) 34f else 28f,
                             center = Offset(node.x, node.y)
                         )
-                        // Inner circle
                         drawCircle(
                             color = nodeColor,
-                            radius = 22f,
+                            radius = if (isConnected) 24f else 20f,
                             center = Offset(node.x, node.y)
                         )
-                        // Glowing center core
                         drawCircle(
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = Color.White.copy(alpha = 0.85f * dimAlpha),
                             radius = 7f,
                             center = Offset(node.x, node.y)
                         )
 
-                        // Node title label
                         val label = if (node.title.length > 15) node.title.take(14) + "…" else node.title
                         drawText(
                             textMeasurer = textMeasurer,
                             text = label,
                             topLeft = Offset(node.x - 36f, node.y + 26f),
-                            style = TextStyle(color = labelColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            style = TextStyle(
+                                color = labelColor.copy(alpha = dimAlpha),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSearchMatch) FontWeight.Bold else FontWeight.Medium
+                            )
                         )
                     }
                 }
+            }
+
+            // Top-Left Search & Graph Filter Overlay
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 12.dp, start = 12.dp, end = 76.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                    tonalElevation = 4.dp,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Filter nodes…", fontSize = 13.sp) },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                FilterChip(
+                    selected = hideOrphans,
+                    onClick = { hideOrphans = !hideOrphans },
+                    label = { Text(if (hideOrphans) "Linked" else "All", fontSize = 12.sp) }
+                )
             }
 
             // Floating Zoom & Reset Controls
@@ -432,7 +525,7 @@ fun GraphScreen(
                                 val connectionCount = edges.count { it.first.noteId == note.id || it.second.noteId == note.id }
                                 InputChip(
                                     selected = false,
-                                    onClick = { onNoteClick(note.id) },
+                                    onClick = { handleNodeOpen(note.id) },
                                     label = {
                                         Text(
                                             if (connectionCount > 0)
@@ -442,7 +535,7 @@ fun GraphScreen(
                                         )
                                     },
                                     leadingIcon = {
-                                        Text(if (connectionCount > 0) "🔗" else "📄", fontSize = 12.sp)
+                                        Text(if (note.isLocked) "🔒" else if (connectionCount > 0) "🔗" else "📄", fontSize = 12.sp)
                                     }
                                 )
                             }
@@ -451,5 +544,19 @@ fun GraphScreen(
                 }
             }
         }
+    }
+
+    pendingUnlockNote?.let { locked ->
+        VaultPinDialog(
+            isSettingNewPin = false,
+            title = "Unlock Note",
+            subtitle = "\"${locked.title.ifBlank { "Untitled" }}\" is protected.",
+            onDismiss = { pendingUnlockNote = null },
+            onVerify = { attempt -> NoteSecurityManager.verifyPin(context, attempt) },
+            onSuccess = {
+                pendingUnlockNote = null
+                onNoteClick(locked.id)
+            }
+        )
     }
 }

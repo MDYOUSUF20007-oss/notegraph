@@ -32,6 +32,8 @@ import java.io.File
 fun AudioRecorderBlock(
     audioFilePath: String,
     durationMs: Long,
+    seekToRequestMs: Long? = null,
+    onSeekHandled: () -> Unit = {},
     onRecordingStarted: (filePath: String, startTimeMs: Long) -> Unit,
     onRecordingStopped: (durationMs: Long) -> Unit
 ) {
@@ -43,6 +45,33 @@ fun AudioRecorderBlock(
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var recordStartTime by remember { mutableLongStateOf(0L) }
     var playbackPosition by remember { mutableIntStateOf(0) }
+
+    // Seek & play from timestamped text block taps
+    LaunchedEffect(seekToRequestMs, audioFilePath) {
+        val targetMs = seekToRequestMs
+        if (targetMs != null && !isRecording && File(audioFilePath).exists()) {
+            try {
+                player?.release()
+                val mp = MediaPlayer().apply {
+                    setDataSource(audioFilePath)
+                    prepare()
+                    val clamped = targetMs.toInt().coerceIn(0, duration.coerceAtLeast(0))
+                    seekTo(clamped)
+                    start()
+                    setOnCompletionListener {
+                        isPlaying = false
+                        playbackPosition = 0
+                    }
+                }
+                player = mp
+                playbackPosition = targetMs.toInt()
+                isPlaying = true
+            } catch (_: Exception) {
+            } finally {
+                onSeekHandled()
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()

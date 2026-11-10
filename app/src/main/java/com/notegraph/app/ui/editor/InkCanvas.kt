@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,8 +25,12 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.StrokePoint
 import com.notegraph.app.ui.theme.AppThemeMode
@@ -79,12 +84,85 @@ private val InkPresetColorHex = listOf(
 fun InkCanvas(
     strokes: List<InkStroke>,
     heightDp: Float,
+    paperTemplate: String = "DEFAULT",
+    onTemplateChanged: ((String) -> Unit)? = null,
     onStrokesChanged: (List<InkStroke>) -> Unit
+) {
+    var showFullscreenCanvas by remember { mutableStateOf(false) }
+
+    InkCanvasContent(
+        strokes = strokes,
+        heightDp = heightDp,
+        isFullscreen = false,
+        paperTemplate = paperTemplate,
+        onTemplateChanged = onTemplateChanged,
+        onToggleFullscreen = { showFullscreenCanvas = true },
+        onStrokesChanged = onStrokesChanged
+    )
+
+    if (showFullscreenCanvas) {
+        Dialog(
+            onDismissRequest = { showFullscreenCanvas = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Fullscreen Sketch Studio", style = MaterialTheme.typography.titleMedium)
+                        FilledTonalButton(onClick = { showFullscreenCanvas = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Done", modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Done")
+                        }
+                    }
+                    InkCanvasContent(
+                        strokes = strokes,
+                        heightDp = heightDp,
+                        isFullscreen = true,
+                        paperTemplate = paperTemplate,
+                        onTemplateChanged = onTemplateChanged,
+                        onToggleFullscreen = { showFullscreenCanvas = false },
+                        onStrokesChanged = onStrokesChanged,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val PAPER_TEMPLATE_OPTIONS = listOf(
+    "DEFAULT" to "Theme",
+    "DOTS" to "Dots",
+    "GRID" to "Grid",
+    "LINED" to "Lined",
+    "CORNELL" to "Cornell",
+    "BLANK" to "Blank"
+)
+
+@Composable
+private fun InkCanvasContent(
+    strokes: List<InkStroke>,
+    heightDp: Float,
+    isFullscreen: Boolean,
+    paperTemplate: String,
+    onTemplateChanged: ((String) -> Unit)?,
+    onToggleFullscreen: () -> Unit,
+    onStrokesChanged: (List<InkStroke>) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var mode by remember { mutableStateOf(InkMode.PEN) }
     var selectedColorIndex by remember { mutableIntStateOf(0) }
     var strokeWidth by remember { mutableFloatStateOf(4f) }
     var shapeSnapEnabled by remember { mutableStateOf(false) }
+    var stylusOnlyMode by remember { mutableStateOf(false) }
 
     // Committed strokes & undo/redo buffers
     var committedStrokes by remember(strokes) { mutableStateOf(strokes) }
@@ -140,11 +218,11 @@ fun InkCanvas(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
     ) {
-        // ─── Toolbar Row 1: Mode chips (Pen, Hi-lite, Eraser, Vanish, Lasso, Snap) ───
+        // ─── Toolbar Row 1: Mode chips, S-Pen Palm Rejection, Paper Template & Expand ───
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -189,6 +267,34 @@ fun InkCanvas(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
+            FilterChip(
+                selected = stylusOnlyMode,
+                onClick = { stylusOnlyMode = !stylusOnlyMode },
+                label = { Text(if (stylusOnlyMode) "🖊 S-Pen Only" else "👆 Finger", fontSize = 11.sp) }
+            )
+            if (onTemplateChanged != null) {
+                val curIdx = PAPER_TEMPLATE_OPTIONS.indexOfFirst { it.first == paperTemplate }.coerceAtLeast(0)
+                val curLabel = PAPER_TEMPLATE_OPTIONS[curIdx].second
+                AssistChip(
+                    onClick = {
+                        val next = PAPER_TEMPLATE_OPTIONS[(curIdx + 1) % PAPER_TEMPLATE_OPTIONS.size].first
+                        onTemplateChanged(next)
+                    },
+                    label = { Text("📄 $curLabel", fontSize = 11.sp) }
+                )
+            }
+            if (!isFullscreen) {
+                IconButton(
+                    onClick = onToggleFullscreen,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Fullscreen,
+                        contentDescription = "Expand Sketch Studio",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
 
         // ─── Toolbar Row 2: Color dots, Width Slider, and Undo / Redo Buttons ───
@@ -361,27 +467,37 @@ fun InkCanvas(
         }
 
         // ─── Drawing Canvas ───
+        val canvasHeightModifier = if (isFullscreen) {
+            Modifier.fillMaxWidth().weight(1f)
+        } else {
+            Modifier.fillMaxWidth().height(heightDp.dp)
+        }
+
         Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(heightDp.dp)
+            modifier = canvasHeightModifier
                 .clipToBounds()
                 .background(canvasBackground, RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp))
-                .pointerInput(mode, selectedColorIndex, strokeWidth, shapeSnapEnabled, themeMode) {
+                .pointerInput(mode, selectedColorIndex, strokeWidth, shapeSnapEnabled, stylusOnlyMode, themeMode) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            val pos = event.changes.firstOrNull()?.position ?: continue
-                            val point = StrokePoint(pos.x, pos.y)
-
-                            when {
-                                event.changes.any { it.pressed } -> {
-                                    currentPoints = currentPoints + point
-                                    event.changes.forEach { it.consume() }
+                            val activeChanges = event.changes.filter { it.pressed }
+                            if (activeChanges.size == 1) {
+                                val first = activeChanges.first()
+                                val isStylusOrEraser = first.type == PointerType.Stylus || first.type == PointerType.Eraser
+                                if (stylusOnlyMode && !isStylusOrEraser) {
+                                    // Palm rejection: ignore bare touch when S-Pen Only is active
+                                    continue
                                 }
-                                currentPoints.isNotEmpty() -> {
-                                    // Pointer released
-                                    when (mode) {
+                                val point = StrokePoint(first.position.x, first.position.y)
+                                currentPoints = currentPoints + point
+                                event.changes.forEach { it.consume() }
+                            } else if (activeChanges.size > 1) {
+                                // Ignore multi-touch palm/scroll gestures cleanly
+                                continue
+                            } else if (currentPoints.isNotEmpty()) {
+                                // Pointer released
+                                when (mode) {
                                         InkMode.ERASER -> {
                                             val eraserPts = currentPoints
                                             val threshold = 24f * 24f
@@ -441,7 +557,6 @@ fun InkCanvas(
                                     }
 
                                     currentPoints = emptyList()
-                                }
                             }
                         }
                     }
@@ -450,50 +565,72 @@ fun InkCanvas(
             // Read tick to drive continuous 60-120 FPS animation of vanishing strokes
             val _t = currentTick
 
-            // 0. Draw theme-specific surface ruling / grid
-            when (themeMode) {
-                AppThemeMode.KINDLE_PARCHMENT -> {
-                    // Cornell Ruled Sepia lines
+            // 0. Draw selected paper template or theme-default surface ruling
+            val resolvedTemplate = if (paperTemplate == "DEFAULT") {
+                when (themeMode) {
+                    AppThemeMode.KINDLE_PARCHMENT -> "CORNELL"
+                    AppThemeMode.MATTE_STUDIO -> "DOTS"
+                    AppThemeMode.DEEP_PURPLE_AMOLED -> "BLANK"
+                }
+            } else {
+                paperTemplate
+            }
+            val rulerColor = when (themeMode) {
+                AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentSepiaDivider
+                AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioGridBorder
+                AppThemeMode.DEEP_PURPLE_AMOLED -> Color(0xFF282038)
+            }
+            val cueColor = when (themeMode) {
+                AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentAccent.copy(alpha = 0.45f)
+                AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioAccent.copy(alpha = 0.45f)
+                AppThemeMode.DEEP_PURPLE_AMOLED -> NoteGraphColors.DeepPurpleAmoledAccent.copy(alpha = 0.45f)
+            }
+
+            when (resolvedTemplate) {
+                "CORNELL" -> {
                     val ruleStep = 28.dp.toPx()
                     var y = ruleStep
                     while (y < size.height) {
-                        drawLine(
-                            color = NoteGraphColors.KindleParchmentSepiaDivider,
-                            start = Offset(0f, y),
-                            end = Offset(size.width, y),
-                            strokeWidth = 1.5f
-                        )
+                        drawLine(color = rulerColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.5f)
                         y += ruleStep
                     }
-                    // Cornell vertical cue margin
                     val cueX = 48.dp.toPx()
-                    drawLine(
-                        color = NoteGraphColors.KindleParchmentAccent.copy(alpha = 0.45f),
-                        start = Offset(cueX, 0f),
-                        end = Offset(cueX, size.height),
-                        strokeWidth = 2f
-                    )
+                    drawLine(color = cueColor, start = Offset(cueX, 0f), end = Offset(cueX, size.height), strokeWidth = 2f)
                 }
-                AppThemeMode.MATTE_STUDIO -> {
-                    // Matte Studio Dot Matrix Grid
+                "LINED" -> {
+                    val ruleStep = 28.dp.toPx()
+                    var y = ruleStep
+                    while (y < size.height) {
+                        drawLine(color = rulerColor, start = Offset(0f, y), end = Offset(size.width, y), strokeWidth = 1.4f)
+                        y += ruleStep
+                    }
+                }
+                "GRID" -> {
+                    val step = 24.dp.toPx()
+                    var gx = step
+                    while (gx < size.width) {
+                        drawLine(color = rulerColor.copy(alpha = 0.55f), start = Offset(gx, 0f), end = Offset(gx, size.height), strokeWidth = 1f)
+                        gx += step
+                    }
+                    var gy = step
+                    while (gy < size.height) {
+                        drawLine(color = rulerColor.copy(alpha = 0.55f), start = Offset(0f, gy), end = Offset(size.width, gy), strokeWidth = 1f)
+                        gy += step
+                    }
+                }
+                "DOTS" -> {
                     val gridStep = 24.dp.toPx()
                     var gx = gridStep
                     while (gx < size.width) {
                         var gy = gridStep
                         while (gy < size.height) {
-                            drawCircle(
-                                color = NoteGraphColors.MatteStudioGridBorder,
-                                radius = 1.6f,
-                                center = Offset(gx, gy)
-                            )
+                            drawCircle(color = rulerColor, radius = 1.7f, center = Offset(gx, gy))
                             gy += gridStep
                         }
                         gx += gridStep
                     }
                 }
-                AppThemeMode.DEEP_PURPLE_AMOLED -> {
-                    // Pure OLED True Black zero-glare workspace
-                }
+                else -> Unit // BLANK: clean solid canvas
             }
 
             // 1. Draw committed strokes

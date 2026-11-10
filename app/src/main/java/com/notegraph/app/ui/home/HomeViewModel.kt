@@ -1,6 +1,7 @@
 package com.notegraph.app.ui.home
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.notegraph.app.data.local.dao.FolderDao
@@ -9,10 +10,13 @@ import com.notegraph.app.data.local.entity.ChecklistItem
 import com.notegraph.app.data.local.entity.FolderEntity
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.editor.PdfHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
@@ -39,6 +43,9 @@ class HomeViewModel @Inject constructor(
 
     val folders: StateFlow<List<FolderEntity>> = folderDao.getAllFolders()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<FolderEntity>())
+
+    val trashNotes: StateFlow<List<NoteEntity>> = noteDao.getTrashNotes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<NoteEntity>())
 
     private val _selectedFolderId = MutableStateFlow<String?>(null)
     val selectedFolderId: StateFlow<String?> = _selectedFolderId.asStateFlow()
@@ -189,6 +196,123 @@ class HomeViewModel @Inject constructor(
     fun moveToTrash(note: NoteEntity) {
         viewModelScope.launch {
             noteDao.setTrashState(note.id, true, System.currentTimeMillis())
+        }
+    }
+
+    fun restoreFromTrash(noteId: String) {
+        viewModelScope.launch {
+            noteDao.setTrashState(noteId, false, null)
+        }
+    }
+
+    fun deletePermanently(noteId: String) {
+        viewModelScope.launch {
+            noteDao.deleteNoteCompletely(noteId)
+        }
+    }
+
+    fun toggleLock(note: NoteEntity) {
+        viewModelScope.launch {
+            noteDao.updateNote(note.copy(isLocked = !note.isLocked))
+        }
+    }
+
+    fun importPdfAsNewNote(uri: Uri, onReady: (String?) -> Unit) {
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                PdfHelper.importPdfFromUri(appContext, uri)
+            }
+            if (info == null) {
+                onReady(null)
+                return@launch
+            }
+            val id = UUID.randomUUID().toString()
+            val now = System.currentTimeMillis()
+            val cleanTitle = info.fileName.removeSuffix(".pdf").ifBlank { "PDF Document" }
+            val pdfBlock: List<NoteBlock> = listOf(
+                NoteBlock.PdfBlock(
+                    id = UUID.randomUUID().toString(),
+                    filePath = info.filePath,
+                    fileName = info.fileName,
+                    pageCount = info.pageCount,
+                    currentPage = 0,
+                    annotationsJson = "[]"
+                )
+            )
+            val note = NoteEntity(
+                id = id,
+                title = cleanTitle,
+                content = "#pdf #study\n",
+                folderId = _selectedFolderId.value?.takeIf { it != UNFILED_FOLDER_ID },
+                createdAt = now,
+                updatedAt = now,
+                templateType = "PDF",
+                blocksJson = json.encodeToString(pdfBlock)
+            )
+            noteDao.insertNote(note)
+            onReady(id)
+        }
+    }
+
+    fun createNoteFromTemplate(templateType: String, onCreated: (String) -> Unit) {
+        val id = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val resolvedFolderId = _selectedFolderId.value?.takeIf { it != UNFILED_FOLDER_ID }
+        val (title, body, blocks) = when (templateType) {
+            "CORNELL" -> Triple(
+                "Cornell Lecture Notes",
+                "#study #cornell\n\n**Topic / Course:** \n**Key Questions & Cues:** \n- ",
+                listOf<NoteBlock>(
+                    NoteBlock.InkBlock(
+                        id = UUID.randomUUID().toString(),
+                        paperTemplate = "CORNELL",
+                        heightDp = 320f
+                    ),
+                    NoteBlock.TextBlock(id = UUID.randomUUID().toString(), text = "Summary:\n")
+                )
+            )
+            "MEETING" -> Triple(
+                "Meeting / People Check-In",
+                "#work #meeting\n\n**With:** [[\n**Follow-up Notes:**\n",
+                listOf<NoteBlock>(
+                    NoteBlock.ChecklistBlock(
+                        id = UUID.randomUUID().toString(),
+                        title = "Action Items & Next Steps",
+                        items = listOf(
+                            ChecklistItem(id = UUID.randomUUID().toString(), text = "Send follow-up summary", isChecked = false)
+                        )
+                    )
+                )
+            )
+            "CHECKLIST" -> Triple(
+                "Task List",
+                "#todo\n",
+                listOf<NoteBlock>(
+                    NoteBlock.ChecklistBlock(
+                        id = UUID.randomUUID().toString(),
+                        title = "Tasks",
+                        items = listOf(
+                            ChecklistItem(id = UUID.randomUUID().toString(), text = "", isChecked = false)
+                        )
+                    )
+                )
+            )
+            else -> Triple("Untitled Note", "", emptyList())
+        }
+
+        val note = NoteEntity(
+            id = id,
+            title = title,
+            content = body,
+            folderId = resolvedFolderId,
+            createdAt = now,
+            updatedAt = now,
+            templateType = templateType,
+            blocksJson = json.encodeToString<List<NoteBlock>>(blocks)
+        )
+        viewModelScope.launch {
+            noteDao.insertNote(note)
+            onCreated(id)
         }
     }
 }

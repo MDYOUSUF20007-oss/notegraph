@@ -234,6 +234,42 @@ object ExportManager {
                     }
                     yPos += 10f
                 }
+                is NoteBlock.PdfBlock -> {
+                    val annotationsByPage = PdfHelper.parseAnnotations(block.annotationsJson).associateBy { it.pageIndex }
+                    val pCount = block.pageCount.coerceAtLeast(PdfHelper.getPageCount(block.filePath))
+                    ensureSpace(34f)
+                    canvas.drawText("📄 PDF Attachment: ${block.fileName.ifBlank { "Document.pdf" }} ($pCount pages)", margin, yPos, labelPaint)
+                    yPos += 18f
+
+                    for (pIdx in 0 until pCount) {
+                        val pageBmp = PdfHelper.renderPageBitmap(block.filePath, pIdx, 1080)
+                        val pageAnn = annotationsByPage[pIdx]
+                        if (pageBmp != null) {
+                            val bmpAspect = pageBmp.height.toFloat() / pageBmp.width.coerceAtLeast(1).toFloat()
+                            val maxAvailH = pageHeight - (2 * margin) - 36f
+                            var drawW = usableWidth
+                            var drawH = drawW * bmpAspect
+                            if (drawH > maxAvailH) {
+                                drawH = maxAvailH
+                                drawW = drawH / bmpAspect
+                            }
+                            ensureSpace(drawH + 24f)
+                            val xLeft = margin + (usableWidth - drawW) / 2f
+                            val dest = RectF(xLeft, yPos, xLeft + drawW, yPos + drawH)
+                            canvas.drawBitmap(pageBmp, null, dest, null)
+                            pageBmp.recycle()
+
+                            if (pageAnn != null && pageAnn.strokes.isNotEmpty()) {
+                                PdfHelper.drawNormalizedStrokesOnCanvas(canvas, pageAnn.strokes, xLeft, yPos, drawW, drawH)
+                            }
+                            yPos += drawH + 14f
+                        }
+                        if (pageAnn != null && pageAnn.pageNote.isNotBlank()) {
+                            drawWrappedText("Page ${pIdx + 1} Note: ${pageAnn.pageNote}", labelPaint, 4f)
+                            yPos += 6f
+                        }
+                    }
+                }
             }
         }
 
@@ -313,6 +349,20 @@ object ExportManager {
                         sb.append("""<w:p><w:r><w:rPr>$strikeTag<w:sz w:val="24"/></w:rPr><w:t>${escapeXml("$prefix ${item.text}")}</w:t></w:r></w:p>""")
                     }
                 }
+                is NoteBlock.PdfBlock -> {
+                    val anns = PdfHelper.parseAnnotations(block.annotationsJson)
+                    sb.append("""<w:p><w:r><w:rPr><w:b/><w:sz w:val="26"/></w:rPr><w:t>${escapeXml("📄 PDF: ${block.fileName.ifBlank { "Document.pdf" }} (${block.pageCount} pages)")}</w:t></w:r></w:p>""")
+                    for (ann in anns) {
+                        if (ann.pageNote.isNotBlank() || ann.strokes.isNotEmpty()) {
+                            val summary = buildString {
+                                append("Page ${ann.pageIndex + 1}")
+                                if (ann.strokes.isNotEmpty()) append(" [${ann.strokes.size} ink stroke(s)]")
+                                if (ann.pageNote.isNotBlank()) append(": ${ann.pageNote}")
+                            }
+                            sb.append("""<w:p><w:r><w:sz w:val="24"/><w:t>${escapeXml(summary)}</w:t></w:r></w:p>""")
+                        }
+                    }
+                }
             }
         }
 
@@ -386,6 +436,19 @@ object ExportManager {
                         "$prefix ${item.text.ifBlank { "(task)" }}"
                     }.ifEmpty { listOf("(No tasks)") }
                     slides.add(SlideData(block.title.ifBlank { "To-Do Checklist" }, lines))
+                }
+                is NoteBlock.PdfBlock -> {
+                    val anns = PdfHelper.parseAnnotations(block.annotationsJson)
+                    val lines = mutableListOf(
+                        "Attached PDF: ${block.fileName.ifBlank { "Document.pdf" }}",
+                        "Pages: ${block.pageCount}"
+                    )
+                    anns.forEach { ann ->
+                        if (ann.strokes.isNotEmpty() || ann.pageNote.isNotBlank()) {
+                            lines.add("Page ${ann.pageIndex + 1}: ${ann.strokes.size} stroke(s) ${ann.pageNote}")
+                        }
+                    }
+                    slides.add(SlideData("PDF Document & Markup", lines))
                 }
             }
         }
@@ -590,6 +653,14 @@ object ExportManager {
                     val itemLines = block.items.sumOf { ((it.text.length / 36) + 1) }.coerceAtLeast(1)
                     60f + (itemLines * 36f)
                 }
+                is NoteBlock.PdfBlock -> {
+                    val anns = PdfHelper.parseAnnotations(block.annotationsJson)
+                    val previewPages = anns.filter { it.strokes.isNotEmpty() || it.pageNote.isNotBlank() }
+                        .map { it.pageIndex }
+                        .ifEmpty { listOf(block.currentPage.coerceIn(0, (block.pageCount - 1).coerceAtLeast(0))) }
+                        .take(4)
+                    60f + (previewPages.size * 760f)
+                }
             }
         }
 
@@ -764,6 +835,37 @@ object ExportManager {
                     }
                     yPos += 14f
                 }
+                is NoteBlock.PdfBlock -> {
+                    canvas.drawText("📄 PDF: ${block.fileName.ifBlank { "Document.pdf" }} (${block.pageCount} pages)", margin, yPos, labelPaint)
+                    yPos += 28f
+                    val anns = PdfHelper.parseAnnotations(block.annotationsJson).associateBy { it.pageIndex }
+                    val targetPages = anns.values
+                        .filter { it.strokes.isNotEmpty() || it.pageNote.isNotBlank() }
+                        .map { it.pageIndex }
+                        .ifEmpty { listOf(block.currentPage.coerceIn(0, (block.pageCount - 1).coerceAtLeast(0))) }
+                        .take(4)
+                    for (pIdx in targetPages) {
+                        val bmp = PdfHelper.renderPageBitmap(block.filePath, pIdx, 960) ?: continue
+                        val drawW = usableWidth
+                        val drawH = ((bmp.height.toFloat() / bmp.width.coerceAtLeast(1)) * drawW).coerceAtMost(640f)
+                        if (yPos + drawH + 40f > totalHeight) {
+                            bmp.recycle()
+                            break
+                        }
+                        val dest = RectF(margin, yPos, margin + drawW, yPos + drawH)
+                        canvas.drawBitmap(bmp, null, dest, null)
+                        bmp.recycle()
+                        val ann = anns[pIdx]
+                        if (ann != null && ann.strokes.isNotEmpty()) {
+                            PdfHelper.drawNormalizedStrokesOnCanvas(canvas, ann.strokes, margin, yPos, drawW, drawH)
+                        }
+                        yPos += drawH + 14f
+                        if (ann != null && ann.pageNote.isNotBlank()) {
+                            drawTextWrapped("Page ${pIdx + 1}: ${ann.pageNote}", labelPaint, 6f)
+                            yPos += 10f
+                        }
+                    }
+                }
             }
         }
 
@@ -813,6 +915,16 @@ object ExportManager {
                     for (item in block.items) {
                         val mark = if (item.isChecked) "x" else " "
                         sb.appendLine("- [$mark] ${item.text}")
+                    }
+                    sb.appendLine()
+                }
+                is NoteBlock.PdfBlock -> {
+                    sb.appendLine("### 📄 PDF: ${block.fileName.ifBlank { "Document.pdf" }} (${block.pageCount} pages)")
+                    val anns = PdfHelper.parseAnnotations(block.annotationsJson)
+                    for (ann in anns) {
+                        if (ann.strokes.isNotEmpty() || ann.pageNote.isNotBlank()) {
+                            sb.appendLine("- **Page ${ann.pageIndex + 1}** (${ann.strokes.size} strokes): ${ann.pageNote}")
+                        }
                     }
                     sb.appendLine()
                 }

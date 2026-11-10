@@ -1,5 +1,9 @@
 package com.notegraph.app.ui.home
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -8,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,8 +29,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -52,6 +59,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -63,6 +71,8 @@ import com.notegraph.app.data.local.entity.FolderEntity
 import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.common.NoteSecurityManager
+import com.notegraph.app.ui.common.VaultPinDialog
 import com.notegraph.app.ui.editor.ExportManager
 import com.notegraph.app.ui.theme.AppThemeMode
 import com.notegraph.app.ui.theme.NoteGraphColors
@@ -118,8 +128,10 @@ fun HomeScreen(
     val allNotes by viewModel.notes.collectAsState()
     val filteredNotes by viewModel.filteredNotes.collectAsState()
     val folders by viewModel.folders.collectAsState()
+    val trashNotes by viewModel.trashNotes.collectAsState()
     val selectedFolderId by viewModel.selectedFolderId.collectAsState()
 
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -131,6 +143,23 @@ fun HomeScreen(
     var showMovePickerForNote by remember { mutableStateOf<NoteEntity?>(null) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var editingFolder by remember { mutableStateOf<FolderEntity?>(null) }
+    var showTemplatesDialog by remember { mutableStateOf(false) }
+    var showTrashDialog by remember { mutableStateOf(false) }
+    var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var pendingSetPinForNote by remember { mutableStateOf<NoteEntity?>(null) }
+
+    val openPdfLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        viewModel.importPdfAsNewNote(uri) { noteId ->
+            if (noteId != null) {
+                onNoteClick(noteId)
+            } else {
+                Toast.makeText(context, "Could not open selected PDF", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // Drag-and-drop state from NoteCard onto FolderChips
     var rootOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -225,12 +254,13 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                // ─── Row 1: Daily Note Pill + Quick Status ───
+                // ─── Row 1: Daily Note Pill, Open PDF, Templates, Trash & Quick Status ───
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
@@ -250,10 +280,60 @@ fun HomeScreen(
                         ) {
                             Text("📅", fontSize = 13.sp)
                             Text(
-                                text = "$todayDateStr Journal",
+                                text = "$todayDateStr",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = { openPdfLauncher.launch(arrayOf("application/pdf")) },
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text("📄", fontSize = 13.sp)
+                            Text(
+                                text = "Open PDF",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = { showTemplatesDialog = true },
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, ThemeManager.cardBorderColor)
+                    ) {
+                        Text(
+                            text = "📋 Templates",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    if (trashNotes.isNotEmpty()) {
+                        Surface(
+                            onClick = { showTrashDialog = true },
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+                        ) {
+                            Text(
+                                text = "🗑 Trash (${trashNotes.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                             )
                         }
                     }
@@ -280,12 +360,6 @@ fun HomeScreen(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
-                    } else {
-                        Text(
-                            text = "${filteredNotes.size} notes • Hold to drag",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
                     }
                 }
 
@@ -438,7 +512,13 @@ fun HomeScreen(
                                 note = note,
                                 folder = noteFolder,
                                 isBeingDragged = isBeingDragged,
-                                onClick = { onNoteClick(note.id) },
+                                onClick = {
+                                    if (note.isLocked && NoteSecurityManager.hasPin(context)) {
+                                        pendingUnlockNote = note
+                                    } else {
+                                        onNoteClick(note.id)
+                                    }
+                                },
                                 onMenuClick = { showMenuForNote = note },
                                 onDragStartRoot = { grabOffset, pointerRoot ->
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -572,6 +652,22 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(if (note.isPinned) "Unpin Note" else "⭐ Pin to Top")
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (note.isLocked) {
+                                viewModel.toggleLock(note)
+                            } else if (NoteSecurityManager.hasPin(context)) {
+                                viewModel.toggleLock(note)
+                            } else {
+                                pendingSetPinForNote = note
+                            }
+                            showMenuForNote = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (note.isLocked) "🔓 Unlock Note" else "🔒 Lock with Vault PIN")
                     }
 
                     OutlinedButton(
@@ -720,6 +816,156 @@ fun HomeScreen(
             onDelete = {
                 viewModel.deleteFolder(folderToEdit.id)
                 editingFolder = null
+            }
+        )
+    }
+
+    // ─── Dialog 5: Note Templates Picker ───
+    if (showTemplatesDialog) {
+        AlertDialog(
+            onDismissRequest = { showTemplatesDialog = false },
+            title = { Text("Create from Template") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedCard(
+                        onClick = {
+                            showTemplatesDialog = false
+                            openPdfLauncher.launch(arrayOf("application/pdf"))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("📄 PDF + Direct Markup") },
+                            supportingContent = { Text("Open any PDF from device & draw/highlight on pages") }
+                        )
+                    }
+                    OutlinedCard(
+                        onClick = {
+                            showTemplatesDialog = false
+                            viewModel.createNoteFromTemplate("CORNELL") { onNoteClick(it) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("📚 Cornell Study & Sketch") },
+                            supportingContent = { Text("Cornell ruled ink canvas + structured summary block") }
+                        )
+                    }
+                    OutlinedCard(
+                        onClick = {
+                            showTemplatesDialog = false
+                            viewModel.createNoteFromTemplate("MEETING") { onNoteClick(it) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("💼 Meeting / People CRM") },
+                            supportingContent = { Text("Linked [[Person]] header + action items checklist") }
+                        )
+                    }
+                    OutlinedCard(
+                        onClick = {
+                            showTemplatesDialog = false
+                            viewModel.createNoteFromTemplate("CHECKLIST") { onNoteClick(it) }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("☑ To-Do Checklist") },
+                            supportingContent = { Text("Task list with progress tracking") }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTemplatesDialog = false }) { Text("Close") }
+            }
+        )
+    }
+
+    // ─── Dialog 6: Trash / Recycle Bin Recovery ───
+    if (showTrashDialog) {
+        AlertDialog(
+            onDismissRequest = { showTrashDialog = false },
+            title = { Text("Recycle Bin (${trashNotes.size})") },
+            text = {
+                if (trashNotes.isEmpty()) {
+                    Text("Trash is empty.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 300.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        trashNotes.forEach { tNote ->
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = tNote.title.ifBlank { "Untitled" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    IconButton(onClick = { viewModel.restoreFromTrash(tNote.id) }) {
+                                        Icon(Icons.Default.Refresh, contentDescription = "Restore")
+                                    }
+                                    IconButton(onClick = { viewModel.deletePermanently(tNote.id) }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete Forever",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTrashDialog = false }) { Text("Done") }
+            }
+        )
+    }
+
+    // ─── Dialog 7: Unlock PIN Prompt ───
+    pendingUnlockNote?.let { locked ->
+        VaultPinDialog(
+            isSettingNewPin = false,
+            title = "Unlock Note",
+            subtitle = "\"${locked.title.ifBlank { "Untitled" }}\" is protected.",
+            onDismiss = { pendingUnlockNote = null },
+            onVerify = { attempt -> NoteSecurityManager.verifyPin(context, attempt) },
+            onSuccess = {
+                pendingUnlockNote = null
+                onNoteClick(locked.id)
+            }
+        )
+    }
+
+    // ─── Dialog 8: First-Time Set Vault PIN ───
+    pendingSetPinForNote?.let { noteToLock ->
+        VaultPinDialog(
+            isSettingNewPin = true,
+            title = "Set Vault PIN",
+            subtitle = "Create a 4–8 digit PIN to lock sensitive notes.",
+            onDismiss = { pendingSetPinForNote = null },
+            onVerify = { true },
+            onSuccess = { pin ->
+                NoteSecurityManager.setPin(context, pin)
+                viewModel.toggleLock(noteToLock)
+                pendingSetPinForNote = null
+                Toast.makeText(context, "Note locked", Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -989,6 +1235,8 @@ fun NoteCard(
     }
     val hasAudio = remember(blocks) { blocks.any { it is NoteBlock.AudioBlock } }
     val hasImage = remember(blocks) { blocks.any { it is NoteBlock.ImageBlock } }
+    val pdfBlocks = remember(blocks) { blocks.filterIsInstance<NoteBlock.PdfBlock>() }
+    val hasPdf = pdfBlocks.isNotEmpty()
 
     val previewStrokes = remember(blocks) {
         val json = Json { ignoreUnknownKeys = true }
@@ -1062,6 +1310,14 @@ fun NoteCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f)
                 ) {
+                    if (note.isLocked) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Locked",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                     if (note.isPinned) {
                         Icon(
                             Icons.Default.Star,
@@ -1113,60 +1369,89 @@ fun NoteCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Note Body Snippet
-            if (latestNote.content.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+            // Note Body Snippet (hidden if locked)
+            if (latestNote.isLocked) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = latestNote.content,
+                    text = "🔒 Locked Note — Tap & enter PIN to open",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.secondary
                 )
-            } else if (previewStrokes.isEmpty() && checklistBlocks.isEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Empty note…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-            }
+            } else {
+                if (latestNote.content.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = latestNote.content,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                } else if (previewStrokes.isEmpty() && checklistBlocks.isEmpty() && !hasPdf) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Empty note…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
 
-            // Live Mini Ink Canvas Preview
-            if (previewStrokes.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                MiniInkPreviewCanvas(
-                    strokes = previewStrokes,
-                    themeMode = themeMode
-                )
-            }
-
-            // Checklist Progress Preview
-            if (checklistBlocks.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                // PDF Attachment Summary Chip
+                if (hasPdf) {
+                    val firstPdf = pdfBlocks.first()
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
-                            text = "☑ $doneTasks/$totalTasks done",
+                            text = "📄 ${firstPdf.fileName.ifBlank { "PDF" }} (${firstPdf.pageCount}p)",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
-                        firstChecklistItems.forEach { item ->
-                            val mark = if (item.isChecked) "✓" else "○"
+                    }
+                }
+
+                // Live Mini Ink Canvas Preview
+                if (previewStrokes.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    MiniInkPreviewCanvas(
+                        strokes = previewStrokes,
+                        themeMode = themeMode
+                    )
+                }
+
+                // Checklist Progress Preview
+                if (checklistBlocks.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
                             Text(
-                                text = "$mark ${item.text}",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                text = "☑ $doneTasks/$totalTasks done",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
                             )
+                            firstChecklistItems.forEach { item ->
+                                val mark = if (item.isChecked) "✓" else "○"
+                                Text(
+                                    text = "$mark ${item.text}",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
@@ -1186,8 +1471,9 @@ fun NoteCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
 
-                if (hasAudio || hasImage) {
+                if (hasAudio || hasImage || hasPdf) {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (hasPdf) Text("📄", fontSize = 11.sp)
                         if (hasAudio) Text("🎙", fontSize = 11.sp)
                         if (hasImage) Text("🖼", fontSize = 11.sp)
                     }

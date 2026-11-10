@@ -1,6 +1,8 @@
 package com.notegraph.app.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -19,12 +21,28 @@ import com.notegraph.app.ui.settings.SettingsScreen
 import com.notegraph.app.ui.tags.TagsScreen
 
 @Composable
-fun NoteGraphNavGraph() {
+fun NoteGraphNavGraph(
+    incomingPdfUri: Uri? = null,
+    onIncomingPdfHandled: () -> Unit = {}
+) {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             val viewModel: HomeViewModel = hiltViewModel()
+
+            LaunchedEffect(incomingPdfUri) {
+                val uri = incomingPdfUri
+                if (uri != null) {
+                    onIncomingPdfHandled()
+                    viewModel.importPdfAsNewNote(uri) { createdId ->
+                        if (createdId != null) {
+                            navController.navigate("editor/$createdId")
+                        }
+                    }
+                }
+            }
+
             HomeScreen(
                 viewModel = viewModel,
                 onNoteClick = { noteId -> navController.navigate("editor/$noteId") },
@@ -83,6 +101,7 @@ fun NoteGraphNavGraph() {
             val viewModel: ReaderViewModel = hiltViewModel()
             ReaderScreen(
                 onBack = { navController.popBackStack() },
+                onEditNote = { id -> navController.navigate("editor/$id") },
                 initialNoteId = noteId,
                 viewModel = viewModel
             )
@@ -91,6 +110,7 @@ fun NoteGraphNavGraph() {
             val viewModel: ReaderViewModel = hiltViewModel()
             ReaderScreen(
                 onBack = { navController.popBackStack() },
+                onEditNote = { id -> navController.navigate("editor/$id") },
                 initialNoteId = null,
                 viewModel = viewModel
             )

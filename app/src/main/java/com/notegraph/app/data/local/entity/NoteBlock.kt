@@ -24,7 +24,8 @@ sealed class NoteBlock {
     data class InkBlock(
         override val id: String,
         val strokesJson: String = "[]",
-        val heightDp: Float = 300f
+        val heightDp: Float = 300f,
+        val paperTemplate: String = "DEFAULT"
     ) : NoteBlock()
 
     @Serializable
@@ -50,7 +51,31 @@ sealed class NoteBlock {
         val title: String = "To-Do Checklist",
         val items: List<ChecklistItem> = emptyList()
     ) : NoteBlock()
+
+    @Serializable
+    @SerialName("pdf")
+    data class PdfBlock(
+        override val id: String,
+        val filePath: String = "",
+        val fileName: String = "",
+        val pageCount: Int = 0,
+        val currentPage: Int = 0,
+        val annotationsJson: String = "[]",
+        val invertDark: Boolean = false
+    ) : NoteBlock()
 }
+
+/**
+ * Per-page annotation data stored inside a [NoteBlock.PdfBlock].
+ * Ink coordinates are normalized to [0f..1f] relative to page width/height
+ * so annotations stay pixel-aligned across inline preview, fullscreen zoom, and PDF export.
+ */
+@Serializable
+data class PdfPageAnnotation(
+    val pageIndex: Int,
+    val strokes: List<InkStroke> = emptyList(),
+    val pageNote: String = ""
+)
 
 /**
  * A single checkable item inside a [NoteBlock.ChecklistBlock].

@@ -3,12 +3,15 @@ package com.notegraph.app.ui.reader
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,39 +29,82 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.common.NoteSecurityManager
+import com.notegraph.app.ui.common.VaultPinDialog
 import com.notegraph.app.ui.editor.ExportManager
+import com.notegraph.app.ui.editor.PdfHelper
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.sqrt
+
+enum class PageTurnStyle(val label: String) {
+    CORNER_FOLD("Corner Fold"),
+    SPINE_CURL("3D Curl"),
+    PAPER_STACK("Slide Stack")
+}
+
+private enum class FoldCorner {
+    BOTTOM_RIGHT,
+    TOP_RIGHT,
+    BOTTOM_LEFT,
+    TOP_LEFT
+}
+
+private data class CornerFoldGeometry(
+    val isActive: Boolean,
+    val isCompletelyTurned: Boolean,
+    val remainingPagePoly: List<Offset>,
+    val exposedCornerPoly: List<Offset>,
+    val reflectedFlapPoly: List<Offset>,
+    val creaseStart: Offset?,
+    val creaseEnd: Offset?,
+    val anchor: Offset,
+    val tip: Offset
+)
 
 /**
- * Google Play Books inspired 3D Page-Curl Reading Mode.
- * Features 60-120 FPS touch-tracked page-curl physics, paper shadow gradients,
- * and interactive corner dog-ear bookmarking for reviewing saved notes like a physical book.
+ * Tactile Book Reading Mode with selectable page-turn physics:
+ * 1. reMarkable / Apple Books geometric Corner Fold (tracks corner & diagonal finger pull)
+ * 2. Google Play Books 3D Spine Curl
+ * 3. Layered Paper Slide Stack
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
     onBack: () -> Unit,
+    onEditNote: (String) -> Unit = {},
     initialNoteId: String? = null,
     viewModel: ReaderViewModel = hiltViewModel()
 ) {
     val notes by viewModel.notes.collectAsState()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var currentPageIndex by remember { mutableIntStateOf(0) }
+    var turnStyle by remember { mutableStateOf(PageTurnStyle.CORNER_FOLD) }
+    var unlockedInSession by remember { mutableStateOf(setOf<String>()) }
+    var pendingPinNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var pendingPinOpensEditor by remember { mutableStateOf(false) }
 
-    // Jump to initialNoteId on first load
     LaunchedEffect(notes, initialNoteId) {
         if (!initialNoteId.isNullOrBlank() && notes.isNotEmpty()) {
             val idx = notes.indexOfFirst { it.id == initialNoteId }
@@ -65,13 +112,56 @@ fun ReaderScreen(
         }
     }
 
-    // Curl progress from 0f (flat) to 1f (fully turned)
+    // Touch-driven animation state
     val curlProgress = remember { Animatable(0f) }
-    // Direction of drag: -1 for next page (drag left), +1 for previous page (drag right)
-    var dragDirection by remember { mutableIntStateOf(0) }
+    var dragDirection by remember { mutableIntStateOf(0) } // -1 = next, +1 = prev
+    var activeCorner by remember { mutableStateOf(FoldCorner.BOTTOM_RIGHT) }
+    var isDraggingFinger by remember { mutableStateOf(false) }
+
+    // Normalized corner tip position (relative to page container size) during free corner drag
+    var dragTipNorm by remember { mutableStateOf(Offset(1f, 1f)) }
+    var releaseStartTipNorm by remember { mutableStateOf(Offset(1f, 1f)) }
+    val releaseBlend = remember { Animatable(0f) }
+    var containerSize by remember { mutableStateOf(IntSize(1080, 1600)) }
 
     val currentNote = notes.getOrNull(currentPageIndex)
     val totalPages = notes.size.coerceAtLeast(1)
+
+    fun triggerTurnNext() {
+        if (currentPageIndex >= notes.size - 1) return
+        scope.launch {
+            isDraggingFinger = false
+            dragDirection = -1
+            activeCorner = FoldCorner.BOTTOM_RIGHT
+            releaseStartTipNorm = Offset(0.95f, 0.92f)
+            releaseBlend.snapTo(0f)
+            curlProgress.snapTo(0f)
+            launch { releaseBlend.animateTo(1f, tween(380, easing = FastOutSlowInEasing)) }
+            curlProgress.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+            currentPageIndex++
+            curlProgress.snapTo(0f)
+            releaseBlend.snapTo(0f)
+            dragDirection = 0
+        }
+    }
+
+    fun triggerTurnPrev() {
+        if (currentPageIndex <= 0) return
+        scope.launch {
+            isDraggingFinger = false
+            dragDirection = 1
+            activeCorner = FoldCorner.BOTTOM_LEFT
+            releaseStartTipNorm = Offset(0.05f, 0.92f)
+            releaseBlend.snapTo(0f)
+            curlProgress.snapTo(0f)
+            launch { releaseBlend.animateTo(1f, tween(380, easing = FastOutSlowInEasing)) }
+            curlProgress.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+            currentPageIndex--
+            curlProgress.snapTo(0f)
+            releaseBlend.snapTo(0f)
+            dragDirection = 0
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -95,7 +185,28 @@ fun ReaderScreen(
                     }
                 },
                 actions = {
+                    // Cycle page-turn animation style
+                    AssistChip(
+                        onClick = {
+                            val styles = PageTurnStyle.values()
+                            turnStyle = styles[(styles.indexOf(turnStyle) + 1) % styles.size]
+                        },
+                        label = { Text(turnStyle.label, fontSize = 11.sp) }
+                    )
                     if (currentNote != null) {
+                        IconButton(onClick = {
+                            if (currentNote.isLocked &&
+                                NoteSecurityManager.hasPin(context) &&
+                                currentNote.id !in unlockedInSession
+                            ) {
+                                pendingPinNote = currentNote
+                                pendingPinOpensEditor = true
+                            } else {
+                                onEditNote(currentNote.id)
+                            }
+                        }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit / Markup Note")
+                        }
                         IconButton(onClick = { viewModel.toggleBookmark(currentNote) }) {
                             Icon(
                                 if (currentNote.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
@@ -120,38 +231,28 @@ fun ReaderScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconButton(
-                        onClick = {
-                            if (currentPageIndex > 0) {
-                                scope.launch {
-                                    dragDirection = 1
-                                    curlProgress.snapTo(1f)
-                                    currentPageIndex--
-                                    curlProgress.animateTo(0f, tween(350, easing = FastOutSlowInEasing))
-                                }
-                            }
-                        },
+                        onClick = { triggerTurnPrev() },
                         enabled = currentPageIndex > 0
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Page")
                     }
 
-                    Text(
-                        text = "Page ${currentPageIndex + 1} of $totalPages",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontFamily = FontFamily.Serif
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Page ${currentPageIndex + 1} of $totalPages",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontFamily = FontFamily.Serif
+                        )
+                        Text(
+                            text = "Swipe corner or edge to fold page",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
 
                     IconButton(
-                        onClick = {
-                            if (currentPageIndex < notes.size - 1) {
-                                scope.launch {
-                                    dragDirection = -1
-                                    curlProgress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
-                                    currentPageIndex++
-                                    curlProgress.snapTo(0f)
-                                }
-                            }
-                        },
+                        onClick = { triggerTurnNext() },
                         enabled = currentPageIndex < notes.size - 1
                     ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Page")
@@ -164,7 +265,7 @@ fun ReaderScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF231F1C)) // Dark library ambient backdrop
+                .background(Color(0xFF231F1C))
                 .padding(12.dp)
         ) {
             if (notes.isEmpty()) {
@@ -172,91 +273,307 @@ fun ReaderScreen(
                     Text("No notes found in vault to read.", color = Color.White)
                 }
             } else if (currentNote != null) {
-                // Book Page Container with 3D Page Curl Touch Tracking
+                val curPageIdxState by rememberUpdatedState(currentPageIndex)
+                val notesSizeState by rememberUpdatedState(notes.size)
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(currentPageIndex, notes.size) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { offset ->
-                                    dragDirection = 0
-                                },
-                                onDragEnd = {
-                                    scope.launch {
-                                        val p = curlProgress.value
-                                        if (dragDirection == -1) {
-                                            // Next page
-                                            if (p > 0.35f && currentPageIndex < notes.size - 1) {
-                                                curlProgress.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
-                                                currentPageIndex++
-                                                curlProgress.snapTo(0f)
-                                            } else {
-                                                curlProgress.animateTo(0f, tween(200))
-                                            }
-                                        } else if (dragDirection == 1) {
-                                            // Previous page
-                                            if (p > 0.35f && currentPageIndex > 0) {
-                                                curlProgress.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
-                                                currentPageIndex--
-                                                curlProgress.snapTo(0f)
-                                            } else {
-                                                curlProgress.animateTo(0f, tween(200))
+                        .onSizeChanged { containerSize = it }
+                        .pointerInput(turnStyle) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                val h = size.height.toFloat().coerceAtLeast(1f)
+                                val downPos = down.position
+
+                                val inRightCorner = downPos.x > w * 0.72f &&
+                                    (downPos.y > h * 0.65f || downPos.y < h * 0.35f)
+                                val inLeftCorner = downPos.x < w * 0.28f &&
+                                    (downPos.y > h * 0.65f || downPos.y < h * 0.35f)
+
+                                var gestureLocked = false
+                                var activeDir = 0
+
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val active = event.changes.filter { it.pressed }
+
+                                    if (active.isEmpty()) {
+                                        if (gestureLocked && activeDir != 0) {
+                                            val curTip = dragTipNorm
+                                            val curProg = curlProgress.value
+                                            isDraggingFinger = false
+                                            releaseStartTipNorm = curTip
+                                            val capturedDir = activeDir
+
+                                            scope.launch {
+                                                val shouldTurn = curProg > 0.28f &&
+                                                    ((capturedDir == -1 && curPageIdxState < notesSizeState - 1) ||
+                                                        (capturedDir == 1 && curPageIdxState > 0))
+                                                if (shouldTurn) {
+                                                    releaseBlend.snapTo(0f)
+                                                    launch {
+                                                        releaseBlend.animateTo(
+                                                            1f,
+                                                            tween(270, easing = FastOutSlowInEasing)
+                                                        )
+                                                    }
+                                                    curlProgress.animateTo(
+                                                        1f,
+                                                        tween(270, easing = FastOutSlowInEasing)
+                                                    )
+                                                    if (capturedDir == -1 && currentPageIndex < notes.size - 1) {
+                                                        currentPageIndex++
+                                                    } else if (capturedDir == 1 && currentPageIndex > 0) {
+                                                        currentPageIndex--
+                                                    }
+                                                    curlProgress.snapTo(0f)
+                                                    releaseBlend.snapTo(0f)
+                                                } else {
+                                                    releaseBlend.snapTo(0f)
+                                                    curlProgress.animateTo(0f, tween(210, easing = FastOutSlowInEasing))
+                                                }
+                                                dragDirection = 0
                                             }
                                         }
-                                        dragDirection = 0
+                                        break
                                     }
-                                }
-                            ) { change, dragAmount ->
-                                change.consume()
-                                val width = size.width.toFloat()
-                                if (dragDirection == 0) {
-                                    dragDirection = if (dragAmount < 0) -1 else 1
-                                }
 
-                                scope.launch {
-                                    if (dragDirection == -1 && currentPageIndex < notes.size - 1) {
-                                        // Dragging left -> turning to next page
-                                        val currentP = curlProgress.value
-                                        val delta = -dragAmount / width
-                                        curlProgress.snapTo((currentP + delta).coerceIn(0f, 1f))
-                                    } else if (dragDirection == 1 && currentPageIndex > 0) {
-                                        // Dragging right -> turning to previous page
-                                        val currentP = curlProgress.value
-                                        val delta = dragAmount / width
-                                        curlProgress.snapTo((currentP + delta).coerceIn(0f, 1f))
+                                    val pointer = active.first()
+                                    val totalDx = pointer.position.x - downPos.x
+                                    val totalDy = pointer.position.y - downPos.y
+
+                                    if (!gestureLocked) {
+                                        val movedDist = sqrt(totalDx * totalDx + totalDy * totalDy)
+                                        val isHorizontalSwipe = abs(totalDx) > 14f && abs(totalDx) > abs(totalDy) * 1.15f
+                                        val isCornerDrag = (inRightCorner || inLeftCorner) && movedDist > 8f
+
+                                        if (!isHorizontalSwipe && !isCornerDrag) {
+                                            // If user scrolls steeply vertically in middle of page, yield to verticalScroll
+                                            if (abs(totalDy) > 24f && !inRightCorner && !inLeftCorner) {
+                                                break
+                                            }
+                                            continue
+                                        }
+
+                                        val desiredDir = when {
+                                            inRightCorner && totalDx <= -2f -> -1
+                                            inLeftCorner && totalDx >= 2f -> 1
+                                            totalDx < 0 -> -1
+                                            totalDx > 0 -> 1
+                                            else -> 0
+                                        }
+
+                                        if (desiredDir == -1 && curPageIdxState >= notesSizeState - 1) break
+                                        if (desiredDir == 1 && curPageIdxState <= 0) break
+                                        if (desiredDir == 0) continue
+
+                                        activeDir = desiredDir
+                                        dragDirection = desiredDir
+                                        activeCorner = when (desiredDir) {
+                                            -1 -> if (downPos.y < h * 0.40f) FoldCorner.TOP_RIGHT else FoldCorner.BOTTOM_RIGHT
+                                            else -> if (downPos.y < h * 0.40f) FoldCorner.TOP_LEFT else FoldCorner.BOTTOM_LEFT
+                                        }
+                                        gestureLocked = true
+                                        isDraggingFinger = true
                                     }
+
+                                    pointer.consume()
+
+                                    // Compute responsive corner tip position from drag vector
+                                    val anchorX = when (activeCorner) {
+                                        FoldCorner.BOTTOM_RIGHT, FoldCorner.TOP_RIGHT -> 1f
+                                        FoldCorner.BOTTOM_LEFT, FoldCorner.TOP_LEFT -> 0f
+                                    }
+                                    val anchorY = when (activeCorner) {
+                                        FoldCorner.BOTTOM_RIGHT, FoldCorner.BOTTOM_LEFT -> 1f
+                                        FoldCorner.TOP_RIGHT, FoldCorner.TOP_LEFT -> 0f
+                                    }
+                                    val dxNorm = totalDx / w
+                                    val dyNorm = totalDy / h
+
+                                    val rawTipX: Float
+                                    val rawTipY: Float
+                                    val progressEstimate: Float
+
+                                    if (activeDir == -1) {
+                                        val peelLeft = (-dxNorm).coerceIn(0f, 1.85f)
+                                        rawTipX = (anchorX - peelLeft * 1.12f).coerceIn(-0.95f, 0.99f)
+                                        val naturalLift = peelLeft * 0.20f
+                                        rawTipY = if (anchorY == 1f) {
+                                            (1f + dyNorm * 1.1f - naturalLift).coerceIn(-0.15f, 0.98f)
+                                        } else {
+                                            (0f + dyNorm * 1.1f + naturalLift).coerceIn(0.02f, 1.15f)
+                                        }
+                                        progressEstimate = (peelLeft * 1.15f).coerceIn(0f, 1f)
+                                    } else {
+                                        val peelRight = dxNorm.coerceIn(0f, 1.85f)
+                                        rawTipX = (anchorX + peelRight * 1.12f).coerceIn(0.01f, 1.95f)
+                                        val naturalLift = peelRight * 0.20f
+                                        rawTipY = if (anchorY == 1f) {
+                                            (1f + dyNorm * 1.1f - naturalLift).coerceIn(-0.15f, 0.98f)
+                                        } else {
+                                            (0f + dyNorm * 1.1f + naturalLift).coerceIn(0.02f, 1.15f)
+                                        }
+                                        progressEstimate = (peelRight * 1.15f).coerceIn(0f, 1f)
+                                    }
+
+                                    dragTipNorm = Offset(rawTipX, rawTipY)
+                                    scope.launch { curlProgress.snapTo(progressEstimate) }
                                 }
                             }
                         }
                 ) {
-                    // Underneath Next/Prev Page (Rendered behind the curling page)
                     val nextNote = if (dragDirection == -1) notes.getOrNull(currentPageIndex + 1)
-                                   else if (dragDirection == 1) notes.getOrNull(currentPageIndex - 1)
-                                   else null
+                    else if (dragDirection == 1) notes.getOrNull(currentPageIndex - 1)
+                    else null
 
-                    if (nextNote != null && curlProgress.value > 0.01f) {
+                    val p = curlProgress.value
+                    val wPx = containerSize.width.toFloat().coerceAtLeast(1f)
+                    val hPx = containerSize.height.toFloat().coerceAtLeast(1f)
+
+                    // Calculate corner fold geometry when CORNER_FOLD is selected and curl is active
+                    val foldGeom: CornerFoldGeometry? = if (turnStyle == PageTurnStyle.CORNER_FOLD && p > 0.002f && dragDirection != 0) {
+                        val anchor = cornerOffset(activeCorner, wPx, hPx)
+                        val finishTarget = when (activeCorner) {
+                            FoldCorner.BOTTOM_RIGHT -> Offset(-0.98f * wPx, 0.96f * hPx)
+                            FoldCorner.TOP_RIGHT -> Offset(-0.98f * wPx, 0.04f * hPx)
+                            FoldCorner.BOTTOM_LEFT -> Offset(1.98f * wPx, 0.96f * hPx)
+                            FoldCorner.TOP_LEFT -> Offset(1.98f * wPx, 0.04f * hPx)
+                        }
+                        val tip = if (isDraggingFinger) {
+                            Offset(dragTipNorm.x * wPx, dragTipNorm.y * hPx)
+                        } else if (releaseBlend.value > 0f) {
+                            val t = releaseBlend.value
+                            val startPx = Offset(releaseStartTipNorm.x * wPx, releaseStartTipNorm.y * hPx)
+                            Offset(
+                                startPx.x + (finishTarget.x - startPx.x) * t,
+                                startPx.y + (finishTarget.y - startPx.y) * t
+                            )
+                        } else {
+                            // Springing back flat from release point
+                            val ratio = (p / 0.35f).coerceIn(0f, 1f)
+                            val relPx = Offset(releaseStartTipNorm.x * wPx, releaseStartTipNorm.y * hPx)
+                            Offset(
+                                anchor.x + (relPx.x - anchor.x) * ratio,
+                                anchor.y + (relPx.y - anchor.y) * ratio
+                            )
+                        }
+                        computeCornerFoldGeometry(wPx, hPx, anchor, tip)
+                    } else null
+
+                    // 1. Underneath Next/Prev Page (revealed progressively beneath the lifting corner/curl)
+                    if (nextNote != null && p > 0.002f) {
                         BookPageSurface(
                             note = nextNote,
                             pageNumber = if (dragDirection == -1) currentPageIndex + 2 else currentPageIndex,
                             isBookmarked = nextNote.isFavorite,
+                            isSessionUnlocked = nextNote.id in unlockedInSession,
+                            onUnlockClick = {
+                                if (NoteSecurityManager.hasPin(context)) {
+                                    pendingPinNote = nextNote
+                                    pendingPinOpensEditor = false
+                                } else {
+                                    unlockedInSession = unlockedInSession + nextNote.id
+                                }
+                            },
                             onDogEarClick = { viewModel.toggleBookmark(nextNote) },
+                            onToggleChecklist = { blkId, itemId -> viewModel.toggleChecklistItem(nextNote, blkId, itemId) },
+                            showCornerHint = false,
                             modifier = Modifier.fillMaxSize()
                         )
                     }
 
-                    // Main Foreground Page
+                    // 2. Foreground Current Page (clipped geometrically so next page peeks right through!)
+                    val fgModifier = when {
+                        turnStyle == PageTurnStyle.CORNER_FOLD && foldGeom != null && foldGeom.isActive -> {
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    clip = true
+                                    shape = GenericShape { _, _ ->
+                                        val poly = foldGeom.remainingPagePoly
+                                        if (poly.size >= 3) {
+                                            moveTo(poly[0].x, poly[0].y)
+                                            for (i in 1 until poly.size) {
+                                                lineTo(poly[i].x, poly[i].y)
+                                            }
+                                            close()
+                                        } else {
+                                            // Page has swept 100% across
+                                            moveTo(0f, 0f)
+                                            lineTo(0.01f, 0f)
+                                            close()
+                                        }
+                                    }
+                                }
+                        }
+                        turnStyle == PageTurnStyle.SPINE_CURL && p > 0.005f -> {
+                            val foldX = if (dragDirection == -1) wPx * (1f - p) else wPx * p
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    clip = true
+                                    shape = GenericShape { size, _ ->
+                                        if (dragDirection == -1) {
+                                            moveTo(0f, 0f)
+                                            lineTo(foldX.coerceAtLeast(0.01f), 0f)
+                                            lineTo(foldX.coerceAtLeast(0.01f), size.height)
+                                            lineTo(0f, size.height)
+                                            close()
+                                        } else {
+                                            moveTo(foldX.coerceAtMost(size.width - 0.01f), 0f)
+                                            lineTo(size.width, 0f)
+                                            lineTo(size.width, size.height)
+                                            lineTo(foldX.coerceAtMost(size.width - 0.01f), size.height)
+                                            close()
+                                        }
+                                    }
+                                }
+                        }
+                        turnStyle == PageTurnStyle.PAPER_STACK && p > 0.005f -> {
+                            val slideX = if (dragDirection == -1) -wPx * p else wPx * p
+                            val stackScale = 1f - (p * 0.06f)
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    translationX = slideX
+                                    scaleX = stackScale
+                                    scaleY = stackScale
+                                }
+                        }
+                        else -> Modifier.fillMaxSize()
+                    }
+
                     BookPageSurface(
                         note = currentNote,
                         pageNumber = currentPageIndex + 1,
                         isBookmarked = currentNote.isFavorite,
+                        isSessionUnlocked = currentNote.id in unlockedInSession,
+                        onUnlockClick = {
+                            if (NoteSecurityManager.hasPin(context)) {
+                                pendingPinNote = currentNote
+                                pendingPinOpensEditor = false
+                            } else {
+                                unlockedInSession = unlockedInSession + currentNote.id
+                            }
+                        },
                         onDogEarClick = { viewModel.toggleBookmark(currentNote) },
-                        modifier = Modifier.fillMaxSize()
+                        onToggleChecklist = { blkId, itemId -> viewModel.toggleChecklistItem(currentNote, blkId, itemId) },
+                        showCornerHint = (currentPageIndex < notes.size - 1) && p <= 0.002f && turnStyle == PageTurnStyle.CORNER_FOLD,
+                        modifier = fgModifier
                     )
 
-                    // 3D Page Curl Overlay Canvas (60-120 FPS dynamic lighting & shadow mesh)
-                    if (curlProgress.value > 0.005f) {
-                        PageCurlOverlay(
-                            progress = curlProgress.value,
+                    // 3. Tactile Shadow & Reflected Backside Flap Overlay
+                    if (turnStyle == PageTurnStyle.CORNER_FOLD && foldGeom != null && foldGeom.isActive) {
+                        ReMarkableCornerFoldOverlay(
+                            geometry = foldGeom,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else if (turnStyle == PageTurnStyle.SPINE_CURL && p > 0.005f) {
+                        SpineCurlOverlay(
+                            progress = p,
                             isNext = dragDirection == -1,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -265,27 +582,253 @@ fun ReaderScreen(
             }
         }
     }
+
+    pendingPinNote?.let { target ->
+        VaultPinDialog(
+            isSettingNewPin = false,
+            title = "Unlock Note",
+            subtitle = "\"${target.title.ifBlank { "Untitled" }}\" is protected by your Vault PIN.",
+            onDismiss = { pendingPinNote = null },
+            onVerify = { attempt -> NoteSecurityManager.verifyPin(context, attempt) },
+            onSuccess = {
+                unlockedInSession = unlockedInSession + target.id
+                val openEd = pendingPinOpensEditor
+                pendingPinNote = null
+                if (openEd) {
+                    onEditNote(target.id)
+                }
+            }
+        )
+    }
+}
+
+private fun cornerOffset(corner: FoldCorner, w: Float, h: Float): Offset = when (corner) {
+    FoldCorner.BOTTOM_RIGHT -> Offset(w, h)
+    FoldCorner.TOP_RIGHT -> Offset(w, 0f)
+    FoldCorner.BOTTOM_LEFT -> Offset(0f, h)
+    FoldCorner.TOP_LEFT -> Offset(0f, 0f)
+}
+
+/**
+ * Exact 2D paper-fold half-plane polygon solver (Sutherland-Hodgman clip + reflection across fold crease).
+ */
+private fun computeCornerFoldGeometry(
+    w: Float,
+    h: Float,
+    anchor: Offset,
+    tip: Offset
+): CornerFoldGeometry {
+    val dx = tip.x - anchor.x
+    val dy = tip.y - anchor.y
+    val distSq = dx * dx + dy * dy
+    if (distSq < 9f) {
+        return CornerFoldGeometry(false, false, emptyList(), emptyList(), emptyList(), null, null, anchor, tip)
+    }
+
+    val mid = Offset((anchor.x + tip.x) / 2f, (anchor.y + tip.y) / 2f)
+    val normal = Offset(dx, dy)
+    val rect = listOf(Offset(0f, 0f), Offset(w, 0f), Offset(w, h), Offset(0f, h))
+
+    fun signedDist(p: Offset): Float = (p.x - mid.x) * normal.x + (p.y - mid.y) * normal.y
+
+    val remaining = clipConvexPolygon(rect, ::signedDist, keepPositiveSide = true)
+    val exposed = clipConvexPolygon(rect, ::signedDist, keepPositiveSide = false)
+
+    val reflectedFlap = exposed.map { v ->
+        val t = signedDist(v) / distSq
+        Offset(v.x - 2f * t * normal.x, v.y - 2f * t * normal.y)
+    }
+
+    val scaleTol = sqrt(distSq) * 0.02f
+    val creasePts = remaining.filter { abs(signedDist(it)) <= scaleTol }
+    val c1 = creasePts.firstOrNull()
+    val c2 = if (creasePts.size >= 2) creasePts.last() else null
+
+    return CornerFoldGeometry(
+        isActive = true,
+        isCompletelyTurned = remaining.size < 3,
+        remainingPagePoly = remaining,
+        exposedCornerPoly = exposed,
+        reflectedFlapPoly = reflectedFlap,
+        creaseStart = c1,
+        creaseEnd = c2,
+        anchor = anchor,
+        tip = tip
+    )
+}
+
+private fun clipConvexPolygon(
+    poly: List<Offset>,
+    eval: (Offset) -> Float,
+    keepPositiveSide: Boolean
+): List<Offset> {
+    if (poly.isEmpty()) return emptyList()
+    val out = mutableListOf<Offset>()
+    val sign = if (keepPositiveSide) 1f else -1f
+
+    for (i in poly.indices) {
+        val curr = poly[i]
+        val prev = poly[(i + poly.size - 1) % poly.size]
+        val currVal = eval(curr) * sign
+        val prevVal = eval(prev) * sign
+
+        val currIn = currVal >= -0.001f
+        val prevIn = prevVal >= -0.001f
+
+        if (currIn != prevIn) {
+            val denom = prevVal - currVal
+            val t = if (abs(denom) > 1e-5f) (prevVal / denom).coerceIn(0f, 1f) else 0.5f
+            out.add(
+                Offset(
+                    prev.x + (curr.x - prev.x) * t,
+                    prev.y + (curr.y - prev.y) * t
+                )
+            )
+        }
+        if (currIn) {
+            out.add(curr)
+        }
+    }
+    return out
+}
+
+@Composable
+private fun ReMarkableCornerFoldOverlay(
+    geometry: CornerFoldGeometry,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val c1 = geometry.creaseStart ?: return@Canvas
+        val c2 = geometry.creaseEnd ?: return@Canvas
+
+        val dx = geometry.tip.x - geometry.anchor.x
+        val dy = geometry.tip.y - geometry.anchor.y
+        val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(4f)
+        val uNorm = Offset(dx / dist, dy / dist)
+        val creaseMid = Offset((c1.x + c2.x) / 2f, (c1.y + c2.y) / 2f)
+
+        // 1. Cast shadow onto the REVEALED next page inside exposedCornerPoly
+        if (geometry.exposedCornerPoly.size >= 3) {
+            val exposedPath = pointsToPath(geometry.exposedCornerPoly)
+            val shadowDepth = (dist * 0.30f).coerceIn(24f, 130f)
+            val shadowEnd = Offset(creaseMid.x - uNorm.x * shadowDepth, creaseMid.y - uNorm.y * shadowDepth)
+            clipPath(exposedPath) {
+                drawPath(
+                    path = exposedPath,
+                    brush = Brush.linearGradient(
+                        colorStops = arrayOf(
+                            0.0f to Color(0x58000000),
+                            0.45f to Color(0x22000000),
+                            1.0f to Color.Transparent
+                        ),
+                        start = creaseMid,
+                        end = shadowEnd
+                    )
+                )
+            }
+        }
+
+        // 2. Lifted Paper Flap Drop Shadow onto remaining foreground page + Reflected Flap Mesh
+        if (geometry.reflectedFlapPoly.size >= 3) {
+            val flapPath = pointsToPath(geometry.reflectedFlapPoly)
+
+            if (geometry.remainingPagePoly.size >= 3) {
+                val remainPath = pointsToPath(geometry.remainingPagePoly)
+                clipPath(remainPath) {
+                    // Ambient drop shadow under raised corner flap
+                    drawPath(
+                        path = flapPath,
+                        color = Color(0x26000000),
+                        style = Stroke(width = 22f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    )
+                }
+            }
+
+            // Reflected Back-of-Page Surface with cylindrical specular paper lighting
+            val flapSpan = (dist * 0.50f).coerceAtLeast(18f)
+            val gradEnd = Offset(creaseMid.x + uNorm.x * flapSpan, creaseMid.y + uNorm.y * flapSpan)
+
+            clipPath(flapPath) {
+                drawPath(
+                    path = flapPath,
+                    brush = Brush.linearGradient(
+                        colorStops = arrayOf(
+                            0.00f to Color(0xFFD6CEC2),
+                            0.18f to Color(0xFFFDFBF7), // Crisp specular fold sheen
+                            0.62f to Color(0xFFEBE5DA), // Warm parchment paper back
+                            1.00f to Color(0xFFDDD5C8)  // Soft corner edge shading
+                        ),
+                        start = creaseMid,
+                        end = gradEnd
+                    )
+                )
+
+                // Subtle ghost reverse-page ink bleed lines across the folded paper back
+                val bounds = flapPath.getBounds()
+                var gy = bounds.top + 28f
+                while (gy < bounds.bottom - 18f) {
+                    drawLine(
+                        color = Color(0x102C2C2C),
+                        start = Offset(bounds.left + 16f, gy),
+                        end = Offset(bounds.right - 22f, gy),
+                        strokeWidth = 3f
+                    )
+                    gy += 26f
+                }
+            }
+
+            // Crisp tactile paper thickness outline around folded corner
+            drawPath(
+                path = flapPath,
+                color = Color(0x36000000),
+                style = Stroke(width = 1.6f, join = StrokeJoin.Round)
+            )
+        }
+
+        // 3. Highlighted fold crease line
+        drawLine(
+            color = Color(0x38000000),
+            start = c1,
+            end = c2,
+            strokeWidth = 2f
+        )
+    }
+}
+
+private fun pointsToPath(points: List<Offset>): Path = Path().apply {
+    if (points.isNotEmpty()) {
+        moveTo(points[0].x, points[0].y)
+        for (i in 1 until points.size) {
+            lineTo(points[i].x, points[i].y)
+        }
+        close()
+    }
 }
 
 /**
  * Renders a tactile book page with authentic parchment texture, spine crease shading,
- * and an interactive corner dog-ear bookmark.
+ * ink previews, PDF summaries, interactive checklists, and corner dog-ear bookmark.
  */
 @Composable
 private fun BookPageSurface(
     note: NoteEntity,
     pageNumber: Int,
     isBookmarked: Boolean,
+    isSessionUnlocked: Boolean = false,
+    onUnlockClick: () -> Unit = {},
     onDogEarClick: () -> Unit,
+    onToggleChecklist: (blockId: String, itemId: String) -> Unit,
+    showCornerHint: Boolean,
     modifier: Modifier = Modifier
 ) {
     val blocks = remember(note) { ExportManager.parseBlocks(note) }
     val dateFormat = remember { SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()) }
+    val json = remember { Json { ignoreUnknownKeys = true } }
 
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(topStart = 4.dp, bottomStart = 4.dp, topEnd = 12.dp, bottomEnd = 12.dp),
-        color = Color(0xFFF9F6F0), // Authentic book paper parchment
+        color = Color(0xFFF9F6F0),
         shadowElevation = 8.dp
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -312,18 +855,16 @@ private fun BookPageSurface(
                     .padding(start = 28.dp, end = 20.dp, top = 20.dp, bottom = 16.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Header line with date
                 Text(
                     text = dateFormat.format(Date(note.updatedAt)).uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF8B4513), // Sepia / Leather tone
+                    color = Color(0xFF8B4513),
                     fontFamily = FontFamily.Serif,
                     letterSpacing = 1.2.sp
                 )
 
                 Spacer(Modifier.height(10.dp))
 
-                // Chapter / Note Title
                 Text(
                     text = note.title.ifBlank { "Untitled Note" },
                     style = MaterialTheme.typography.headlineMedium,
@@ -335,137 +876,245 @@ private fun BookPageSurface(
                 HorizontalDivider(color = Color(0xFFDCD6CD), thickness = 1.dp)
                 Spacer(Modifier.height(14.dp))
 
-                // Body text in classic book serif typography
-                if (note.content.isNotBlank()) {
-                    Text(
-                        text = note.content,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            lineHeight = 28.sp,
-                            fontSize = 17.sp,
-                            fontFamily = FontFamily.Serif,
-                            color = Color(0xFF2C2C2C)
+                if (note.isLocked && !isSessionUnlocked) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFECE7DE),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("🔒 Locked Note", fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = Color(0xFF2C2C2C))
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Unlock with your Vault PIN to read or edit this page.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF6B655D)
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedButton(onClick = onUnlockClick) {
+                                Text("🔓 Unlock Page")
+                            }
+                        }
+                    }
+                } else {
+                    if (note.content.isNotBlank()) {
+                        Text(
+                            text = note.content,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                lineHeight = 28.sp,
+                                fontSize = 17.sp,
+                                fontFamily = FontFamily.Serif,
+                                color = Color(0xFF2C2C2C)
+                            )
                         )
-                    )
-                    Spacer(Modifier.height(14.dp))
-                }
+                        Spacer(Modifier.height(14.dp))
+                    }
 
-                // Multimedia Blocks formatted for book reading
-                for (block in blocks) {
-                    when (block) {
-                        is NoteBlock.TextBlock -> {
-                            if (block.text.isNotBlank()) {
-                                Text(
-                                    text = block.text,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        lineHeight = 26.sp,
-                                        fontFamily = FontFamily.Serif,
-                                        color = Color(0xFF2C2C2C)
-                                    )
-                                )
-                                Spacer(Modifier.height(10.dp))
-                            }
-                        }
-                        is NoteBlock.InkBlock -> {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFECE7DE),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("✏️", fontSize = 20.sp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column {
-                                        Text("Handwritten Drawing Canvas", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
-                                        Text("Included in note vault", style = MaterialTheme.typography.bodySmall, color = Color(0xFF757575))
-                                    }
-                                }
-                            }
-                        }
-                        is NoteBlock.AudioBlock -> {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFECE7DE),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("🎙", fontSize = 20.sp)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column {
-                                        Text("Voice Recording (${block.durationMs / 1000}s)", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
-                                        Text("Audio block preserved in note", style = MaterialTheme.typography.bodySmall, color = Color(0xFF757575))
-                                    }
-                                }
-                            }
-                        }
-                        is NoteBlock.ImageBlock -> {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFECE7DE),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("🖼", fontSize = 20.sp)
-                                        Spacer(Modifier.width(10.dp))
-                                        Text("Embedded Image Attachment", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
-                                    }
-                                    if (!block.extractedOcrText.isNullOrBlank()) {
-                                        Spacer(Modifier.height(6.dp))
-                                        Text(
-                                            "“${block.extractedOcrText.trim()}”",
-                                            fontStyle = FontStyle.Italic,
+                    for (block in blocks) {
+                        when (block) {
+                            is NoteBlock.TextBlock -> {
+                                if (block.text.isNotBlank()) {
+                                    Text(
+                                        text = block.text,
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            lineHeight = 26.sp,
                                             fontFamily = FontFamily.Serif,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF4A4A4A)
+                                            color = Color(0xFF2C2C2C)
                                         )
-                                    }
+                                    )
+                                    Spacer(Modifier.height(10.dp))
                                 }
                             }
-                        }
-                        is NoteBlock.ChecklistBlock -> {
-                            val checkedCount = block.items.count { it.isChecked }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color(0xFFECE7DE),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                            is NoteBlock.InkBlock -> {
+                                val strokes = remember(block.strokesJson) {
+                                    try {
+                                        json.decodeFromString<List<InkStroke>>(block.strokesJson)
+                                    } catch (_: Exception) {
+                                        emptyList()
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFECE7DE),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
                                         Text(
-                                            text = block.title.ifBlank { "To-Do Checklist" },
+                                            "✏️ Handwritten Sketch (${strokes.size} strokes)",
                                             fontFamily = FontFamily.Serif,
                                             style = MaterialTheme.typography.titleSmall,
                                             color = Color(0xFF2C2C2C)
                                         )
+                                        if (strokes.isNotEmpty()) {
+                                            Spacer(Modifier.height(6.dp))
+                                            Canvas(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(110.dp)
+                                                    .background(Color(0xFFF9F6F0), RoundedCornerShape(6.dp))
+                                            ) {
+                                                val allPts = strokes.flatMap { it.points }
+                                                if (allPts.isNotEmpty()) {
+                                                    val minX = allPts.minOf { it.x }
+                                                    val maxX = allPts.maxOf { it.x }
+                                                    val minY = allPts.minOf { it.y }
+                                                    val maxY = allPts.maxOf { it.y }
+                                                    val rawW = (maxX - minX).coerceAtLeast(10f)
+                                                    val rawH = (maxY - minY).coerceAtLeast(10f)
+                                                    val pad = 12f
+                                                    val scale = minOf((size.width - pad * 2) / rawW, (size.height - pad * 2) / rawH)
+                                                    val ox = (size.width - rawW * scale) / 2f
+                                                    val oy = (size.height - rawH * scale) / 2f
+                                                    for (s in strokes) {
+                                                        if (s.points.size < 2) continue
+                                                        val p = Path().apply {
+                                                            moveTo(ox + (s.points[0].x - minX) * scale, oy + (s.points[0].y - minY) * scale)
+                                                            for (i in 1 until s.points.size) {
+                                                                lineTo(ox + (s.points[i].x - minX) * scale, oy + (s.points[i].y - minY) * scale)
+                                                            }
+                                                        }
+                                                        val hex = if (s.colorHex.equals("#FFFFFF", true)) "#2C2C2C" else s.colorHex
+                                                        val col = try {
+                                                            Color(android.graphics.Color.parseColor(hex))
+                                                        } catch (_: Exception) {
+                                                            Color(0xFF2C2C2C)
+                                                        }
+                                                        drawPath(
+                                                            p,
+                                                            color = col.copy(alpha = if (s.isHighlighter) 0.4f else 0.95f),
+                                                            style = Stroke(width = (s.strokeWidth * scale).coerceIn(1.5f, 5f), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            is NoteBlock.AudioBlock -> {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFECE7DE),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("🎙", fontSize = 20.sp)
+                                        Spacer(Modifier.width(10.dp))
+                                        Column {
+                                            Text("Voice Recording (${block.durationMs / 1000}s)", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
+                                            Text("Audio block preserved in note", style = MaterialTheme.typography.bodySmall, color = Color(0xFF757575))
+                                        }
+                                    }
+                                }
+                            }
+                            is NoteBlock.ImageBlock -> {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFECE7DE),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("🖼", fontSize = 20.sp)
+                                            Spacer(Modifier.width(10.dp))
+                                            Text("Embedded Image Attachment", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
+                                        }
+                                        if (!block.extractedOcrText.isNullOrBlank()) {
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                "“${block.extractedOcrText.trim()}”",
+                                                fontStyle = FontStyle.Italic,
+                                                fontFamily = FontFamily.Serif,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF4A4A4A)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            is NoteBlock.ChecklistBlock -> {
+                                val checkedCount = block.items.count { it.isChecked }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFECE7DE),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = block.title.ifBlank { "To-Do Checklist" },
+                                                fontFamily = FontFamily.Serif,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = Color(0xFF2C2C2C)
+                                            )
+                                            Text(
+                                                text = "$checkedCount/${block.items.size}",
+                                                fontFamily = FontFamily.Serif,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFF8B4513)
+                                            )
+                                        }
+                                        if (block.items.isNotEmpty()) {
+                                            Spacer(Modifier.height(6.dp))
+                                            block.items.forEach { item ->
+                                                val prefix = if (item.isChecked) "☑" else "☐"
+                                                Text(
+                                                    text = "$prefix ${item.text}",
+                                                    fontFamily = FontFamily.Serif,
+                                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                                        textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
+                                                    ),
+                                                    color = if (item.isChecked) Color(0xFF757575) else Color(0xFF2C2C2C),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable { onToggleChecklist(block.id, item.id) }
+                                                        .padding(vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            is NoteBlock.PdfBlock -> {
+                                val anns = remember(block.annotationsJson) { PdfHelper.parseAnnotations(block.annotationsJson) }
+                                val markedPages = anns.count { it.strokes.isNotEmpty() || it.pageNote.isNotBlank() }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFFECE7DE),
+                                    border = BorderStroke(1.dp, Color(0xFFD2C8B8)),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
                                         Text(
-                                            text = "$checkedCount/${block.items.size}",
+                                            text = "📄 ${block.fileName.ifBlank { "PDF Document" }}",
                                             fontFamily = FontFamily.Serif,
-                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = Color(0xFF2C2C2C)
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = "${block.pageCount} pages • $markedPages annotated • Tap ✏️ above to markup",
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = Color(0xFF8B4513)
                                         )
-                                    }
-                                    if (block.items.isNotEmpty()) {
-                                        Spacer(Modifier.height(6.dp))
-                                        block.items.forEach { item ->
-                                            val prefix = if (item.isChecked) "☑" else "☐"
+                                        anns.filter { it.pageNote.isNotBlank() }.take(3).forEach { ann ->
+                                            Spacer(Modifier.height(4.dp))
                                             Text(
-                                                text = "$prefix ${item.text}",
+                                                text = "• Page ${ann.pageIndex + 1}: ${ann.pageNote}",
                                                 fontFamily = FontFamily.Serif,
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
-                                                ),
-                                                color = if (item.isChecked) Color(0xFF757575) else Color(0xFF2C2C2C),
-                                                modifier = Modifier.padding(vertical = 2.dp)
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF4A4A4A)
                                             )
                                         }
                                     }
@@ -477,7 +1126,6 @@ private fun BookPageSurface(
 
                 Spacer(Modifier.height(28.dp))
 
-                // Footer page folio number
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(
                         text = "— $pageNumber —",
@@ -496,13 +1144,41 @@ private fun BookPageSurface(
                     .align(Alignment.TopEnd)
                     .size(56.dp)
             )
+
+            // Subtle reMarkable Bottom-Right Corner Lift Cue when idle
+            if (showCornerHint) {
+                Canvas(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(44.dp)
+                ) {
+                    val w = size.width
+                    val h = size.height
+                    val fold = 22f
+                    drawPath(
+                        path = Path().apply {
+                            moveTo(w - fold, h)
+                            lineTo(w, h - fold)
+                            lineTo(w - fold, h - fold)
+                            close()
+                        },
+                        color = Color(0xFFE7E0D4)
+                    )
+                    drawPath(
+                        path = Path().apply {
+                            moveTo(w - fold, h)
+                            lineTo(w, h - fold)
+                            lineTo(w, h)
+                            close()
+                        },
+                        color = Color(0x28000000)
+                    )
+                }
+            }
         }
     }
 }
 
-/**
- * 3D Corner Dog-Ear Bookmark. Tapping toggles a golden folded corner with drop shadow.
- */
 @Composable
 private fun DogEarBookmark(
     isFolded: Boolean,
@@ -514,13 +1190,9 @@ private fun DogEarBookmark(
             .clickable(onClick = onClick)
     ) {
         val w = size.width
-        val h = size.height
 
         if (isFolded) {
-            // Fold size
             val foldSize = 44f
-
-            // Shadow under the folded corner
             val shadowPath = Path().apply {
                 moveTo(w - foldSize - 4f, 0f)
                 lineTo(w, foldSize + 4f)
@@ -529,7 +1201,6 @@ private fun DogEarBookmark(
             }
             drawPath(shadowPath, color = Color(0x44000000))
 
-            // Folded paper corner triangle (Golden Bookmark Finish)
             val foldPath = Path().apply {
                 moveTo(w - foldSize, 0f)
                 lineTo(w, foldSize)
@@ -545,7 +1216,6 @@ private fun DogEarBookmark(
                 )
             )
 
-            // Crease highlight line
             drawLine(
                 color = Color(0x66FFFFFF),
                 start = Offset(w - foldSize, 0f),
@@ -553,7 +1223,6 @@ private fun DogEarBookmark(
                 strokeWidth = 1.5f
             )
         } else {
-            // Subtle dotted outline inviting user to dog-ear bookmark the page
             val foldSize = 24f
             val outlinePath = Path().apply {
                 moveTo(w - foldSize, 0f)
@@ -571,12 +1240,8 @@ private fun DogEarBookmark(
     }
 }
 
-/**
- * 3D Page-Curl Physics overlay. Renders smooth cylinder gradient shadows and
- * page peel curvature reflecting light across the curling leaf.
- */
 @Composable
-private fun PageCurlOverlay(
+private fun SpineCurlOverlay(
     progress: Float,
     isNext: Boolean,
     modifier: Modifier = Modifier
@@ -585,26 +1250,23 @@ private fun PageCurlOverlay(
         val w = size.width
         val h = size.height
         val curlAmount = progress.coerceIn(0f, 1f)
-
         if (curlAmount <= 0.001f) return@Canvas
 
-        // Position of the fold line moving across the page
         val foldX = if (isNext) w * (1f - curlAmount) else w * curlAmount
         val shadowWidth = 60f + (curlAmount * 40f)
 
-        // 1. Ambient drop shadow cast by the peeling page onto the page beneath
         val shadowRect = if (isNext) {
-            Rect(foldX - shadowWidth, 0f, foldX, h)
-        } else {
             Rect(foldX, 0f, foldX + shadowWidth, h)
+        } else {
+            Rect(foldX - shadowWidth, 0f, foldX, h)
         }
 
         drawRect(
             brush = Brush.horizontalGradient(
                 colors = if (isNext) {
-                    listOf(Color.Transparent, Color(0x66000000))
-                } else {
                     listOf(Color(0x66000000), Color.Transparent)
+                } else {
+                    listOf(Color.Transparent, Color(0x66000000))
                 },
                 startX = shadowRect.left,
                 endX = shadowRect.right
@@ -613,18 +1275,16 @@ private fun PageCurlOverlay(
             size = Size(shadowRect.width, h)
         )
 
-        // 2. The curling page flap (Curled back leaf)
-        val curlFlapWidth = (curlAmount * 120f).coerceAtMost(w * 0.45f)
-        val flapLeft = if (isNext) foldX else foldX - curlFlapWidth
-        val flapRight = if (isNext) foldX + curlFlapWidth else foldX
+        val curlFlapWidth = (curlAmount * 120f).coerceAtMost(w * 0.45f).coerceAtLeast(4f)
+        val flapLeft = if (isNext) (foldX - curlFlapWidth) else foldX
+        val flapRight = if (isNext) foldX else (foldX + curlFlapWidth)
 
-        // Backside paper tone of the curled page with cylindrical lighting gradient
         drawRect(
             brush = Brush.horizontalGradient(
                 colors = listOf(
-                    Color(0xFFE2DDD5), // Backside paper
-                    Color(0xFFF4F1EA), // Peak specular highlight on the curl cylinder
-                    Color(0xFFB5ADA0)  // Deep shadow at the apex of the curl
+                    Color(0xFFE2DDD5),
+                    Color(0xFFFDFBF7),
+                    Color(0xFFB5ADA0)
                 ),
                 startX = flapLeft,
                 endX = flapRight
@@ -633,7 +1293,6 @@ private fun PageCurlOverlay(
             size = Size(curlFlapWidth, h)
         )
 
-        // 3. Crisp spine crease line along the fold
         drawLine(
             color = Color(0x44000000),
             start = Offset(foldX, 0f),

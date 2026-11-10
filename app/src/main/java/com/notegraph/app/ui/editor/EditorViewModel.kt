@@ -1,6 +1,7 @@
 package com.notegraph.app.ui.editor
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,11 +14,13 @@ import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.UUID
@@ -55,6 +58,12 @@ class EditorViewModel @Inject constructor(
     val saveEvent: SharedFlow<String> = _saveEvent.asSharedFlow()
 
     private var debouncedSaveJob: Job? = null
+
+    val allNotes: StateFlow<List<NoteEntity>> = noteDao.getAllNotes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val outgoingLinks: StateFlow<List<LinkEntity>> = linkDao.getLinksForNote(noteId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val backlinks: StateFlow<List<BacklinkItem>> = _note.flatMapLatest { currentNote ->
         if (currentNote != null) {
@@ -173,6 +182,62 @@ class EditorViewModel @Inject constructor(
         )
     }
 
+    fun importPdfFromUri(uri: Uri, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val info = withContext(Dispatchers.IO) {
+                PdfHelper.importPdfFromUri(appContext, uri)
+            }
+            if (info != null) {
+                appendBlock(
+                    NoteBlock.PdfBlock(
+                        id = UUID.randomUUID().toString(),
+                        filePath = info.filePath,
+                        fileName = info.fileName,
+                        pageCount = info.pageCount,
+                        currentPage = 0,
+                        annotationsJson = "[]"
+                    )
+                )
+                onComplete(true)
+            } else {
+                onComplete(false)
+            }
+        }
+    }
+
+    fun setNoteLocked(locked: Boolean) {
+        _note.value?.let { current ->
+            _note.value = current.copy(isLocked = locked, updatedAt = System.currentTimeMillis())
+            saveNow()
+        }
+    }
+
+    fun openOrCreateNoteByTitle(targetTitle: String, onReady: (String) -> Unit) {
+        val clean = targetTitle.trim()
+        if (clean.isBlank()) return
+        viewModelScope.launch {
+            val all = noteDao.getAllNotesOnce()
+            val match = all.find { it.title.trim().equals(clean, ignoreCase = true) }
+            if (match != null) {
+                onReady(match.id)
+            } else {
+                val now = System.currentTimeMillis()
+                val createdId = UUID.randomUUID().toString()
+                noteDao.insertNote(
+                    NoteEntity(
+                        id = createdId,
+                        title = clean,
+                        content = "",
+                        folderId = _note.value?.folderId,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+                onReady(createdId)
+            }
+        }
+    }
+
     fun updateChecklistTitle(blockId: String, newTitle: String) {
         val block = _blocks.value.find { it.id == blockId }
         if (block is NoteBlock.ChecklistBlock) {
@@ -254,6 +319,13 @@ class EditorViewModel @Inject constructor(
         }
     }
 
+    fun updateInkTemplate(blockId: String, template: String) {
+        val block = _blocks.value.find { it.id == blockId }
+        if (block is NoteBlock.InkBlock) {
+            updateBlock(block.copy(paperTemplate = template))
+        }
+    }
+
     /**
      * Immediately persists note and blocks to Room.
      * Used by explicit Save button and onBack navigation (DisposableEffect/BackHandler).
@@ -313,6 +385,11 @@ class EditorViewModel @Inject constructor(
                 is NoteBlock.ChecklistBlock -> {
                     val itemsText = block.items.joinToString("\n") { it.text }
                     listOf(block.title, itemsText).filter { it.isNotBlank() }.joinToString("\n")
+                }
+                is NoteBlock.PdfBlock -> {
+                    val notes = PdfHelper.parseAnnotations(block.annotationsJson)
+                        .mapNotNull { it.pageNote.takeIf { n -> n.isNotBlank() } }
+                    (listOf(block.fileName) + notes).joinToString("\n")
                 }
                 else -> null
             }

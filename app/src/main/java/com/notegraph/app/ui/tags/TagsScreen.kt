@@ -13,9 +13,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.common.NoteSecurityManager
+import com.notegraph.app.ui.common.VaultPinDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,7 +37,9 @@ fun TagsScreen(
     onNoteClick: (String) -> Unit = {},
     viewModel: TagsViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val notes by viewModel.notes.collectAsState()
+    var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
 
     // Build the hierarchical tag tree from notes
     val tagTree = remember(notes) { buildTagTree(notes) }
@@ -130,22 +135,35 @@ fun TagsScreen(
                             }
                         } else {
                             items(filteredNotes) { note ->
-                                val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                                val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(vertical = 4.dp)
-                                        .clickable { onNoteClick(note.id) },
+                                        .clickable {
+                                            if (note.isLocked && NoteSecurityManager.hasPin(context)) {
+                                                pendingUnlockNote = note
+                                            } else {
+                                                onNoteClick(note.id)
+                                            }
+                                        },
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
                                         Text(
-                                            note.title.ifBlank { "Untitled" },
+                                            if (note.isLocked) "🔒 ${note.title.ifBlank { "Untitled" }}" else note.title.ifBlank { "Untitled" },
                                             style = MaterialTheme.typography.titleSmall
                                         )
-                                        if (note.content.isNotBlank()) {
+                                        if (note.isLocked) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                "Locked note — tap & enter PIN to open",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
+                                        } else if (note.content.isNotBlank()) {
                                             Spacer(Modifier.height(4.dp))
                                             Text(
                                                 note.content.take(120),
@@ -168,6 +186,20 @@ fun TagsScreen(
                 }
             }
         }
+    }
+
+    pendingUnlockNote?.let { locked ->
+        VaultPinDialog(
+            isSettingNewPin = false,
+            title = "Unlock Note",
+            subtitle = "\"${locked.title.ifBlank { "Untitled" }}\" is protected.",
+            onDismiss = { pendingUnlockNote = null },
+            onVerify = { attempt -> NoteSecurityManager.verifyPin(context, attempt) },
+            onSuccess = {
+                pendingUnlockNote = null
+                onNoteClick(locked.id)
+            }
+        )
     }
 }
 
