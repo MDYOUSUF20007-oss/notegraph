@@ -1,16 +1,20 @@
 package com.notegraph.app.ui.editor
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -19,11 +23,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.notegraph.app.data.local.entity.ChecklistItem
 import com.notegraph.app.data.local.entity.NoteBlock
+import com.notegraph.app.ui.theme.ThemeManager
 
 /**
- * Interactive checklist / to-do block placed inside a note.
- * Supports toggling checkmarks (with strikethrough feedback), adding items,
- * editing tasks inline, and tracking live completion progress.
+ * Minimalist interactive checklist / to-do block with gradient progress indicator.
  */
 @Composable
 fun ChecklistBlockUi(
@@ -37,15 +40,16 @@ fun ChecklistBlockUi(
     val totalCount = block.items.size
     val checkedCount = block.items.count { it.isChecked }
     val progress = if (totalCount > 0) checkedCount.toFloat() / totalCount.toFloat() else 0f
+    val activePreset = ThemeManager.currentGradient
 
     var localTitle by remember(block.id) { mutableStateOf(block.title) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        // Header: Checklist Title + Live Progress Counter
+        // Header: Checklist Title + Progress Badge
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -59,17 +63,17 @@ fun ChecklistBlockUi(
                 },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.titleSmall.copy(
-                    color = MaterialTheme.colorScheme.primary,
+                    color = activePreset.accentStart,
                     fontWeight = FontWeight.SemiBold
                 ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                cursorBrush = SolidColor(activePreset.accentStart),
                 modifier = Modifier.weight(1f),
                 decorationBox = { innerTextField ->
                     if (localTitle.isEmpty()) {
                         Text(
                             "Checklist Title",
                             style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         )
                     }
                     innerTextField()
@@ -77,28 +81,35 @@ fun ChecklistBlockUi(
             )
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
+                shape = RoundedCornerShape(10.dp),
+                color = activePreset.accentStart.copy(alpha = 0.14f)
             ) {
                 Text(
-                    text = if (totalCount == 0) "0 tasks" else "$checkedCount / $totalCount done",
+                    text = if (totalCount == 0) "0 tasks" else "$checkedCount / $totalCount",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = activePreset.accentStart,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                 )
             }
         }
 
         if (totalCount > 0) {
-            Spacer(Modifier.height(6.dp))
-            LinearProgressIndicator(
-                progress = { progress },
+            Spacer(Modifier.height(8.dp))
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-            )
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(ThemeManager.cardBorderColor)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .background(ThemeManager.activeAccentBrush)
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -116,12 +127,18 @@ fun ChecklistBlockUi(
             }
         }
 
-        // "+ Add item" button
+        // "+ Add task" button
         TextButton(
             onClick = onAddItem,
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
         ) {
-            Text("+ Add to-do item", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text("Add task", fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -147,7 +164,8 @@ private fun ChecklistItemRow(
             onCheckedChange = { onToggle() },
             colors = CheckboxDefaults.colors(
                 checkedColor = MaterialTheme.colorScheme.primary,
-                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                checkmarkColor = MaterialTheme.colorScheme.onPrimary,
+                uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
             )
         )
 
@@ -159,7 +177,7 @@ private fun ChecklistItemRow(
             },
             textStyle = MaterialTheme.typography.bodyMedium.copy(
                 color = if (item.isChecked) {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 } else {
                     MaterialTheme.colorScheme.onSurface
                 },
@@ -174,9 +192,9 @@ private fun ChecklistItemRow(
             decorationBox = { innerTextField ->
                 if (localText.isEmpty()) {
                     Text(
-                        "Write a task...",
+                        "Write a task…",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
                     )
                 }
                 innerTextField()
@@ -188,10 +206,10 @@ private fun ChecklistItemRow(
             modifier = Modifier.size(28.dp)
         ) {
             Icon(
-                Icons.Default.Close,
+                Icons.Rounded.Close,
                 contentDescription = "Delete checklist item",
                 modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
             )
         }
     }

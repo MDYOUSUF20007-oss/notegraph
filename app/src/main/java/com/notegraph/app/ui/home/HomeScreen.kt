@@ -24,19 +24,32 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckBox
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Label
+import androidx.compose.material.icons.rounded.Layers
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.People
+import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -75,8 +88,11 @@ import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
 import com.notegraph.app.ui.editor.ExportManager
 import com.notegraph.app.ui.theme.AppThemeMode
+import com.notegraph.app.ui.theme.GradientFloatingActionButton
+import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.NoteGraphColors
 import com.notegraph.app.ui.theme.ThemeManager
+import com.notegraph.app.ui.theme.ThemeStudioSheetContent
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
@@ -136,7 +152,7 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val todayDateStr = remember {
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        SimpleDateFormat("MMM d", Locale.getDefault()).format(Date())
     }
 
     var showMenuForNote by remember { mutableStateOf<NoteEntity?>(null) }
@@ -145,6 +161,7 @@ fun HomeScreen(
     var editingFolder by remember { mutableStateOf<FolderEntity?>(null) }
     var showTemplatesDialog by remember { mutableStateOf(false) }
     var showTrashDialog by remember { mutableStateOf(false) }
+    var showThemeStudioSheet by remember { mutableStateOf(false) }
     var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
     var pendingSetPinForNote by remember { mutableStateOf<NoteEntity?>(null) }
 
@@ -170,8 +187,9 @@ fun HomeScreen(
     var hoveredDropTargetId by remember { mutableStateOf<String?>(null) }
 
     val foldersById = remember(folders) { folders.associateBy { it.id } }
+    val activePreset = ThemeManager.currentGradient
 
-    Box(
+    MinimalistBackground(
         modifier = Modifier
             .fillMaxSize()
             .onGloballyPositioned { coords ->
@@ -179,66 +197,78 @@ fun HomeScreen(
             }
     ) {
         Scaffold(
+            containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
                     title = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(30.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(
-                                                NoteGraphColors.RainbowViolet,
-                                                NoteGraphColors.RainbowMagenta,
-                                                NoteGraphColors.RainbowWarmOrange
-                                            )
-                                        )
-                                    ),
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(ThemeManager.activeAccentBrush),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "NG",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold
+                                    text = "N",
+                                    color = activePreset.onAccent,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
-                            Text(
-                                text = "NoteGraph",
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column {
+                                Text(
+                                    text = "NoteGraph",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "${filteredNotes.size} note${if (filteredNotes.size == 1) "" else "s"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                                )
+                            }
                         }
                     },
                     actions = {
-                        ThemeCyclePill(
+                        ThemeStudioPill(
                             themeMode = ThemeManager.currentTheme,
-                            onClick = { ThemeManager.cycleTheme() }
+                            onClick = { showThemeStudioSheet = true }
                         )
                         IconButton(onClick = onNavigateSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                            Icon(
+                                imageVector = Icons.Rounded.Settings,
+                                contentDescription = "Appearance & Settings",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(
+                GradientFloatingActionButton(
                     onClick = {
                         viewModel.createNote { newId ->
                             onNoteClick(newId)
                         }
                     },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = CircleShape
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "New Note")
-                }
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "New Note",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    },
+                    label = "New"
+                )
             },
             bottomBar = {
                 BottomGlassDock(
@@ -254,131 +284,108 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                // ─── Row 1: Daily Note Pill, Open PDF, Templates, Trash & Quick Status ───
+                // ─── Minimalist Utility Pills (Daily, Open PDF, Templates, Trash) ───
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
+                    QuickActionPill(
+                        icon = Icons.Rounded.Today,
+                        label = todayDateStr,
+                        highlighted = true,
                         onClick = {
                             viewModel.openOrCreateDailyNote { dailyId ->
                                 onNoteClick(dailyId)
                             }
-                        },
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text("📅", fontSize = 13.sp)
-                            Text(
-                                text = "$todayDateStr",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
                         }
-                    }
+                    )
 
-                    Surface(
-                        onClick = { openPdfLauncher.launch(arrayOf("application/pdf")) },
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text("📄", fontSize = 13.sp)
-                            Text(
-                                text = "Open PDF",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+                    QuickActionPill(
+                        icon = Icons.Rounded.PictureAsPdf,
+                        label = "Open PDF",
+                        highlighted = false,
+                        onClick = { openPdfLauncher.launch(arrayOf("application/pdf")) }
+                    )
 
-                    Surface(
-                        onClick = { showTemplatesDialog = true },
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = BorderStroke(1.dp, ThemeManager.cardBorderColor)
-                    ) {
-                        Text(
-                            text = "📋 Templates",
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
-                        )
-                    }
+                    QuickActionPill(
+                        icon = Icons.Rounded.Layers,
+                        label = "Templates",
+                        highlighted = false,
+                        onClick = { showTemplatesDialog = true }
+                    )
 
                     if (trashNotes.isNotEmpty()) {
                         Surface(
                             onClick = { showTrashDialog = true },
                             shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
                         ) {
-                            Text(
-                                text = "🗑 Trash (${trashNotes.size})",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.DeleteOutline,
+                                    contentDescription = "Trash",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "${trashNotes.size}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
                         }
                     }
 
                     if (draggingNote != null) {
                         val dropFolderLabel = when (hoveredDropTargetId) {
-                            null -> "Drop onto a folder ↓"
+                            null -> "Drop onto a folder"
                             HomeViewModel.UNFILED_FOLDER_ID -> "Release to unfile"
                             else -> {
                                 val target = foldersById[hoveredDropTargetId]
-                                if (target != null) "Drop in ${target.icon} ${target.name}" else "Drop here"
+                                if (target != null) "Drop in ${target.name}" else "Drop here"
                             }
                         }
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                            shape = RoundedCornerShape(20.dp),
+                            color = activePreset.accentStart.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, activePreset.accentStart)
                         ) {
                             Text(
                                 text = dropFolderLabel,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                color = activePreset.accentStart,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
 
-                // ─── Row 2: Customizable Folder Shelf (Tap to filter, Long-press to edit, Drop notes) ───
+                // ─── Minimalist Folder Shelf (Tap to filter, Long-press to customize, Drop notes) ───
                 LazyRow(
                     modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // All Notes
                     item(key = "folder_all") {
                         FolderChip(
-                            icon = "🗂",
+                            vectorIcon = Icons.Rounded.FolderOpen,
+                            emojiIcon = null,
                             name = "All",
                             count = allNotes.size,
-                            accentColor = MaterialTheme.colorScheme.primary,
+                            accentColor = activePreset.accentStart,
                             isSelected = selectedFolderId == null,
                             isDropHovered = false,
                             showEditButton = false,
@@ -388,17 +395,17 @@ fun HomeScreen(
                         )
                     }
 
-                    // Unfiled Notes (accepts drops to remove folder)
                     item(key = HomeViewModel.UNFILED_FOLDER_ID) {
                         DisposableEffect(HomeViewModel.UNFILED_FOLDER_ID) {
                             onDispose { folderBounds.remove(HomeViewModel.UNFILED_FOLDER_ID) }
                         }
                         val unfiledCount = allNotes.count { it.folderId == null }
                         FolderChip(
-                            icon = "📄",
+                            vectorIcon = Icons.Rounded.Description,
+                            emojiIcon = null,
                             name = "Unfiled",
                             count = unfiledCount,
-                            accentColor = MaterialTheme.colorScheme.secondary,
+                            accentColor = activePreset.accentEnd,
                             isSelected = selectedFolderId == HomeViewModel.UNFILED_FOLDER_ID,
                             isDropHovered = hoveredDropTargetId == HomeViewModel.UNFILED_FOLDER_ID,
                             showEditButton = false,
@@ -411,16 +418,16 @@ fun HomeScreen(
                         )
                     }
 
-                    // User & Starter Folders
                     items(folders, key = { it.id }) { folder ->
                         DisposableEffect(folder.id) {
                             onDispose { folderBounds.remove(folder.id) }
                         }
-                        val folderColor = parseColorSafe(folder.colorHex, MaterialTheme.colorScheme.primary)
+                        val folderColor = parseColorSafe(folder.colorHex, activePreset.accentStart)
                         val count = allNotes.count { it.folderId == folder.id }
                         val isSelected = selectedFolderId == folder.id
                         FolderChip(
-                            icon = folder.icon,
+                            vectorIcon = null,
+                            emojiIcon = folder.icon,
                             name = folder.name,
                             count = count,
                             accentColor = folderColor,
@@ -436,13 +443,12 @@ fun HomeScreen(
                         )
                     }
 
-                    // + New Folder button
                     item(key = "add_folder_btn") {
                         Surface(
                             onClick = { showCreateFolderDialog = true },
                             shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                            color = Color.Transparent,
+                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
@@ -450,59 +456,73 @@ fun HomeScreen(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.Add,
+                                    imageVector = Icons.Rounded.Add,
                                     contentDescription = "New Folder",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
+                                    tint = activePreset.accentStart,
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Text(
                                     text = "Folder",
                                     style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold
+                                    color = activePreset.accentStart,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
 
-                // ─── Row 3: Masonry Note Card Grid ───
+                // ─── Minimalist Masonry Note Grid ───
                 if (filteredNotes.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(24.dp),
+                            .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             val activeFolder = selectedFolderId?.let { foldersById[it] }
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(activePreset.accentStart.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (activeFolder != null) Icons.Rounded.Folder else Icons.Rounded.Description,
+                                    contentDescription = null,
+                                    tint = activePreset.accentStart,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                             Text(
-                                text = if (activeFolder != null) {
-                                    "No notes in ${activeFolder.icon} ${activeFolder.name} yet"
-                                } else if (selectedFolderId == HomeViewModel.UNFILED_FOLDER_ID) {
-                                    "No unfiled notes"
-                                } else {
-                                    "Your vault is ready"
+                                text = when {
+                                    activeFolder != null -> "No notes in ${activeFolder.name}"
+                                    selectedFolderId == HomeViewModel.UNFILED_FOLDER_ID -> "No unfiled notes"
+                                    else -> "Clean slate"
                                 },
                                 style = MaterialTheme.typography.titleMedium
                             )
-                            Spacer(Modifier.height(6.dp))
                             Text(
-                                text = "Tap + to create a note, or long-press and drag any note onto a folder chip above.",
+                                text = "Tap New below to write, or long-press a note to drag it into a folder.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
                             )
                         }
                     }
                 } else {
                     LazyVerticalStaggeredGrid(
-                        columns = StaggeredGridCells.Adaptive(160.dp),
+                        columns = StaggeredGridCells.Adaptive(162.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 92.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalItemSpacing = 8.dp
+                        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 96.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalItemSpacing = 10.dp
                     ) {
                         items(filteredNotes, key = { it.id }) { note ->
                             val noteFolder = note.folderId?.let { foldersById[it] }
@@ -543,10 +563,10 @@ fun HomeScreen(
                                     if (dragged != null && targetId != null) {
                                         viewModel.moveNoteToFolder(dragged.id, targetId)
                                         val msg = if (targetId == HomeViewModel.UNFILED_FOLDER_ID) {
-                                            "Moved \"${dragged.title.ifBlank { "Untitled" }}\" to Unfiled"
+                                            "Moved to Unfiled"
                                         } else {
                                             val f = foldersById[targetId]
-                                            "Moved \"${dragged.title.ifBlank { "Untitled" }}\" to ${f?.icon.orEmpty()} ${f?.name ?: "Folder"}"
+                                            "Moved to ${f?.name ?: "Folder"}"
                                         }
                                         scope.launch {
                                             snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
@@ -574,10 +594,10 @@ fun HomeScreen(
             val ghostOffset = (dragPointerRoot - rootOrigin) - dragGrabOffset - Offset(0f, 36f)
             val targetFolder = hoveredDropTargetId?.let { foldersById[it] }
             val highlightColor = when (hoveredDropTargetId) {
-                null -> MaterialTheme.colorScheme.primary
-                HomeViewModel.UNFILED_FOLDER_ID -> MaterialTheme.colorScheme.secondary
-                else -> targetFolder?.let { parseColorSafe(it.colorHex, MaterialTheme.colorScheme.primary) }
-                    ?: MaterialTheme.colorScheme.primary
+                null -> activePreset.accentStart
+                HomeViewModel.UNFILED_FOLDER_ID -> activePreset.accentEnd
+                else -> targetFolder?.let { parseColorSafe(it.colorHex, activePreset.accentStart) }
+                    ?: activePreset.accentStart
             }
 
             Surface(
@@ -589,29 +609,29 @@ fun HomeScreen(
                         )
                     }
                     .width(185.dp)
-                    .shadow(14.dp, RoundedCornerShape(14.dp)),
-                shape = RoundedCornerShape(14.dp),
+                    .shadow(16.dp, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
-                border = BorderStroke(2.dp, highlightColor)
+                border = BorderStroke(1.5.dp, highlightColor)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = activeDragNote.title.ifBlank { "Untitled Note" },
+                        text = activeDragNote.title.ifBlank { "Untitled" },
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = when (hoveredDropTargetId) {
-                            null -> "Drag onto any folder…"
-                            HomeViewModel.UNFILED_FOLDER_ID -> "Release → 📄 Unfiled"
-                            else -> "Release → ${targetFolder?.icon.orEmpty()} ${targetFolder?.name ?: "Folder"}"
+                            null -> "Drag onto folder…"
+                            HomeViewModel.UNFILED_FOLDER_ID -> "Release -> Unfiled"
+                            else -> "Release -> ${targetFolder?.name ?: "Folder"}"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = highlightColor,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -620,14 +640,30 @@ fun HomeScreen(
         }
     }
 
-    // ─── Dialog 1: Note Contextual Menu (Pin / Move to Folder / Delete) ───
+    // ─── Live Appearance & Gradient Studio Bottom Sheet ───
+    if (showThemeStudioSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showThemeStudioSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.background
+        ) {
+            ThemeStudioSheetContent(
+                onOpenSettings = onNavigateSettings,
+                onClose = { showThemeStudioSheet = false }
+            )
+        }
+    }
+
+    // ─── Dialog 1: Note Contextual Menu ───
     showMenuForNote?.let { note ->
         val currentFolder = note.folderId?.let { foldersById[it] }
         AlertDialog(
             onDismissRequest = { showMenuForNote = null },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             title = {
                 Text(
-                    text = note.title.ifBlank { "Untitled Note" },
+                    text = note.title.ifBlank { "Untitled" },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -635,11 +671,7 @@ fun HomeScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = if (currentFolder != null) {
-                            "Folder: ${currentFolder.icon} ${currentFolder.name}"
-                        } else {
-                            "Folder: 📄 Unfiled"
-                        },
+                        text = if (currentFolder != null) "Folder · ${currentFolder.name}" else "Folder · Unfiled",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -649,9 +681,12 @@ fun HomeScreen(
                             viewModel.togglePin(note)
                             showMenuForNote = null
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
                     ) {
-                        Text(if (note.isPinned) "Unpin Note" else "⭐ Pin to Top")
+                        Icon(Icons.Rounded.Star, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (note.isPinned) "Unpin Note" else "Pin to Top")
                     }
 
                     OutlinedButton(
@@ -665,9 +700,16 @@ fun HomeScreen(
                             }
                             showMenuForNote = null
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
                     ) {
-                        Text(if (note.isLocked) "🔓 Unlock Note" else "🔒 Lock with Vault PIN")
+                        Icon(
+                            if (note.isLocked) Icons.Rounded.LockOpen else Icons.Rounded.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (note.isLocked) "Unlock Note" else "Lock with Vault PIN")
                     }
 
                     OutlinedButton(
@@ -675,9 +717,12 @@ fun HomeScreen(
                             showMovePickerForNote = note
                             showMenuForNote = null
                         },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
                     ) {
-                        Text("📁 Move to Folder…")
+                        Icon(Icons.Rounded.Folder, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Move to Folder…")
                     }
 
                     Button(
@@ -690,7 +735,9 @@ fun HomeScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("🗑 Delete Note")
+                        Icon(Icons.Rounded.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Move to Trash")
                     }
                 }
             },
@@ -706,21 +753,22 @@ fun HomeScreen(
     showMovePickerForNote?.let { note ->
         AlertDialog(
             onDismissRequest = { showMovePickerForNote = null },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             title = { Text("Move to Folder") },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Unfiled option
                     val isUnfiled = note.folderId == null
                     Surface(
                         onClick = {
                             viewModel.moveNoteToFolder(note.id, HomeViewModel.UNFILED_FOLDER_ID)
                             showMovePickerForNote = null
                         },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isUnfiled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isUnfiled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                        border = BorderStroke(0.75.dp, if (isUnfiled) activePreset.accentStart else ThemeManager.cardBorderColor),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -728,24 +776,30 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("📄 Unfiled (No Folder)")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Rounded.Description, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Text("Unfiled")
+                            }
                             if (isUnfiled) {
-                                Icon(Icons.Default.Check, contentDescription = "Current", modifier = Modifier.size(18.dp))
+                                Icon(Icons.Rounded.Check, contentDescription = "Current", modifier = Modifier.size(18.dp))
                             }
                         }
                     }
 
                     folders.forEach { folder ->
                         val isCurrent = note.folderId == folder.id
-                        val fColor = parseColorSafe(folder.colorHex, MaterialTheme.colorScheme.primary)
+                        val fColor = parseColorSafe(folder.colorHex, activePreset.accentStart)
                         Surface(
                             onClick = {
                                 viewModel.moveNoteToFolder(note.id, folder.id)
                                 showMovePickerForNote = null
                             },
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isCurrent) fColor.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
-                            border = BorderStroke(1.dp, if (isCurrent) fColor else Color.Transparent),
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isCurrent) fColor.copy(alpha = 0.2f) else MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                            border = BorderStroke(0.75.dp, if (isCurrent) fColor else ThemeManager.cardBorderColor),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -759,14 +813,14 @@ fun HomeScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(10.dp)
+                                            .size(9.dp)
                                             .background(fColor, CircleShape)
                                     )
                                     Text("${folder.icon} ${folder.name}")
                                 }
                                 if (isCurrent) {
                                     Icon(
-                                        Icons.Default.Check,
+                                        Icons.Rounded.Check,
                                         contentDescription = "Current",
                                         tint = fColor,
                                         modifier = Modifier.size(18.dp)
@@ -824,57 +878,46 @@ fun HomeScreen(
     if (showTemplatesDialog) {
         AlertDialog(
             onDismissRequest = { showTemplatesDialog = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             title = { Text("Create from Template") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedCard(
+                    TemplateOptionCard(
+                        icon = Icons.Rounded.PictureAsPdf,
+                        title = "PDF Markup",
+                        subtitle = "Import PDF & annotate directly above pages",
                         onClick = {
                             showTemplatesDialog = false
                             openPdfLauncher.launch(arrayOf("application/pdf"))
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("📄 PDF + Direct Markup") },
-                            supportingContent = { Text("Open any PDF from device & draw/highlight on pages") }
-                        )
-                    }
-                    OutlinedCard(
+                        }
+                    )
+                    TemplateOptionCard(
+                        icon = Icons.Rounded.Brush,
+                        title = "Cornell Study & Sketch",
+                        subtitle = "Cornell ruled ink canvas + structured notes",
                         onClick = {
                             showTemplatesDialog = false
                             viewModel.createNoteFromTemplate("CORNELL") { onNoteClick(it) }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("📚 Cornell Study & Sketch") },
-                            supportingContent = { Text("Cornell ruled ink canvas + structured summary block") }
-                        )
-                    }
-                    OutlinedCard(
+                        }
+                    )
+                    TemplateOptionCard(
+                        icon = Icons.Rounded.People,
+                        title = "Meeting / People CRM",
+                        subtitle = "Linked [[Person]] header + action items",
                         onClick = {
                             showTemplatesDialog = false
                             viewModel.createNoteFromTemplate("MEETING") { onNoteClick(it) }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("💼 Meeting / People CRM") },
-                            supportingContent = { Text("Linked [[Person]] header + action items checklist") }
-                        )
-                    }
-                    OutlinedCard(
+                        }
+                    )
+                    TemplateOptionCard(
+                        icon = Icons.Rounded.CheckBox,
+                        title = "To-Do Checklist",
+                        subtitle = "Interactive task list with progress bar",
                         onClick = {
                             showTemplatesDialog = false
                             viewModel.createNoteFromTemplate("CHECKLIST") { onNoteClick(it) }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        ListItem(
-                            headlineContent = { Text("☑ To-Do Checklist") },
-                            supportingContent = { Text("Task list with progress tracking") }
-                        )
-                    }
+                        }
+                    )
                 }
             },
             confirmButton = {
@@ -887,7 +930,8 @@ fun HomeScreen(
     if (showTrashDialog) {
         AlertDialog(
             onDismissRequest = { showTrashDialog = false },
-            title = { Text("Recycle Bin (${trashNotes.size})") },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            title = { Text("Trash (${trashNotes.size})") },
             text = {
                 if (trashNotes.isEmpty()) {
                     Text("Trash is empty.", style = MaterialTheme.typography.bodySmall)
@@ -900,12 +944,13 @@ fun HomeScreen(
                     ) {
                         trashNotes.forEach { tNote ->
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.background.copy(alpha = 0.45f),
+                                border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -917,11 +962,11 @@ fun HomeScreen(
                                         modifier = Modifier.weight(1f)
                                     )
                                     IconButton(onClick = { viewModel.restoreFromTrash(tNote.id) }) {
-                                        Icon(Icons.Default.Refresh, contentDescription = "Restore")
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "Restore")
                                     }
                                     IconButton(onClick = { viewModel.deletePermanently(tNote.id) }) {
                                         Icon(
-                                            Icons.Default.Delete,
+                                            Icons.Rounded.Delete,
                                             contentDescription = "Delete Forever",
                                             tint = MaterialTheme.colorScheme.error
                                         )
@@ -958,7 +1003,7 @@ fun HomeScreen(
         VaultPinDialog(
             isSettingNewPin = true,
             title = "Set Vault PIN",
-            subtitle = "Create a 4–8 digit PIN to lock sensitive notes.",
+            subtitle = "Create a 4-8 digit PIN to lock sensitive notes.",
             onDismiss = { pendingSetPinForNote = null },
             onVerify = { true },
             onSuccess = { pin ->
@@ -968,6 +1013,115 @@ fun HomeScreen(
                 Toast.makeText(context, "Note locked", Toast.LENGTH_SHORT).show()
             }
         )
+    }
+}
+
+@Composable
+private fun QuickActionPill(
+    icon: ImageVector,
+    label: String,
+    highlighted: Boolean,
+    onClick: () -> Unit
+) {
+    val activePreset = ThemeManager.currentGradient
+    val shape = RoundedCornerShape(20.dp)
+    if (highlighted) {
+        Box(
+            modifier = Modifier
+                .clip(shape)
+                .background(ThemeManager.activeAccentBrush)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 13.dp, vertical = 7.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = activePreset.onAccent,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = activePreset.onAccent
+                )
+            }
+        }
+    } else {
+        Surface(
+            onClick = onClick,
+            shape = shape,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = activePreset.accentStart,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TemplateOptionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    val activePreset = ThemeManager.currentGradient
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(activePreset.accentStart.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = activePreset.accentStart,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -988,25 +1142,16 @@ private fun findHoveredFolderKey(
 }
 
 @Composable
-private fun ThemeCyclePill(
+private fun ThemeStudioPill(
     themeMode: AppThemeMode,
     onClick: () -> Unit
 ) {
-    val label = when (themeMode) {
-        AppThemeMode.DEEP_PURPLE_AMOLED -> "AMOLED"
-        AppThemeMode.KINDLE_PARCHMENT -> "Kindle"
-        AppThemeMode.MATTE_STUDIO -> "Matte"
-    }
-    val dotColor = when (themeMode) {
-        AppThemeMode.DEEP_PURPLE_AMOLED -> NoteGraphColors.DeepPurpleAmoledAccent
-        AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentAccent
-        AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioAccent
-    }
+    val preset = ThemeManager.currentGradient
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, ThemeManager.cardBorderColor)
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f),
+        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -1015,13 +1160,16 @@ private fun ThemeCyclePill(
         ) {
             Box(
                 modifier = Modifier
-                    .size(8.dp)
-                    .background(dotColor, CircleShape)
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(listOf(preset.accentStart, preset.accentEnd))
+                    )
             )
             Text(
-                text = label,
+                text = themeMode.shortLabel,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Medium
             )
         }
     }
@@ -1030,7 +1178,8 @@ private fun ThemeCyclePill(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FolderChip(
-    icon: String,
+    vectorIcon: ImageVector?,
+    emojiIcon: String?,
     name: String,
     count: Int,
     accentColor: Color,
@@ -1043,16 +1192,16 @@ private fun FolderChip(
     onEditClick: () -> Unit
 ) {
     val containerColor = when {
-        isDropHovered -> accentColor.copy(alpha = 0.28f)
-        isSelected -> accentColor.copy(alpha = 0.18f)
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        isDropHovered -> accentColor.copy(alpha = 0.25f)
+        isSelected -> accentColor.copy(alpha = 0.14f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
     }
     val borderColor = when {
         isDropHovered -> accentColor
-        isSelected -> accentColor
+        isSelected -> accentColor.copy(alpha = 0.75f)
         else -> ThemeManager.cardBorderColor
     }
-    val borderWidth = if (isDropHovered || isSelected) 1.5.dp else 1.dp
+    val borderWidth = if (isDropHovered || isSelected) 1.25.dp else 0.75.dp
 
     Surface(
         modifier = modifier
@@ -1066,36 +1215,39 @@ private fun FolderChip(
         border = BorderStroke(borderWidth, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(icon, fontSize = 14.sp)
+            if (vectorIcon != null) {
+                Icon(
+                    imageVector = vectorIcon,
+                    contentDescription = null,
+                    tint = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            } else if (!emojiIcon.isNullOrBlank()) {
+                Text(emojiIcon, fontSize = 13.sp)
+            }
             Text(
                 text = name,
                 style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isSelected || isDropHovered) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (isSelected || isDropHovered) FontWeight.SemiBold else FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = accentColor.copy(alpha = 0.2f)
-            ) {
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = accentColor,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
-                )
-            }
+            Text(
+                text = "$count",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isSelected) accentColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                fontWeight = FontWeight.Medium
+            )
             if (showEditButton) {
                 Icon(
-                    Icons.Default.Edit,
+                    imageVector = Icons.Rounded.Edit,
                     contentDescription = "Customize Folder",
                     tint = accentColor,
                     modifier = Modifier
-                        .size(15.dp)
+                        .size(14.dp)
                         .clickable { onEditClick() }
                 )
             }
@@ -1113,51 +1265,51 @@ private fun BottomGlassDock(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(8.dp, RoundedCornerShape(24.dp)),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.94f),
-            border = BorderStroke(1.dp, ThemeManager.cardBorderColor)
+                .shadow(10.dp, RoundedCornerShape(26.dp)),
+            shape = RoundedCornerShape(26.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
+            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 DockActionItem(
                     label = "Notes",
-                    icon = Icons.Default.List,
+                    icon = Icons.Rounded.Description,
                     isActive = true,
                     onClick = {}
                 )
                 DockActionItem(
                     label = "Graph",
-                    icon = Icons.Default.Share,
+                    icon = Icons.Rounded.Share,
                     isActive = false,
                     onClick = onNavigateGraph
                 )
                 DockActionItem(
                     label = "Tags",
-                    icon = Icons.Default.Star,
+                    icon = Icons.Rounded.Label,
                     isActive = false,
                     onClick = onNavigateTags
                 )
                 DockActionItem(
                     label = "Reader",
-                    icon = Icons.Default.MenuBook,
+                    icon = Icons.Rounded.MenuBook,
                     isActive = false,
                     onClick = onNavigateReader
                 )
                 DockActionItem(
                     label = "Search",
-                    icon = Icons.Default.Search,
+                    icon = Icons.Rounded.Search,
                     isActive = false,
                     onClick = onNavigateSearch
                 )
@@ -1173,21 +1325,22 @@ private fun DockActionItem(
     isActive: Boolean,
     onClick: () -> Unit
 ) {
+    val activePreset = ThemeManager.currentGradient
     val contentColor = if (isActive) {
-        MaterialTheme.colorScheme.primary
+        activePreset.accentStart
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
     }
 
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(
-                if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                if (isActive) activePreset.accentStart.copy(alpha = 0.13f)
                 else Color.Transparent
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
@@ -1202,7 +1355,7 @@ private fun DockActionItem(
             style = MaterialTheme.typography.labelSmall,
             fontSize = 10.sp,
             color = contentColor,
-            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium
         )
     }
 }
@@ -1245,7 +1398,7 @@ fun NoteCard(
             try {
                 json.decodeFromString<List<InkStroke>>(firstInk.strokesJson)
                     .filter { it.points.size >= 2 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyList()
             }
         } else {
@@ -1253,17 +1406,32 @@ fun NoteCard(
         }
     }
 
-    val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
-    val folderColor = folder?.let { parseColorSafe(it.colorHex, MaterialTheme.colorScheme.primary) }
+    val dateFormat = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+    val activePreset = ThemeManager.currentGradient
+    val folderColor = folder?.let { parseColorSafe(it.colorHex, activePreset.accentStart) }
     val themeMode = ThemeManager.currentTheme
 
-    Card(
+    val cardShape = RoundedCornerShape(18.dp)
+    val borderColor = if (note.isPinned) {
+        activePreset.accentStart.copy(alpha = 0.6f)
+    } else {
+        ThemeManager.cardBorderColor
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .alpha(if (isBeingDragged) 0.3f else 1f)
             .onGloballyPositioned { coords ->
                 cardBoundsRoot = coords.boundsInRoot()
             }
+            .clip(cardShape)
+            .background(ThemeManager.activeCardBrush(highlighted = note.isPinned))
+            .border(
+                width = if (note.isPinned) 1.25.dp else 0.75.dp,
+                color = borderColor,
+                shape = cardShape
+            )
             .pointerInput(note.id) {
                 var totalDelta = Offset.Zero
                 var movedFar = false
@@ -1289,17 +1457,10 @@ fun NoteCard(
                     }
                 )
             }
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(
-            width = if (note.isPinned) 1.5.dp else 1.dp,
-            color = if (note.isPinned) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-            else ThemeManager.cardBorderColor
-        ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Top badge row: Folder pill / Pin + ⋮ Menu
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Top subtle indicator strip + More button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1307,39 +1468,43 @@ fun NoteCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     if (note.isLocked) {
                         Icon(
-                            Icons.Default.Lock,
+                            imageVector = Icons.Rounded.Lock,
                             contentDescription = "Locked",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(14.dp)
+                            tint = activePreset.accentEnd,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                     if (note.isPinned) {
                         Icon(
-                            Icons.Default.Star,
+                            imageVector = Icons.Rounded.Star,
                             contentDescription = "Pinned",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
+                            tint = activePreset.accentStart,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                     if (folder != null && folderColor != null) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = folderColor.copy(alpha = 0.18f),
-                            border = BorderStroke(0.5.dp, folderColor.copy(alpha = 0.55f))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(folderColor)
+                            )
                             Text(
-                                text = "${folder.icon} ${folder.name}",
+                                text = folder.name,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = folderColor,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Medium,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -1350,10 +1515,10 @@ fun NoteCard(
                     modifier = Modifier.size(22.dp)
                 ) {
                     Icon(
-                        Icons.Default.MoreVert,
+                        imageVector = Icons.Rounded.MoreVert,
                         contentDescription = "Note Options",
                         modifier = Modifier.size(15.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -1369,50 +1534,61 @@ fun NoteCard(
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Note Body Snippet (hidden if locked)
+            // Note Body Snippet
             if (latestNote.isLocked) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "🔒 Locked Note — Tap & enter PIN to open",
+                    text = "Locked with Vault PIN",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
+                    color = activePreset.accentEnd
                 )
             } else {
                 if (latestNote.content.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(5.dp))
                     Text(
                         text = latestNote.content,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.84f),
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 } else if (previewStrokes.isEmpty() && checklistBlocks.isEmpty() && !hasPdf) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Empty note…",
+                        text = "Empty note",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
                     )
                 }
 
-                // PDF Attachment Summary Chip
+                // PDF Attachment Badge
                 if (hasPdf) {
                     val firstPdf = pdfBlocks.first()
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                        color = activePreset.accentStart.copy(alpha = 0.12f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "📄 ${firstPdf.fileName.ifBlank { "PDF" }} (${firstPdf.pageCount}p)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PictureAsPdf,
+                                contentDescription = null,
+                                tint = activePreset.accentStart,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "${firstPdf.fileName.ifBlank { "PDF" }} (${firstPdf.pageCount}p)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
@@ -1429,17 +1605,44 @@ fun NoteCard(
                 if (checklistBlocks.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.35f),
+                        border = BorderStroke(0.5.dp, ThemeManager.cardBorderColor),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                            Text(
-                                text = "☑ $doneTasks/$totalTasks done",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Column(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$doneTasks / $totalTasks done",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = activePreset.accentStart,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            if (totalTasks > 0) {
+                                val pct = doneTasks.toFloat() / totalTasks.toFloat()
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp)
+                                        .clip(CircleShape)
+                                        .background(ThemeManager.cardBorderColor)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(pct.coerceIn(0f, 1f))
+                                            .fillMaxHeight()
+                                            .background(ThemeManager.activeAccentBrush)
+                                    )
+                                }
+                            }
                             firstChecklistItems.forEach { item ->
                                 val mark = if (item.isChecked) "✓" else "○"
                                 Text(
@@ -1457,9 +1660,9 @@ fun NoteCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Footer Date + Media Badges
+            // Footer Date + Clean Vector Media Badges
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1468,14 +1671,38 @@ fun NoteCard(
                 Text(
                     text = dateFormat.format(Date(latestNote.updatedAt)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                 )
 
                 if (hasAudio || hasImage || hasPdf) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (hasPdf) Text("📄", fontSize = 11.sp)
-                        if (hasAudio) Text("🎙", fontSize = 11.sp)
-                        if (hasImage) Text("🖼", fontSize = 11.sp)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (hasPdf) {
+                            Icon(
+                                imageVector = Icons.Rounded.PictureAsPdf,
+                                contentDescription = "Has PDF",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        if (hasAudio) {
+                            Icon(
+                                imageVector = Icons.Rounded.Mic,
+                                contentDescription = "Has Audio",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        if (hasImage) {
+                            Icon(
+                                imageVector = Icons.Rounded.Image,
+                                contentDescription = "Has Image",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1489,7 +1716,7 @@ private fun MiniInkPreviewCanvas(
     themeMode: AppThemeMode
 ) {
     val bgColor = when (themeMode) {
-        AppThemeMode.DEEP_PURPLE_AMOLED -> Color(0xFF07030F)
+        AppThemeMode.DEEP_PURPLE_AMOLED -> Color(0xFF06030C)
         AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentBackground
         AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioBackground
     }
@@ -1498,9 +1725,9 @@ private fun MiniInkPreviewCanvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(bgColor)
-            .border(0.5.dp, ThemeManager.cardBorderColor, RoundedCornerShape(8.dp))
+            .border(0.5.dp, ThemeManager.cardBorderColor, RoundedCornerShape(10.dp))
             .clipToBounds()
     ) {
         val allPts = strokes.flatMap { it.points }
@@ -1573,17 +1800,17 @@ private fun FolderEditorDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         title = {
-            Text(if (existingFolder == null) "Create Custom Folder" else "Customize Folder")
+            Text(if (existingFolder == null) "New Folder" else "Customize Folder")
         },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Quick Presets (Study, Work, Gaming, Shopping, Reminder)
                 Text(
-                    "Quick Category Presets",
+                    "Presets",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1603,7 +1830,6 @@ private fun FolderEditorDialog(
                     }
                 }
 
-                // Folder Name Input
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -1613,9 +1839,8 @@ private fun FolderEditorDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Emoji Icon Selector
                 Text(
-                    "Choose Icon",
+                    "Icon",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1628,24 +1853,23 @@ private fun FolderEditorDialog(
                         Surface(
                             onClick = { selectedIcon = emoji },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (isChosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (isChosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
                             border = BorderStroke(
-                                width = if (isChosen) 1.5.dp else 1.dp,
+                                width = if (isChosen) 1.25.dp else 0.75.dp,
                                 color = if (isChosen) MaterialTheme.colorScheme.primary else ThemeManager.cardBorderColor
                             )
                         ) {
                             Text(
                                 text = emoji,
-                                fontSize = 18.sp,
+                                fontSize = 17.sp,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                             )
                         }
                     }
                 }
 
-                // Color Swatch Selector
                 Text(
-                    "Choose Color",
+                    "Accent Color",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1671,7 +1895,7 @@ private fun FolderEditorDialog(
                         ) {
                             if (isChosen) {
                                 Icon(
-                                    Icons.Default.Check,
+                                    Icons.Rounded.Check,
                                     contentDescription = "Selected Color",
                                     tint = Color.White,
                                     modifier = Modifier.size(16.dp)
@@ -1682,7 +1906,7 @@ private fun FolderEditorDialog(
                 }
 
                 if (existingFolder != null && onDelete != null) {
-                    HorizontalDivider()
+                    HorizontalDivider(color = ThemeManager.cardBorderColor)
                     TextButton(
                         onClick = onDelete,
                         colors = ButtonDefaults.textButtonColors(
@@ -1690,7 +1914,7 @@ private fun FolderEditorDialog(
                         )
                     ) {
                         Icon(
-                            Icons.Default.Delete,
+                            Icons.Rounded.DeleteOutline,
                             contentDescription = "Delete Folder",
                             modifier = Modifier.size(16.dp)
                         )
@@ -1720,6 +1944,6 @@ private fun FolderEditorDialog(
 
 private fun parseColorSafe(hex: String, fallback: Color): Color = try {
     Color(android.graphics.Color.parseColor(hex))
-} catch (e: Exception) {
+} catch (_: Exception) {
     fallback
 }

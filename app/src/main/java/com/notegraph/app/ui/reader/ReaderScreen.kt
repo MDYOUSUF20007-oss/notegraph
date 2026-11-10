@@ -20,6 +20,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +53,8 @@ import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
 import com.notegraph.app.ui.editor.ExportManager
 import com.notegraph.app.ui.editor.PdfHelper
+import com.notegraph.app.ui.theme.MinimalistBackground
+import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
@@ -163,111 +170,112 @@ fun ReaderScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            "Book Reading Mode",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            if (currentNote != null) currentNote.title.ifBlank { "Untitled" } else "No Notes",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Exit Reading Mode")
-                    }
-                },
-                actions = {
-                    // Cycle page-turn animation style
-                    AssistChip(
-                        onClick = {
-                            val styles = PageTurnStyle.values()
-                            turnStyle = styles[(styles.indexOf(turnStyle) + 1) % styles.size]
-                        },
-                        label = { Text(turnStyle.label, fontSize = 11.sp) }
-                    )
-                    if (currentNote != null) {
-                        IconButton(onClick = {
-                            if (currentNote.isLocked &&
-                                NoteSecurityManager.hasPin(context) &&
-                                currentNote.id !in unlockedInSession
-                            ) {
-                                pendingPinNote = currentNote
-                                pendingPinOpensEditor = true
-                            } else {
-                                onEditNote(currentNote.id)
-                            }
-                        }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit / Markup Note")
-                        }
-                        IconButton(onClick = { viewModel.toggleBookmark(currentNote) }) {
-                            Icon(
-                                if (currentNote.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                                contentDescription = "Dog-ear Bookmark",
-                                tint = if (currentNote.isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurface
+    MinimalistBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    title = {
+                        Column {
+                            Text(
+                                "Reader",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                if (currentNote != null) currentNote.title.ifBlank { "Untitled" } else "No Notes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Exit Reading Mode")
+                        }
+                    },
+                    actions = {
+                        AssistChip(
+                            onClick = {
+                                val styles = PageTurnStyle.values()
+                                turnStyle = styles[(styles.indexOf(turnStyle) + 1) % styles.size]
+                            },
+                            label = { Text(turnStyle.label, fontSize = 11.sp) }
+                        )
+                        if (currentNote != null) {
+                            IconButton(onClick = {
+                                if (currentNote.isLocked &&
+                                    NoteSecurityManager.hasPin(context) &&
+                                    currentNote.id !in unlockedInSession
+                                ) {
+                                    pendingPinNote = currentNote
+                                    pendingPinOpensEditor = true
+                                } else {
+                                    onEditNote(currentNote.id)
+                                }
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit / Markup Note")
+                            }
+                            IconButton(onClick = { viewModel.toggleBookmark(currentNote) }) {
+                                Icon(
+                                    if (currentNote.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    contentDescription = "Dog-ear Bookmark",
+                                    tint = if (currentNote.isFavorite) Color(0xFFF59E0B) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
                     }
-                }
-            )
-        },
-        bottomBar = {
-            Surface(
-                tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                )
+            },
+            bottomBar = {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
                 ) {
-                    IconButton(
-                        onClick = { triggerTurnPrev() },
-                        enabled = currentPageIndex > 0
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Page")
-                    }
+                        IconButton(
+                            onClick = { triggerTurnPrev() },
+                            enabled = currentPageIndex > 0
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous Page")
+                        }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Page ${currentPageIndex + 1} of $totalPages",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontFamily = FontFamily.Serif
-                        )
-                        Text(
-                            text = "Swipe corner or edge to fold page",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Page ${currentPageIndex + 1} of $totalPages",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontFamily = FontFamily.Serif
+                            )
+                            Text(
+                                text = "Swipe corner or edge to fold",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
-                    IconButton(
-                        onClick = { triggerTurnNext() },
-                        enabled = currentPageIndex < notes.size - 1
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Page")
+                        IconButton(
+                            onClick = { triggerTurnNext() },
+                            enabled = currentPageIndex < notes.size - 1
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next Page")
+                        }
                     }
                 }
             }
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(Color(0xFF231F1C))
-                .padding(12.dp)
-        ) {
+        ) { padding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
             if (notes.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No notes found in vault to read.", color = Color.White)
@@ -581,6 +589,7 @@ fun ReaderScreen(
                 }
             }
         }
+        }
     }
 
     pendingPinNote?.let { target ->
@@ -886,7 +895,13 @@ private fun BookPageSurface(
                             modifier = Modifier.padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("🔒 Locked Note", fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = Color(0xFF2C2C2C))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Rounded.Lock, contentDescription = null, tint = Color(0xFF2C2C2C), modifier = Modifier.size(16.dp))
+                                Text("Locked Note", fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, color = Color(0xFF2C2C2C))
+                            }
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "Unlock with your Vault PIN to read or edit this page.",
@@ -895,7 +910,7 @@ private fun BookPageSurface(
                             )
                             Spacer(Modifier.height(10.dp))
                             OutlinedButton(onClick = onUnlockClick) {
-                                Text("🔓 Unlock Page")
+                                Text("Unlock Page")
                             }
                         }
                     }
@@ -942,12 +957,18 @@ private fun BookPageSurface(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            "✏️ Handwritten Sketch (${strokes.size} strokes)",
-                                            fontFamily = FontFamily.Serif,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = Color(0xFF2C2C2C)
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.Brush, contentDescription = null, tint = Color(0xFF2C2C2C), modifier = Modifier.size(15.dp))
+                                            Text(
+                                                "Handwritten Sketch (${strokes.size} strokes)",
+                                                fontFamily = FontFamily.Serif,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = Color(0xFF2C2C2C)
+                                            )
+                                        }
                                         if (strokes.isNotEmpty()) {
                                             Spacer(Modifier.height(6.dp))
                                             Canvas(
@@ -1004,7 +1025,7 @@ private fun BookPageSurface(
                                         modifier = Modifier.padding(12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("🎙", fontSize = 20.sp)
+                                        Icon(Icons.Rounded.Mic, contentDescription = null, tint = Color(0xFF2C2C2C), modifier = Modifier.size(18.dp))
                                         Spacer(Modifier.width(10.dp))
                                         Column {
                                             Text("Voice Recording (${block.durationMs / 1000}s)", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
@@ -1021,7 +1042,7 @@ private fun BookPageSurface(
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("🖼", fontSize = 20.sp)
+                                            Icon(Icons.Rounded.Image, contentDescription = null, tint = Color(0xFF2C2C2C), modifier = Modifier.size(18.dp))
                                             Spacer(Modifier.width(10.dp))
                                             Text("Embedded Image Attachment", fontFamily = FontFamily.Serif, style = MaterialTheme.typography.titleSmall, color = Color(0xFF2C2C2C))
                                         }
@@ -1095,16 +1116,22 @@ private fun BookPageSurface(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            text = "📄 ${block.fileName.ifBlank { "PDF Document" }}",
-                                            fontFamily = FontFamily.Serif,
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = Color(0xFF2C2C2C)
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.PictureAsPdf, contentDescription = null, tint = Color(0xFF2C2C2C), modifier = Modifier.size(16.dp))
+                                            Text(
+                                                text = block.fileName.ifBlank { "PDF Document" },
+                                                fontFamily = FontFamily.Serif,
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                color = Color(0xFF2C2C2C)
+                                            )
+                                        }
                                         Spacer(Modifier.height(2.dp))
                                         Text(
-                                            text = "${block.pageCount} pages • $markedPages annotated • Tap ✏️ above to markup",
+                                            text = "${block.pageCount} pages • $markedPages annotated • Tap Edit above to markup",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color(0xFF8B4513)
                                         )

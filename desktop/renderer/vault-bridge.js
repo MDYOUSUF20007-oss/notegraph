@@ -213,6 +213,13 @@
     return {
       version: 2,
       activeTheme: 'DEEP_PURPLE_AMOLED',
+      gradientsEnabled: true,
+      themeGradients: {
+        DEEP_PURPLE_AMOLED: 'obsidian_violet',
+        KINDLE_PARCHMENT: 'warm_sepia',
+        MATTE_STUDIO: 'studio_cyan',
+        BLACKBOARD_GREEN: 'emerald_chalk'
+      },
       activeNoteId: welcomeBoardId,
       folders: STARTER_FOLDERS.map((f, idx) => ({ ...f, createdAt: now + idx })),
       notes: [welcomeBoard, dailyNote]

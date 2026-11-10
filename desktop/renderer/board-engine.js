@@ -143,6 +143,8 @@
 
       this.themeMode = 'DEEP_PURPLE_AMOLED';
       this.gridStyle = 'DOTS';
+      this.gradientPreset = null;
+      this.gradientsEnabled = true;
       this.tool = 'pen'; // 'select' | 'pan' | 'pen' | 'highlighter' | 'arrow' | 'laser' | 'eraser' | 'lasso' | 'connect'
       this.strokeColor = '#A855F7';
       this.strokeWidth = 4;
@@ -204,10 +206,12 @@
       return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
     }
 
-    setPage(page, themeMode, gridStyle) {
+    setPage(page, themeMode, gridStyle, gradientPreset = undefined, gradientsEnabled = undefined) {
       this.page = page;
       this.themeMode = themeMode || this.themeMode;
       this.gridStyle = gridStyle || 'DOTS';
+      if (gradientPreset !== undefined) this.gradientPreset = gradientPreset;
+      if (typeof gradientsEnabled === 'boolean') this.gradientsEnabled = gradientsEnabled;
       this.selectedStrokeIds.clear();
       this.undoStack = [];
       this.redoStack = [];
@@ -218,9 +222,11 @@
       this.redrawLive();
     }
 
-    setAppearance(themeMode, gridStyle) {
+    setAppearance(themeMode, gridStyle, gradientPreset = undefined, gradientsEnabled = undefined) {
       this.themeMode = themeMode;
       this.gridStyle = gridStyle;
+      if (gradientPreset !== undefined) this.gradientPreset = gradientPreset;
+      if (typeof gradientsEnabled === 'boolean') this.gradientsEnabled = gradientsEnabled;
       this.redrawGrid();
       this.redrawStatic();
     }
@@ -622,45 +628,66 @@
     }
 
     getPaletteColors() {
+      let base;
       switch (this.themeMode) {
         case 'KINDLE_PARCHMENT':
-          return {
+          base = {
             bg: '#F4F1EA',
             dot: '#C8BFA8',
             line: '#DCD6CD',
             accent: '#B45309',
+            accentEnd: '#D97706',
             cardBg: '#EAE4D7',
             text: '#2C2C2C'
           };
+          break;
         case 'MATTE_STUDIO':
-          return {
-            bg: '#1E2229',
+          base = {
+            bg: '#1A1E25',
             dot: '#3B4252',
-            line: '#2E3440',
+            line: '#2B313D',
             accent: '#38BDF8',
-            cardBg: '#262B35',
-            text: '#E2E8F0'
+            accentEnd: '#6366F1',
+            cardBg: '#212631',
+            text: '#E5EAF2'
           };
+          break;
         case 'BLACKBOARD_GREEN':
-          return {
-            bg: '#0C241B',
+          base = {
+            bg: '#0A2018',
             dot: '#1E4636',
             line: '#16382B',
             accent: '#34D399',
-            cardBg: '#123326',
+            accentEnd: '#0EA5E9',
+            cardBg: '#0E281E',
             text: '#ECFDF5'
           };
+          break;
         case 'DEEP_PURPLE_AMOLED':
         default:
-          return {
+          base = {
             bg: '#000000',
             dot: '#2A2238',
-            line: '#1B112B',
+            line: '#191128',
             accent: '#A855F7',
-            cardBg: '#150A26',
+            accentEnd: '#6366F1',
+            cardBg: '#0E0819',
             text: '#FFFFFF'
           };
+          break;
       }
+
+      if (this.gradientPreset) {
+        base.accent = this.gradientPreset.accentStart || base.accent;
+        base.accentEnd = this.gradientPreset.accentEnd || base.accentEnd;
+        base.bgTop = this.gradientPreset.bgTop || base.bg;
+        base.bgMid = this.gradientPreset.bgMid || base.bg;
+        base.bgBottom = this.gradientPreset.bgBottom || base.bg;
+        if (this.gradientPreset.cardBg) base.cardBg = this.gradientPreset.cardBg;
+        if (this.gradientPreset.dotColor) base.dot = this.gradientPreset.dotColor;
+        if (this.gradientPreset.lineColor) base.line = this.gradientPreset.lineColor;
+      }
+      return base;
     }
 
     redrawGrid(targetCtx = this.gridCtx, targetW = this.width, targetH = this.height, vpOverride = null) {
@@ -671,7 +698,15 @@
 
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = pal.bg;
+      if (this.gradientsEnabled && pal.bgTop && pal.bgBottom) {
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, targetH);
+        bgGrad.addColorStop(0, pal.bgTop);
+        if (pal.bgMid) bgGrad.addColorStop(0.5, pal.bgMid);
+        bgGrad.addColorStop(1, pal.bgBottom);
+        ctx.fillStyle = bgGrad;
+      } else {
+        ctx.fillStyle = pal.bg;
+      }
       ctx.fillRect(0, 0, targetW, targetH);
 
       if (this.gridStyle === 'NONE') {
@@ -800,8 +835,16 @@
       const cpy2 = y2;
 
       ctx.save();
-      ctx.strokeStyle = conn.colorHex || '#A855F7';
-      ctx.lineWidth = 2.5;
+      const pal = this.getPaletteColors();
+      if (this.gradientsEnabled) {
+        const lineGrad = ctx.createLinearGradient(x1, y1, x2, y2);
+        lineGrad.addColorStop(0, conn.colorHex || pal.accent);
+        lineGrad.addColorStop(1, pal.accentEnd || conn.colorHex || pal.accent);
+        ctx.strokeStyle = lineGrad;
+      } else {
+        ctx.strokeStyle = conn.colorHex || pal.accent;
+      }
+      ctx.lineWidth = 2.25;
       ctx.setLineDash([7, 5]);
       ctx.beginPath();
       ctx.moveTo(x1, y1);

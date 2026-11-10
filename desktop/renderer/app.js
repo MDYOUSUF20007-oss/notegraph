@@ -7,11 +7,417 @@
 
   const GRID_ORDER = ['DOTS', 'RULED', 'GRAPH', 'NONE'];
   const GRID_LABELS = {
-    DOTS: '⊞ Dots',
-    RULED: '≣ Cornell',
-    GRAPH: '▦ XY Graph',
-    NONE: '▢ Blank'
+    DOTS: 'Dots',
+    RULED: 'Cornell',
+    GRAPH: 'XY Grid',
+    NONE: 'Blank'
   };
+
+  const THEME_LABELS = {
+    DEEP_PURPLE_AMOLED: 'AMOLED Gradients',
+    KINDLE_PARCHMENT: 'Kindle Gradients',
+    MATTE_STUDIO: 'Matte / Mac Gradients',
+    BLACKBOARD_GREEN: 'Blackboard Gradients'
+  };
+
+  const THEME_GRADIENT_PRESETS = {
+    DEEP_PURPLE_AMOLED: [
+      {
+        id: 'obsidian_violet',
+        name: 'Obsidian Violet',
+        accentStart: '#A855F7',
+        accentEnd: '#6366F1',
+        onAccent: '#FFFFFF',
+        bgTop: '#140726',
+        bgMid: '#05010A',
+        bgBottom: '#000000',
+        surface: '#07040D',
+        elevated: '#110920',
+        cardBg: '#0E0819',
+        cardTint: '#1B0F30',
+        glass: 'rgba(10, 6, 18, 0.78)',
+        borderSubtle: 'rgba(168, 85, 247, 0.20)',
+        borderStrong: 'rgba(168, 85, 247, 0.50)',
+        dotColor: '#2A2238',
+        lineColor: '#191128'
+      },
+      {
+        id: 'aurora_cyan',
+        name: 'Aurora Cyan',
+        accentStart: '#0EA5E9',
+        accentEnd: '#6366F1',
+        onAccent: '#FFFFFF',
+        bgTop: '#051824',
+        bgMid: '#02070E',
+        bgBottom: '#000000',
+        surface: '#040B12',
+        elevated: '#091826',
+        cardBg: '#07111A',
+        cardTint: '#0D2032',
+        glass: 'rgba(6, 16, 26, 0.80)',
+        borderSubtle: 'rgba(14, 165, 233, 0.22)',
+        borderStrong: 'rgba(14, 165, 233, 0.52)',
+        dotColor: '#17354D',
+        lineColor: '#0E2233'
+      },
+      {
+        id: 'crimson_velvet',
+        name: 'Crimson Velvet',
+        accentStart: '#F43F5E',
+        accentEnd: '#A855F7',
+        onAccent: '#FFFFFF',
+        bgTop: '#210712',
+        bgMid: '#080206',
+        bgBottom: '#000000',
+        surface: '#0E0409',
+        elevated: '#1B0A12',
+        cardBg: '#14080E',
+        cardTint: '#260D19',
+        glass: 'rgba(18, 6, 12, 0.80)',
+        borderSubtle: 'rgba(244, 63, 94, 0.22)',
+        borderStrong: 'rgba(244, 63, 94, 0.52)',
+        dotColor: '#3E182B',
+        lineColor: '#260E1B'
+      },
+      {
+        id: 'emerald_flux',
+        name: 'Emerald Flux',
+        accentStart: '#10B981',
+        accentEnd: '#06B6D4',
+        onAccent: '#03140F',
+        bgTop: '#041C16',
+        bgMid: '#010806',
+        bgBottom: '#000000',
+        surface: '#030E0B',
+        elevated: '#071B15',
+        cardBg: '#061310',
+        cardTint: '#0B241E',
+        glass: 'rgba(4, 18, 14, 0.80)',
+        borderSubtle: 'rgba(16, 185, 129, 0.22)',
+        borderStrong: 'rgba(16, 185, 129, 0.52)',
+        dotColor: '#143A30',
+        lineColor: '#0C241E'
+      },
+      {
+        id: 'solar_ember',
+        name: 'Solar Ember',
+        accentStart: '#F59E0B',
+        accentEnd: '#EC4899',
+        onAccent: '#1C0C02',
+        bgTop: '#1F0E04',
+        bgMid: '#080304',
+        bgBottom: '#000000',
+        surface: '#0D0603',
+        elevated: '#1A0D07',
+        cardBg: '#130B06',
+        cardTint: '#24140B',
+        glass: 'rgba(18, 9, 5, 0.80)',
+        borderSubtle: 'rgba(245, 158, 11, 0.22)',
+        borderStrong: 'rgba(245, 158, 11, 0.52)',
+        dotColor: '#3B2214',
+        lineColor: '#24150C'
+      },
+      {
+        id: 'stealth_mono',
+        name: 'OLED Stealth',
+        accentStart: '#CBD5E1',
+        accentEnd: '#94A3B8',
+        onAccent: '#0B0D11',
+        bgTop: '#0B0D11',
+        bgMid: '#020203',
+        bgBottom: '#000000',
+        surface: '#060709',
+        elevated: '#12151C',
+        cardBg: '#0D0E12',
+        cardTint: '#161920',
+        glass: 'rgba(10, 11, 15, 0.82)',
+        borderSubtle: 'rgba(148, 163, 184, 0.20)',
+        borderStrong: 'rgba(203, 213, 225, 0.45)',
+        dotColor: '#252A34',
+        lineColor: '#161A21'
+      }
+    ],
+    KINDLE_PARCHMENT: [
+      {
+        id: 'warm_sepia',
+        name: 'Warm Sepia',
+        accentStart: '#B45309',
+        accentEnd: '#D97706',
+        onAccent: '#FFFFFF',
+        bgTop: '#F7F4EC',
+        bgMid: '#F3EEE2',
+        bgBottom: '#EBE4D4',
+        surface: '#EFEBE0',
+        elevated: '#E6E0D2',
+        cardBg: '#FCF9F2',
+        cardTint: '#F3EADC',
+        glass: 'rgba(247, 244, 236, 0.86)',
+        borderSubtle: 'rgba(140, 124, 98, 0.24)',
+        borderStrong: 'rgba(180, 83, 9, 0.55)',
+        dotColor: '#C8BFA8',
+        lineColor: '#DCD6CD'
+      },
+      {
+        id: 'sage_folio',
+        name: 'Sage Folio',
+        accentStart: '#2D6A4F',
+        accentEnd: '#528C5C',
+        onAccent: '#FFFFFF',
+        bgTop: '#F3F6EF',
+        bgMid: '#EDF2E7',
+        bgBottom: '#E3EAD9',
+        surface: '#EAF0E3',
+        elevated: '#DFE7D6',
+        cardBg: '#FAFDF7',
+        cardTint: '#E8EFE2',
+        glass: 'rgba(243, 246, 239, 0.88)',
+        borderSubtle: 'rgba(82, 112, 92, 0.24)',
+        borderStrong: 'rgba(45, 106, 79, 0.55)',
+        dotColor: '#B5C5B0',
+        lineColor: '#CCD7C5'
+      },
+      {
+        id: 'editorial_rose',
+        name: 'Dusty Rose',
+        accentStart: '#9D4452',
+        accentEnd: '#BE6A73',
+        onAccent: '#FFFFFF',
+        bgTop: '#F8F2F1',
+        bgMid: '#F2E9E7',
+        bgBottom: '#E8DCDA',
+        surface: '#EFE5E3',
+        elevated: '#E5D8D6',
+        cardBg: '#FDF9F8',
+        cardTint: '#F1E3E2',
+        glass: 'rgba(248, 242, 241, 0.88)',
+        borderSubtle: 'rgba(157, 68, 82, 0.22)',
+        borderStrong: 'rgba(157, 68, 82, 0.52)',
+        dotColor: '#CBB8B6',
+        lineColor: '#DCCAC8'
+      },
+      {
+        id: 'oxford_ink',
+        name: 'Oxford Ink',
+        accentStart: '#2B4C7E',
+        accentEnd: '#476A9E',
+        onAccent: '#FFFFFF',
+        bgTop: '#F2F5F9',
+        bgMid: '#EBEFF6',
+        bgBottom: '#E0E7F1',
+        surface: '#E8EDF5',
+        elevated: '#DCE4EE',
+        cardBg: '#FAFBFD',
+        cardTint: '#E4EBF4',
+        glass: 'rgba(242, 245, 249, 0.88)',
+        borderSubtle: 'rgba(43, 76, 126, 0.22)',
+        borderStrong: 'rgba(43, 76, 126, 0.52)',
+        dotColor: '#B8C4D4',
+        lineColor: '#C9D3E0'
+      },
+      {
+        id: 'classic_paper',
+        name: 'Classic Ink',
+        accentStart: '#44403C',
+        accentEnd: '#78716C',
+        onAccent: '#FFFFFF',
+        bgTop: '#F4F1EA',
+        bgMid: '#F4F1EA',
+        bgBottom: '#EEE9DF',
+        surface: '#ECE8DF',
+        elevated: '#E2DDD3',
+        cardBg: '#FAF7F1',
+        cardTint: '#EDE8DE',
+        glass: 'rgba(244, 241, 234, 0.90)',
+        borderSubtle: 'rgba(120, 113, 108, 0.24)',
+        borderStrong: 'rgba(68, 64, 60, 0.55)',
+        dotColor: '#C4BCB0',
+        lineColor: '#DCD6CD'
+      }
+    ],
+    MATTE_STUDIO: [
+      {
+        id: 'studio_cyan',
+        name: 'Studio Cyan',
+        accentStart: '#38BDF8',
+        accentEnd: '#6366F1',
+        onAccent: '#0A1320',
+        bgTop: '#1A2230',
+        bgMid: '#1E2229',
+        bgBottom: '#15181F',
+        surface: '#161920',
+        elevated: '#232833',
+        cardBg: '#212631',
+        cardTint: '#2B3446',
+        glass: 'rgba(24, 28, 37, 0.82)',
+        borderSubtle: 'rgba(148, 163, 184, 0.18)',
+        borderStrong: 'rgba(56, 189, 248, 0.50)',
+        dotColor: '#3B4252',
+        lineColor: '#2B313D'
+      },
+      {
+        id: 'nord_indigo',
+        name: 'Nord Indigo',
+        accentStart: '#818CF8',
+        accentEnd: '#A78BFA',
+        onAccent: '#0E1022',
+        bgTop: '#1E2030',
+        bgMid: '#1D202A',
+        bgBottom: '#161820',
+        surface: '#171923',
+        elevated: '#242736',
+        cardBg: '#222534',
+        cardTint: '#2E3249',
+        glass: 'rgba(26, 28, 40, 0.84)',
+        borderSubtle: 'rgba(129, 140, 248, 0.20)',
+        borderStrong: 'rgba(129, 140, 248, 0.52)',
+        dotColor: '#3D4259',
+        lineColor: '#2C3042'
+      },
+      {
+        id: 'titanium_sage',
+        name: 'Titanium Sage',
+        accentStart: '#34D399',
+        accentEnd: '#2DD4BF',
+        onAccent: '#061B16',
+        bgTop: '#182423',
+        bgMid: '#1C2326',
+        bgBottom: '#151A1C',
+        surface: '#151B1C',
+        elevated: '#21292B',
+        cardBg: '#1E2627',
+        cardTint: '#273936',
+        glass: 'rgba(22, 30, 31, 0.84)',
+        borderSubtle: 'rgba(52, 211, 153, 0.18)',
+        borderStrong: 'rgba(52, 211, 153, 0.48)',
+        dotColor: '#334342',
+        lineColor: '#263332'
+      },
+      {
+        id: 'terracotta_slate',
+        name: 'Warm Copper',
+        accentStart: '#FB923C',
+        accentEnd: '#EC4899',
+        onAccent: '#1D0D07',
+        bgTop: '#261F22',
+        bgMid: '#202127',
+        bgBottom: '#17181D',
+        surface: '#19191E',
+        elevated: '#27262E',
+        cardBg: '#24232A',
+        cardTint: '#382C33',
+        glass: 'rgba(30, 26, 30, 0.84)',
+        borderSubtle: 'rgba(251, 146, 60, 0.20)',
+        borderStrong: 'rgba(251, 146, 60, 0.50)',
+        dotColor: '#423A44',
+        lineColor: '#2F2931'
+      },
+      {
+        id: 'anodized_silver',
+        name: 'Anodized Gray',
+        accentStart: '#CBD5E1',
+        accentEnd: '#94A3B8',
+        onAccent: '#101318',
+        bgTop: '#22252C',
+        bgMid: '#1E2229',
+        bgBottom: '#171A20',
+        surface: '#181B22',
+        elevated: '#252932',
+        cardBg: '#232730',
+        cardTint: '#2F3440',
+        glass: 'rgba(28, 31, 38, 0.86)',
+        borderSubtle: 'rgba(203, 213, 225, 0.18)',
+        borderStrong: 'rgba(203, 213, 225, 0.46)',
+        dotColor: '#3B414F',
+        lineColor: '#2C313C'
+      }
+    ],
+    BLACKBOARD_GREEN: [
+      {
+        id: 'emerald_chalk',
+        name: 'Emerald Chalk',
+        accentStart: '#34D399',
+        accentEnd: '#0EA5E9',
+        onAccent: '#052E16',
+        bgTop: '#0D2A1F',
+        bgMid: '#091F17',
+        bgBottom: '#06150F',
+        surface: '#071812',
+        elevated: '#102B20',
+        cardBg: '#0E281E',
+        cardTint: '#15392B',
+        glass: 'rgba(8, 25, 19, 0.84)',
+        borderSubtle: 'rgba(52, 211, 153, 0.18)',
+        borderStrong: 'rgba(52, 211, 153, 0.50)',
+        dotColor: '#1E4636',
+        lineColor: '#153629'
+      },
+      {
+        id: 'matcha_board',
+        name: 'Matcha Slate',
+        accentStart: '#A3E635',
+        accentEnd: '#22C55E',
+        onAccent: '#0F1F05',
+        bgTop: '#132415',
+        bgMid: '#0D1C0F',
+        bgBottom: '#08120A',
+        surface: '#09140B',
+        elevated: '#142617',
+        cardBg: '#122215',
+        cardTint: '#1B3420',
+        glass: 'rgba(11, 24, 13, 0.84)',
+        borderSubtle: 'rgba(163, 230, 53, 0.18)',
+        borderStrong: 'rgba(163, 230, 53, 0.48)',
+        dotColor: '#274229',
+        lineColor: '#1B301D'
+      },
+      {
+        id: 'cobalt_slate',
+        name: 'Lecture Cobalt',
+        accentStart: '#38BDF8',
+        accentEnd: '#34D399',
+        onAccent: '#061A26',
+        bgTop: '#0A2229',
+        bgMid: '#071B21',
+        bgBottom: '#051217',
+        surface: '#06161B',
+        elevated: '#0E2830',
+        cardBg: '#0C232A',
+        cardTint: '#13353F',
+        glass: 'rgba(7, 23, 28, 0.84)',
+        borderSubtle: 'rgba(56, 189, 248, 0.18)',
+        borderStrong: 'rgba(56, 189, 248, 0.50)',
+        dotColor: '#1B4450',
+        lineColor: '#12323B'
+      }
+    ]
+  };
+
+  function svgMini(kind) {
+    const map = {
+      layers: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg>',
+      bell: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+      inbox: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+      pin: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>',
+      note: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>',
+      checklist: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+      pdf: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+      image: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+      lock: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+      unlock: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
+      edit: '<svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>'
+    };
+    return map[kind] || '';
+  }
+
+  function hexToRgbaCss(hex, alpha) {
+    if (!hex || typeof hex !== 'string') return `rgba(168,85,247,${alpha})`;
+    let clean = hex.replace('#', '').trim();
+    if (clean.length === 3) clean = clean.split('').map((c) => c + c).join('');
+    if (clean.length !== 6) return `rgba(168,85,247,${alpha})`;
+    const num = parseInt(clean, 16);
+    if (Number.isNaN(num)) return `rgba(168,85,247,${alpha})`;
+    return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+  }
 
   let vault = null;
   let activeFolderFilter = 'ALL'; // 'ALL' | 'UNFILED' | 'FOLLOWUPS' | folderId
@@ -61,6 +467,14 @@
     classTimerResetBtn: document.getElementById('classTimerResetBtn'),
     zenModeBtn: document.getElementById('zenModeBtn'),
     exitZenFloatingBtn: document.getElementById('exitZenFloatingBtn'),
+    gradientBtn: document.getElementById('gradientBtn'),
+    gradientBtnOrb: document.getElementById('gradientBtnOrb'),
+    gradientBtnLabel: document.getElementById('gradientBtnLabel'),
+    gradientPopover: document.getElementById('gradientPopover'),
+    gradientPopThemeTitle: document.getElementById('gradientPopThemeTitle'),
+    gradientToggleBtn: document.getElementById('gradientToggleBtn'),
+    gradientOrbsGrid: document.getElementById('gradientOrbsGrid'),
+    gradientResetBtn: document.getElementById('gradientResetBtn'),
     importMenuBtn: document.getElementById('importMenuBtn'),
     importMenu: document.getElementById('importMenu'),
     exportMenuBtn: document.getElementById('exportMenuBtn'),
@@ -186,6 +600,112 @@
     }
   }
 
+  function ensureVaultGradientState() {
+    if (!vault) return;
+    if (typeof vault.gradientsEnabled !== 'boolean') vault.gradientsEnabled = true;
+    if (!vault.themeGradients || typeof vault.themeGradients !== 'object') {
+      vault.themeGradients = {};
+    }
+    for (const [themeKey, presets] of Object.entries(THEME_GRADIENT_PRESETS)) {
+      const validIds = new Set(presets.map((p) => p.id));
+      if (!validIds.has(vault.themeGradients[themeKey])) {
+        vault.themeGradients[themeKey] = presets[0].id;
+      }
+    }
+  }
+
+  function getActiveGradientPreset(themeName = (vault && vault.activeTheme) || 'DEEP_PURPLE_AMOLED') {
+    const list = THEME_GRADIENT_PRESETS[themeName] || THEME_GRADIENT_PRESETS.DEEP_PURPLE_AMOLED;
+    const savedId = vault && vault.themeGradients ? vault.themeGradients[themeName] : null;
+    return list.find((p) => p.id === savedId) || list[0];
+  }
+
+  function applyGradientTheme(themeName = (vault && vault.activeTheme) || 'DEEP_PURPLE_AMOLED') {
+    ensureVaultGradientState();
+    const resolved = themeName || 'DEEP_PURPLE_AMOLED';
+    const preset = getActiveGradientPreset(resolved);
+    const enabled = vault ? vault.gradientsEnabled !== false : true;
+    const rootStyle = document.documentElement.style;
+
+    document.documentElement.setAttribute('data-gradients', enabled ? 'on' : 'off');
+    rootStyle.setProperty('--accent-start', preset.accentStart);
+    rootStyle.setProperty('--accent-end', preset.accentEnd);
+    rootStyle.setProperty('--accent', preset.accentStart);
+    rootStyle.setProperty('--accent-contrast', preset.onAccent);
+    rootStyle.setProperty('--accent-soft', hexToRgbaCss(preset.accentStart, 0.14));
+    rootStyle.setProperty(
+      '--accent-gradient',
+      enabled ? `linear-gradient(135deg, ${preset.accentStart}, ${preset.accentEnd})` : preset.accentStart
+    );
+    rootStyle.setProperty('--bg-root', preset.bgBottom);
+    rootStyle.setProperty('--bg-surface', preset.surface);
+    rootStyle.setProperty('--bg-elevated', preset.elevated);
+    rootStyle.setProperty('--bg-card', preset.cardBg);
+    rootStyle.setProperty('--bg-card-tint', preset.cardTint);
+    rootStyle.setProperty('--bg-glass', preset.glass);
+    rootStyle.setProperty('--border-subtle', preset.borderSubtle);
+    rootStyle.setProperty('--border-strong', preset.borderStrong);
+    rootStyle.setProperty(
+      '--bg-gradient',
+      enabled
+        ? `linear-gradient(180deg, ${preset.bgTop} 0%, ${preset.bgMid} 52%, ${preset.bgBottom} 100%)`
+        : preset.bgBottom
+    );
+
+    if (el.gradientBtnOrb) {
+      el.gradientBtnOrb.style.background = `linear-gradient(135deg, ${preset.accentStart}, ${preset.accentEnd})`;
+    }
+    if (el.gradientBtnLabel) {
+      el.gradientBtnLabel.textContent = preset.name;
+    }
+    if (el.gradientPopThemeTitle) {
+      el.gradientPopThemeTitle.textContent = THEME_LABELS[resolved] || 'Theme Gradients';
+    }
+    if (el.gradientToggleBtn) {
+      el.gradientToggleBtn.classList.toggle('active', enabled);
+      el.gradientToggleBtn.textContent = enabled ? 'Ambient On' : 'Flat Mode';
+    }
+
+    const note = getActiveNote();
+    if (engine) {
+      engine.setAppearance(
+        resolved,
+        (note && note.board && note.board.gridStyle) || 'DOTS',
+        preset,
+        enabled
+      );
+    }
+    renderGradientPopover();
+    renderGraphIfVisible();
+  }
+
+  function renderGradientPopover() {
+    if (!el.gradientOrbsGrid || !vault) return;
+    const resolved = vault.activeTheme || 'DEEP_PURPLE_AMOLED';
+    const presets = THEME_GRADIENT_PRESETS[resolved] || THEME_GRADIENT_PRESETS.DEEP_PURPLE_AMOLED;
+    const active = getActiveGradientPreset(resolved);
+
+    el.gradientOrbsGrid.innerHTML = '';
+    for (const preset of presets) {
+      const isSelected = preset.id === active.id;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `gradient-orb-item${isSelected ? ' active' : ''}`;
+      btn.title = preset.name;
+      btn.innerHTML = `
+        <span class="gradient-orb-swatch" style="background:linear-gradient(135deg, ${preset.accentStart}, ${preset.accentEnd})">${isSelected ? '✓' : ''}</span>
+        <span class="gradient-orb-label">${escapeHtml(preset.name)}</span>
+      `;
+      btn.addEventListener('click', () => {
+        ensureVaultGradientState();
+        vault.themeGradients[resolved] = preset.id;
+        applyGradientTheme(resolved);
+        scheduleSave();
+      });
+      el.gradientOrbsGrid.appendChild(btn);
+    }
+  }
+
   function applyTheme(themeName) {
     const resolved = themeName || 'DEEP_PURPLE_AMOLED';
     vault.activeTheme = resolved;
@@ -193,11 +713,7 @@
     document.querySelectorAll('.theme-chip').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.themeChoice === resolved);
     });
-    const note = getActiveNote();
-    if (engine) {
-      engine.setAppearance(resolved, (note && note.board && note.board.gridStyle) || 'DOTS');
-    }
-    renderGraphIfVisible();
+    applyGradientTheme(resolved);
   }
 
   function formatDateChip(isoDate) {
@@ -240,9 +756,9 @@
     el.folderList.innerHTML = '';
 
     const specialRows = [
-      { id: 'ALL', icon: '📋', name: 'All Boards & Notes', count: activeNotes.length, color: '#a855f7', fixed: true },
-      { id: 'FOLLOWUPS', icon: '🔔', name: 'Follow-Ups Due', count: followUpCount, color: '#f59e0b', fixed: true },
-      { id: 'UNFILED', icon: '📥', name: 'Unfiled', count: unfiledCount, color: '#64748b', fixed: true }
+      { id: 'ALL', icon: svgMini('layers'), rawIcon: true, name: 'All Boards & Notes', count: activeNotes.length, color: '#a855f7', fixed: true },
+      { id: 'FOLLOWUPS', icon: svgMini('bell'), rawIcon: true, name: 'Follow-Ups Due', count: followUpCount, color: '#f59e0b', fixed: true },
+      { id: 'UNFILED', icon: svgMini('inbox'), rawIcon: true, name: 'Unfiled', count: unfiledCount, color: '#64748b', fixed: true }
     ];
 
     for (const sp of specialRows) {
@@ -265,11 +781,11 @@
 
     // Update Notes View folder dropdown too
     if (el.notesFolderSelect) {
-      el.notesFolderSelect.innerHTML = '<option value="">📥 Unfiled</option>';
+      el.notesFolderSelect.innerHTML = '<option value="">Unfiled</option>';
       for (const f of (vault.folders || [])) {
         const opt = document.createElement('option');
         opt.value = f.id;
-        opt.textContent = `${f.icon || '📁'} ${f.name}`;
+        opt.textContent = `${f.icon || ''} ${f.name}`.trim();
         el.notesFolderSelect.appendChild(opt);
       }
       const active = getActiveNote();
@@ -284,10 +800,10 @@
 
     row.innerHTML = `
       <span class="folder-dot" style="background:${meta.color}"></span>
-      <span>${meta.icon}</span>
+      <span class="folder-icon-slot">${meta.rawIcon ? meta.icon : escapeHtml(meta.icon)}</span>
       <span class="folder-name">${escapeHtml(meta.name)}</span>
       <span class="folder-count">${meta.count}</span>
-      ${meta.fixed ? '' : '<button class="folder-edit-btn" title="Customize Folder">✎</button>'}
+      ${meta.fixed ? '' : `<button class="folder-edit-btn" title="Customize Folder">${svgMini('edit')}</button>`}
     `;
 
     row.addEventListener('click', (e) => {
@@ -379,12 +895,12 @@
         badges.push(`<span class="badge-chip">✓ ${chk.done}/${chk.total}</span>`);
       }
       if (note.followUpAt) {
-        badges.push(`<span class="badge-chip${isDue ? ' due' : ''}">🔔 ${formatDateChip(note.followUpAt)}</span>`);
+        badges.push(`<span class="badge-chip${isDue ? ' due' : ''}">${svgMini('bell')} ${formatDateChip(note.followUpAt)}</span>`);
       }
 
       item.innerHTML = `
         <div class="note-item-top">
-          ${note.isPinned ? '<span>📌</span>' : ''}
+          ${note.isPinned ? `<span class="pin-glyph">${svgMini('pin')}</span>` : ''}
           <span class="note-item-title">${escapeHtml(note.title || 'Untitled Board')}</span>
           <button class="note-item-del" title="Move to Trash">✕</button>
         </div>
@@ -503,7 +1019,7 @@
 
     const gridStyle = (note.board && note.board.gridStyle) || 'DOTS';
     el.gridCycleBtn.textContent = GRID_LABELS[gridStyle] || GRID_LABELS.DOTS;
-    engine.setPage(page, vault.activeTheme, gridStyle);
+    engine.setPage(page, vault.activeTheme, gridStyle, getActiveGradientPreset(), vault.gradientsEnabled !== false);
     updateZoomLabel();
     renderSlidesBar(note, page);
     renderSpatialCards(note, page);
@@ -594,10 +1110,18 @@
     // Header
     const head = document.createElement('div');
     head.className = 'card-header';
-    head.style.background = `${card.colorHex || '#a855f7'}22`;
+    head.style.background = hexToRgbaCss(card.colorHex || '#A855F7', 0.11);
 
     const iconSpan = document.createElement('span');
-    iconSpan.textContent = card.kind === 'checklist' ? '☑️' : card.kind === 'pdf' ? '📄' : card.kind === 'image' ? '🖼️' : '📝';
+    iconSpan.className = 'card-kind-icon';
+    iconSpan.style.color = card.colorHex || 'var(--accent)';
+    iconSpan.innerHTML = card.kind === 'checklist'
+      ? svgMini('checklist')
+      : card.kind === 'pdf'
+        ? svgMini('pdf')
+        : card.kind === 'image'
+          ? svgMini('image')
+          : svgMini('note');
 
     const titleIn = document.createElement('input');
     titleIn.className = 'card-title-input';
@@ -611,12 +1135,12 @@
 
     const lockBtn = document.createElement('button');
     lockBtn.className = 'card-action-btn';
-    lockBtn.textContent = card.locked ? '🔒' : '🔓';
+    lockBtn.innerHTML = card.locked ? svgMini('lock') : svgMini('unlock');
     lockBtn.title = card.locked ? 'Unlock card drag/resize' : 'Lock card in place while teaching';
     lockBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
     lockBtn.addEventListener('click', () => {
       card.locked = !card.locked;
-      lockBtn.textContent = card.locked ? '🔒' : '🔓';
+      lockBtn.innerHTML = card.locked ? svgMini('lock') : svgMini('unlock');
       scheduleSave();
     });
 
@@ -1151,10 +1675,18 @@
     }
 
     const ctx = cv.getContext('2d');
-    const pal = engine ? engine.getPaletteColors() : { bg: '#000', accent: '#a855f7', text: '#fff', line: '#222' };
+    const pal = engine ? engine.getPaletteColors() : { bg: '#000', accent: '#a855f7', accentEnd: '#6366f1', text: '#fff', line: '#222' };
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = pal.bg;
+    if (vault && vault.gradientsEnabled !== false && pal.bgTop && pal.bgBottom) {
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+      bgGrad.addColorStop(0, pal.bgTop);
+      if (pal.bgMid) bgGrad.addColorStop(0.52, pal.bgMid);
+      bgGrad.addColorStop(1, pal.bgBottom);
+      ctx.fillStyle = bgGrad;
+    } else {
+      ctx.fillStyle = pal.bg;
+    }
     ctx.fillRect(0, 0, w, h);
 
     ctx.translate(graphState.panX, graphState.panY);
@@ -1164,12 +1696,19 @@
     const filterTxt = (el.graphFilterInput.value || '').trim().toLowerCase();
 
     // Edges
-    ctx.strokeStyle = `${pal.accent}55`;
     ctx.lineWidth = 1.6;
     for (const e of graphState.edges) {
       const a = nodeMap.get(e.sourceId);
       const b = nodeMap.get(e.targetId);
       if (!a || !b) continue;
+      if (vault && vault.gradientsEnabled !== false) {
+        const eg = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+        eg.addColorStop(0, hexToRgbaCss(pal.accent, 0.42));
+        eg.addColorStop(1, hexToRgbaCss(pal.accentEnd || pal.accent, 0.42));
+        ctx.strokeStyle = eg;
+      } else {
+        ctx.strokeStyle = hexToRgbaCss(pal.accent, 0.36);
+      }
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -1508,11 +2047,11 @@
     const notes = VaultBridge.searchNotes(vault, q).slice(0, 12);
 
     const commands = [
-      { label: '+ Create New Class Board', hint: 'Ctrl+N', run: () => createNewBoard() },
-      { label: '📅 Open Today Daily Board', hint: 'Journal', run: () => openOrCreateTodayJournal() },
-      { label: '📄 Import PDF Slides onto Board', hint: 'PDF Markup', run: () => handlePdfPick() },
-      { label: '⛶ Toggle Classroom Zen Mode', hint: 'F11', run: () => toggleZenMode() },
-      { label: '📑 Export All Slides to Multi-Page PDF', hint: 'PDF', run: () => exportAllSlidesPdf() }
+      { label: 'Create New Class Board', hint: 'Ctrl+N', run: () => createNewBoard() },
+      { label: 'Open Today Daily Board', hint: 'Journal', run: () => openOrCreateTodayJournal() },
+      { label: 'Import PDF Slides onto Board', hint: 'PDF Markup', run: () => handlePdfPick() },
+      { label: 'Toggle Classroom Zen Mode', hint: 'F11', run: () => toggleZenMode() },
+      { label: 'Export All Slides to Multi-Page PDF', hint: 'PDF', run: () => exportAllSlidesPdf() }
     ].filter((c) => !q.trim() || c.label.toLowerCase().includes(q.trim().toLowerCase()));
 
     for (const n of notes) {
@@ -1534,7 +2073,7 @@
       const btn = document.createElement('button');
       btn.className = 'palette-row';
       btn.innerHTML = `
-        <span>⚡ ${escapeHtml(cmd.label)}</span>
+        <span>${escapeHtml(cmd.label)}</span>
         <span class="palette-row-sub">${cmd.hint}</span>
       `;
       btn.addEventListener('click', () => {
@@ -1682,6 +2221,7 @@
     el.importMenu.classList.add('hidden');
     el.exportMenu.classList.add('hidden');
     el.followUpPopover.classList.add('hidden');
+    if (el.gradientPopover) el.gradientPopover.classList.add('hidden');
   }
 
   function escapeHtml(str) {
@@ -1801,13 +2341,47 @@
       el.classTimerDisplay.textContent = formatTimer(timerSeconds);
     });
 
-    // Theme switcher
+    // Theme switcher & Choosable Per-Theme Gradient Studio
     document.querySelectorAll('.theme-chip').forEach((btn) => {
       btn.addEventListener('click', () => {
         applyTheme(btn.dataset.themeChoice);
         scheduleSave();
       });
     });
+
+    if (el.gradientBtn) {
+      el.gradientBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = el.gradientPopover.classList.contains('hidden');
+        closeDropdowns();
+        if (willOpen) {
+          renderGradientPopover();
+          el.gradientPopover.classList.remove('hidden');
+        }
+      });
+    }
+
+    if (el.gradientToggleBtn) {
+      el.gradientToggleBtn.addEventListener('click', () => {
+        ensureVaultGradientState();
+        vault.gradientsEnabled = vault.gradientsEnabled === false;
+        applyGradientTheme(vault.activeTheme || 'DEEP_PURPLE_AMOLED');
+        scheduleSave();
+      });
+    }
+
+    if (el.gradientResetBtn) {
+      el.gradientResetBtn.addEventListener('click', () => {
+        ensureVaultGradientState();
+        const themeKey = vault.activeTheme || 'DEEP_PURPLE_AMOLED';
+        const presets = THEME_GRADIENT_PRESETS[themeKey] || THEME_GRADIENT_PRESETS.DEEP_PURPLE_AMOLED;
+        vault.gradientsEnabled = true;
+        vault.themeGradients[themeKey] = presets[0].id;
+        applyGradientTheme(themeKey);
+        scheduleSave();
+        showToast(`Reset ${presets[0].name} gradient for current theme`);
+      });
+    }
 
     // Zen mode
     el.zenModeBtn.addEventListener('click', () => toggleZenMode());
@@ -1910,7 +2484,7 @@
       const next = GRID_ORDER[(GRID_ORDER.indexOf(cur) + 1) % GRID_ORDER.length];
       note.board.gridStyle = next;
       el.gridCycleBtn.textContent = GRID_LABELS[next];
-      engine.setAppearance(vault.activeTheme, next);
+      engine.setAppearance(vault.activeTheme, next, getActiveGradientPreset(), vault.gradientsEnabled !== false);
       scheduleSave();
     });
 
@@ -2221,6 +2795,7 @@
     if (!Array.isArray(vault.folders) || vault.folders.length === 0) {
       vault.folders = VaultBridge.STARTER_FOLDERS.map((f) => ({ ...f, createdAt: Date.now() }));
     }
+    ensureVaultGradientState();
 
     engine = new BoardCanvasEngine({
       stageEl: el.boardStage,

@@ -6,6 +6,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -13,19 +15,37 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Brush
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckBox
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.LockOpen
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Slideshow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +56,7 @@ import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.serialization.json.Json
@@ -66,8 +87,8 @@ fun EditorScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val json = remember { Json { ignoreUnknownKeys = true } }
+    val activePreset = ThemeManager.currentGradient
 
-    // Keep editor state initialized once note loads asynchronously from Room
     LaunchedEffect(note?.id) {
         val loaded = note
         if (loaded != null) {
@@ -91,27 +112,23 @@ fun EditorScreen(
         }
     }
 
-    // Intercept back button to persist immediately
     BackHandler {
         viewModel.saveNow()
         onBack()
     }
 
-    // Persist immediately on composition disposal
     DisposableEffect(Unit) {
         onDispose {
             viewModel.saveNow()
         }
     }
 
-    // Collect save notification events
     LaunchedEffect(Unit) {
         viewModel.saveEvent.collectLatest { msg ->
             snackbarHostState.showSnackbar(msg, duration = SnackbarDuration.Short)
         }
     }
 
-    // Storage Access Framework launchers for each export format
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri: Uri? ->
@@ -169,7 +186,7 @@ fun EditorScreen(
                 context.contentResolver.openOutputStream(uri)?.use { os ->
                     ExportManager.exportPng(context, n, os)
                 }
-                Toast.makeText(context, "Lossless PNG saved successfully", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "PNG saved successfully", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "PNG export failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -192,544 +209,603 @@ fun EditorScreen(
         }
     }
 
-    // Modal Bottom Sheet for Export / Save As
     if (showExportSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
             onDismissRequest = { showExportSheet = false },
-            sheetState = sheetState
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.background
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "Export / Save As",
+                    text = "Export Note",
                     style = MaterialTheme.typography.titleLarge
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(4.dp))
 
                 val baseName = (note?.title ?: "note").ifBlank { "note" }
                     .replace(Regex("[^a-zA-Z0-9._\\- ]"), "_")
 
-                // 1. PDF
-                OutlinedCard(
+                ExportOptionRow(
+                    icon = Icons.Rounded.PictureAsPdf,
+                    title = "PDF Document (.pdf)",
+                    subtitle = "Multi-page document with text, ink & attachments",
                     onClick = {
                         showExportSheet = false
                         viewModel.saveNow()
                         pdfLauncher.launch("$baseName.pdf")
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Save as PDF (.pdf)") },
-                        supportingContent = { Text("Multi-page document with text, ink canvas & images") },
-                        leadingContent = { Text("📄", style = MaterialTheme.typography.titleLarge) }
-                    )
-                }
-
-                // 2. DOCX
-                OutlinedCard(
+                    }
+                )
+                ExportOptionRow(
+                    icon = Icons.Rounded.Description,
+                    title = "Word Document (.docx)",
+                    subtitle = "Editable OpenXML format for Word & Docs",
                     onClick = {
                         showExportSheet = false
                         viewModel.saveNow()
                         docxLauncher.launch("$baseName.docx")
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Save as Word Document (.docx)") },
-                        supportingContent = { Text("OpenXML format for Microsoft Word and Google Docs") },
-                        leadingContent = { Text("📝", style = MaterialTheme.typography.titleLarge) }
-                    )
-                }
-
-                // 3. PPTX
-                OutlinedCard(
+                    }
+                )
+                ExportOptionRow(
+                    icon = Icons.Rounded.Slideshow,
+                    title = "Presentation (.pptx)",
+                    subtitle = "Slide deck for PowerPoint & Keynote",
                     onClick = {
                         showExportSheet = false
                         viewModel.saveNow()
                         pptxLauncher.launch("$baseName.pptx")
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Save as PowerPoint (.pptx)") },
-                        supportingContent = { Text("Slide presentation for PowerPoint and Google Slides") },
-                        leadingContent = { Text("📊", style = MaterialTheme.typography.titleLarge) }
-                    )
-                }
-
-                // 4. PNG
-                OutlinedCard(
+                    }
+                )
+                ExportOptionRow(
+                    icon = Icons.Rounded.Image,
+                    title = "Lossless Image (.png)",
+                    subtitle = "High-resolution flat snapshot",
                     onClick = {
                         showExportSheet = false
                         viewModel.saveNow()
                         pngLauncher.launch("$baseName.png")
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Save as Lossless Image (.png)") },
-                        supportingContent = { Text("High-resolution crisp screenshot") },
-                        leadingContent = { Text("🖼", style = MaterialTheme.typography.titleLarge) }
-                    )
-                }
-
-                // 5. Markdown
-                OutlinedCard(
+                    }
+                )
+                ExportOptionRow(
+                    icon = Icons.Rounded.Code,
+                    title = "Markdown (.md)",
+                    subtitle = "Plain text with [[wiki-links]] and #tags",
                     onClick = {
                         showExportSheet = false
                         viewModel.saveNow()
                         mdLauncher.launch("$baseName.md")
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Save as Markdown (.md)") },
-                        supportingContent = { Text("Plain text with [[wiki-links]] and #tags") },
-                        leadingContent = { Text("📋", style = MaterialTheme.typography.titleLarge) }
-                    )
-                }
+                    }
+                )
             }
         }
     }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    TextField(
-                        value = title,
-                        onValueChange = {
-                            title = it
-                            viewModel.updateTitle(it)
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent
-                        ),
-                        placeholder = { Text("Note Title") }
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        viewModel.saveNow()
-                        onBack()
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    // Lock / Unlock Note
-                    val isLocked = note?.isLocked == true
-                    IconButton(onClick = {
-                        if (isLocked) {
-                            viewModel.setNoteLocked(false)
-                            Toast.makeText(context, "Note unlocked", Toast.LENGTH_SHORT).show()
-                        } else if (NoteSecurityManager.hasPin(context)) {
-                            viewModel.setNoteLocked(true)
-                            Toast.makeText(context, "Note locked with Vault PIN", Toast.LENGTH_SHORT).show()
-                        } else {
-                            showPinSetupDialog = true
+    MinimalistBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    title = {},
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            viewModel.saveNow()
+                            onBack()
+                        }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                         }
-                    }) {
-                        Icon(
-                            if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                            contentDescription = if (isLocked) "Unlock Note" else "Lock Note"
-                        )
+                    },
+                    actions = {
+                        val isLocked = note?.isLocked == true
+                        IconButton(onClick = {
+                            if (isLocked) {
+                                viewModel.setNoteLocked(false)
+                                Toast.makeText(context, "Note unlocked", Toast.LENGTH_SHORT).show()
+                            } else if (NoteSecurityManager.hasPin(context)) {
+                                viewModel.setNoteLocked(true)
+                                Toast.makeText(context, "Note locked with Vault PIN", Toast.LENGTH_SHORT).show()
+                            } else {
+                                showPinSetupDialog = true
+                            }
+                        }) {
+                            Icon(
+                                imageVector = if (isLocked) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                                contentDescription = if (isLocked) "Unlock Note" else "Lock Note",
+                                tint = if (isLocked) activePreset.accentStart else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = {
+                            viewModel.saveNow()
+                            onNavigateReader(note?.id)
+                        }) {
+                            Icon(
+                                imageVector = Icons.Rounded.MenuBook,
+                                contentDescription = "Book Reader Mode",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { viewModel.saveNow(showEvent = true) }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = "Save Note",
+                                tint = activePreset.accentStart
+                            )
+                        }
+                        IconButton(onClick = { showExportSheet = true }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Share,
+                                contentDescription = "Export",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                    // Book Reading Mode
-                    IconButton(onClick = {
-                        viewModel.saveNow()
-                        onNavigateReader(note?.id)
-                    }) {
-                        Icon(Icons.Default.MenuBook, contentDescription = "Read in Book Mode")
-                    }
-                    // Visible Save Button
-                    IconButton(onClick = { viewModel.saveNow(showEvent = true) }) {
-                        Icon(Icons.Default.Check, contentDescription = "Save Note")
-                    }
-                    // Export / Save As Button
-                    IconButton(onClick = { showExportSheet = true }) {
-                        Icon(Icons.Default.Share, contentDescription = "Export / Save As")
-                    }
-                }
-            )
-        },
-        bottomBar = {
-            // Multimedia, PDF & Checklist Toolbar
-            BottomAppBar(tonalElevation = 4.dp) {
-                Row(
+                )
+            },
+            bottomBar = {
+                // Single minimalist glass toolbar for multimedia, PDF & checklist blocks
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    TextButton(onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) }) {
-                        Text("📄 PDF")
-                    }
-                    TextButton(onClick = { viewModel.addChecklistBlock() }) {
-                        Text("☑ To-Do")
-                    }
-                    TextButton(onClick = { viewModel.addInkBlock() }) {
-                        Text("✏️ Drawing")
-                    }
-                    TextButton(onClick = { viewModel.addAudioBlock() }) {
-                        Text("🎙 Voice")
-                    }
-                    TextButton(onClick = { viewModel.addImageBlock() }) {
-                        Text("🖼 Image/OCR")
-                    }
-                    TextButton(onClick = { showLinkPickerDialog = true }) {
-                        Text("🔗 [[Link]]")
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(10.dp, RoundedCornerShape(24.dp)),
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f),
+                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            EditorToolButton(
+                                icon = Icons.Rounded.PictureAsPdf,
+                                label = "PDF",
+                                onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) }
+                            )
+                            EditorToolButton(
+                                icon = Icons.Rounded.CheckBox,
+                                label = "Tasks",
+                                onClick = { viewModel.addChecklistBlock() }
+                            )
+                            EditorToolButton(
+                                icon = Icons.Rounded.Brush,
+                                label = "Sketch",
+                                onClick = { viewModel.addInkBlock() }
+                            )
+                            EditorToolButton(
+                                icon = Icons.Rounded.Mic,
+                                label = "Voice",
+                                onClick = { viewModel.addAudioBlock() }
+                            )
+                            EditorToolButton(
+                                icon = Icons.Rounded.Image,
+                                label = "OCR",
+                                onClick = { viewModel.addImageBlock() }
+                            )
+                            EditorToolButton(
+                                icon = Icons.Rounded.Link,
+                                label = "Link",
+                                onClick = { showLinkPickerDialog = true }
+                            )
+                        }
                     }
                 }
             }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Main text editor
-            OutlinedTextField(
-                value = contentField,
-                onValueChange = { updated ->
-                    contentField = updated
-                    viewModel.updateContent(updated.text)
-                },
+        ) { padding ->
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 120.dp),
-                placeholder = { Text("Start typing notes or type [[ to link notes…") }
-            )
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Borderless Editorial Title
+                BasicTextField(
+                    value = title,
+                    onValueChange = {
+                        title = it
+                        viewModel.updateTitle(it)
+                    },
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(
+                        color = MaterialTheme.colorScheme.onBackground
+                    ),
+                    cursorBrush = SolidColor(activePreset.accentStart),
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { innerTextField ->
+                        if (title.isEmpty()) {
+                            Text(
+                                text = "Untitled",
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
 
-            // Live Obsidian [[Wiki-Link]] Autocomplete Bar while typing `[[query`
-            val activeWikiMatch = remember(contentField) {
-                val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
-                val beforeCursor = contentField.text.substring(0, cursor)
-                Regex("""\[\[([^\[\]\n]*)$""").find(beforeCursor)
-            }
-            if (activeWikiMatch != null) {
-                val rawQuery = activeWikiMatch.groupValues[1].trim()
-                val candidates = remember(allNotes, note?.id, rawQuery) {
-                    allNotes
-                        .filter { it.id != note?.id && it.title.isNotBlank() }
-                        .filter { rawQuery.isBlank() || it.title.contains(rawQuery, ignoreCase = true) }
-                        .take(10)
+                Spacer(Modifier.height(10.dp))
+
+                // Minimal accent hairline rule
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(2.5.dp)
+                            .clip(CircleShape)
+                            .background(ThemeManager.activeAccentBrush)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(0.5.dp)
+                            .background(ThemeManager.cardBorderColor)
+                    )
                 }
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                        Text(
-                            text = if (candidates.isEmpty()) "No matching notes (finish with ]] to create)" else "Tap to link note:",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (candidates.isNotEmpty()) {
-                            Spacer(Modifier.height(4.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                items(candidates, key = { it.id }) { candidate ->
-                                    SuggestionChip(
-                                        onClick = {
-                                            val startIdx = activeWikiMatch.range.first
-                                            val cursor = contentField.selection.start.coerceIn(startIdx, contentField.text.length)
-                                            val inserted = "[[${candidate.title}]] "
-                                            val newText = contentField.text.replaceRange(startIdx, cursor, inserted)
-                                            val newCursor = startIdx + inserted.length
-                                            contentField = TextFieldValue(newText, TextRange(newCursor))
-                                            viewModel.updateContent(newText)
-                                        },
-                                        label = { Text("[[${candidate.title}]]") }
-                                    )
+
+                Spacer(Modifier.height(16.dp))
+
+                // Borderless Distraction-Free Note Canvas
+                BasicTextField(
+                    value = contentField,
+                    onValueChange = { updated ->
+                        contentField = updated
+                        viewModel.updateContent(updated.text)
+                    },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onBackground,
+                        lineHeight = 25.sp
+                    ),
+                    cursorBrush = SolidColor(activePreset.accentStart),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp),
+                    decorationBox = { innerTextField ->
+                        if (contentField.text.isEmpty()) {
+                            Text(
+                                text = "Start writing, or type [[ to connect notes…",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                )
+
+                // Live Obsidian [[Wiki-Link]] Autocomplete Bar while typing `[[query`
+                val activeWikiMatch = remember(contentField) {
+                    val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
+                    val beforeCursor = contentField.text.substring(0, cursor)
+                    Regex("""\[\[([^\[\]\n]*)$""").find(beforeCursor)
+                }
+                if (activeWikiMatch != null) {
+                    val rawQuery = activeWikiMatch.groupValues[1].trim()
+                    val candidates = remember(allNotes, note?.id, rawQuery) {
+                        allNotes
+                            .filter { it.id != note?.id && it.title.isNotBlank() }
+                            .filter { rawQuery.isBlank() || it.title.contains(rawQuery, ignoreCase = true) }
+                            .take(10)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(0.75.dp, activePreset.accentStart.copy(alpha = 0.55f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                            Text(
+                                text = if (candidates.isEmpty()) "No matching notes (close with ]] to create)" else "Link note:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = activePreset.accentStart,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (candidates.isNotEmpty()) {
+                                Spacer(Modifier.height(6.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    items(candidates, key = { it.id }) { candidate ->
+                                        SuggestionChip(
+                                            onClick = {
+                                                val startIdx = activeWikiMatch.range.first
+                                                val cursor = contentField.selection.start.coerceIn(startIdx, contentField.text.length)
+                                                val inserted = "[[${candidate.title}]] "
+                                                val newText = contentField.text.replaceRange(startIdx, cursor, inserted)
+                                                val newCursor = startIdx + inserted.length
+                                                contentField = TextFieldValue(newText, TextRange(newCursor))
+                                                viewModel.updateContent(newText)
+                                            },
+                                            label = { Text("[[${candidate.title}]]") }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-            // Quick add actions directly underneath the note
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AssistChip(
-                    onClick = { importPdfLauncher.launch(arrayOf("application/pdf")) },
-                    label = { Text("📄 Add PDF & Markup") }
-                )
-                AssistChip(
-                    onClick = { viewModel.addChecklistBlock() },
-                    label = { Text("☑ Add To-Do") }
-                )
-                AssistChip(
-                    onClick = { viewModel.addInkBlock() },
-                    label = { Text("✏️ Add Sketch") }
-                )
-                AssistChip(
-                    onClick = { showLinkPickerDialog = true },
-                    label = { Text("🔗 Link Note") }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Multimedia, PDF & Checklist blocks
-            blocks.forEach { block ->
-                key(block.id) {
-                    val blockLabel = when (block) {
-                        is NoteBlock.TextBlock -> "Text Note"
-                        is NoteBlock.InkBlock -> "Ink Canvas"
-                        is NoteBlock.AudioBlock -> "Voice Recording"
-                        is NoteBlock.ImageBlock -> "Image & OCR"
-                        is NoteBlock.ChecklistBlock -> "To-Do Checklist"
-                        is NoteBlock.PdfBlock -> "PDF Document & Markup"
-                    }
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        border = BorderStroke(1.dp, ThemeManager.cardBorderColor),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Column {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 4.dp, top = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = blockLabel,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                                IconButton(
-                                    onClick = { viewModel.removeBlock(block.id) },
-                                    modifier = Modifier.size(28.dp)
+                // Multimedia, PDF & Checklist blocks
+                blocks.forEach { block ->
+                    key(block.id) {
+                        val blockLabel = when (block) {
+                            is NoteBlock.TextBlock -> "Note Segment"
+                            is NoteBlock.InkBlock -> "Sketch"
+                            is NoteBlock.AudioBlock -> "Voice"
+                            is NoteBlock.ImageBlock -> "Image & OCR"
+                            is NoteBlock.ChecklistBlock -> "Checklist"
+                            is NoteBlock.PdfBlock -> "PDF Markup"
+                        }
+                        val blockShape = RoundedCornerShape(16.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp)
+                                .clip(blockShape)
+                                .background(ThemeManager.activeCardBrush(highlighted = false))
+                                .border(0.75.dp, ThemeManager.cardBorderColor, blockShape)
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 14.dp, end = 6.dp, top = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Remove block",
-                                        modifier = Modifier.size(16.dp)
+                                    Text(
+                                        text = blockLabel.uppercase(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        letterSpacing = 0.8.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
                                     )
-                                }
-                            }
-
-                            when (block) {
-                                is NoteBlock.TextBlock -> {
-                                    var blockText by remember(block.id) { mutableStateOf(block.text) }
-                                    OutlinedTextField(
-                                        value = blockText,
-                                        onValueChange = { newText ->
-                                            blockText = newText
-                                            viewModel.updateBlock(block.copy(text = newText))
-                                            viewModel.stampTextBlockWithAudioTime(block.id)
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(8.dp),
-                                        placeholder = { Text("Text block…") }
-                                    )
-                                    block.audioTimestampMs?.let { ts ->
-                                        AssistChip(
-                                            onClick = { pendingAudioSeekMs = ts },
-                                            label = { Text("▶ Jump to Audio @ ${ts / 1000}s") },
-                                            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
+                                    IconButton(
+                                        onClick = { viewModel.removeBlock(block.id) },
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Close,
+                                            contentDescription = "Remove block",
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
                                         )
                                     }
                                 }
 
-                                is NoteBlock.InkBlock -> {
-                                    val strokes: List<InkStroke> = remember(block.strokesJson) {
-                                        try {
-                                            json.decodeFromString<List<InkStroke>>(block.strokesJson)
-                                        } catch (e: Exception) {
-                                            emptyList()
+                                when (block) {
+                                    is NoteBlock.TextBlock -> {
+                                        var blockText by remember(block.id) { mutableStateOf(block.text) }
+                                        BasicTextField(
+                                            value = blockText,
+                                            onValueChange = { newText ->
+                                                blockText = newText
+                                                viewModel.updateBlock(block.copy(text = newText))
+                                                viewModel.stampTextBlockWithAudioTime(block.id)
+                                            },
+                                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            ),
+                                            cursorBrush = SolidColor(activePreset.accentStart),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            decorationBox = { inner ->
+                                                if (blockText.isEmpty()) {
+                                                    Text(
+                                                        "Write additional notes…",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
+                                                    )
+                                                }
+                                                inner()
+                                            }
+                                        )
+                                        block.audioTimestampMs?.let { ts ->
+                                            AssistChip(
+                                                onClick = { pendingAudioSeekMs = ts },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Rounded.PlayArrow,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                },
+                                                label = { Text("Audio @ ${ts / 1000}s") },
+                                                modifier = Modifier.padding(start = 14.dp, bottom = 10.dp)
+                                            )
                                         }
                                     }
-                                    InkCanvas(
-                                        strokes = strokes,
-                                        heightDp = block.heightDp,
-                                        paperTemplate = block.paperTemplate,
-                                        onTemplateChanged = { tmpl ->
-                                            viewModel.updateInkTemplate(block.id, tmpl)
-                                        },
-                                        onStrokesChanged = { newStrokes ->
-                                            viewModel.updateInkStrokes(block.id, newStrokes)
-                                        }
-                                    )
-                                }
 
-                                is NoteBlock.AudioBlock -> {
-                                    AudioRecorderBlock(
-                                        audioFilePath = block.filePath,
-                                        durationMs = block.durationMs,
-                                        seekToRequestMs = pendingAudioSeekMs,
-                                        onSeekHandled = { pendingAudioSeekMs = null },
-                                        onRecordingStarted = { _, startMs ->
-                                            viewModel.onAudioRecordingStarted(startMs)
-                                        },
-                                        onRecordingStopped = { duration ->
-                                            viewModel.onAudioRecordingStopped()
-                                            viewModel.updateBlock(block.copy(durationMs = duration))
+                                    is NoteBlock.InkBlock -> {
+                                        val strokes: List<InkStroke> = remember(block.strokesJson) {
+                                            try {
+                                                json.decodeFromString<List<InkStroke>>(block.strokesJson)
+                                            } catch (_: Exception) {
+                                                emptyList()
+                                            }
                                         }
-                                    )
-                                }
+                                        InkCanvas(
+                                            strokes = strokes,
+                                            heightDp = block.heightDp,
+                                            paperTemplate = block.paperTemplate,
+                                            onTemplateChanged = { tmpl ->
+                                                viewModel.updateInkTemplate(block.id, tmpl)
+                                            },
+                                            onStrokesChanged = { newStrokes ->
+                                                viewModel.updateInkStrokes(block.id, newStrokes)
+                                            }
+                                        )
+                                    }
 
-                                is NoteBlock.ImageBlock -> {
-                                    ImageOcrBlock(
-                                        uriString = block.uriString,
-                                        extractedText = block.extractedOcrText,
-                                        onImagePicked = { uri: Uri ->
-                                            viewModel.updateBlock(
-                                                block.copy(uriString = uri.toString())
-                                            )
-                                        },
-                                        onOcrResult = { text ->
-                                            viewModel.updateBlock(
-                                                block.copy(extractedOcrText = text)
-                                            )
-                                            val current = contentField.text
-                                            val appended = if (current.isBlank()) text
+                                    is NoteBlock.AudioBlock -> {
+                                        AudioRecorderBlock(
+                                            audioFilePath = block.filePath,
+                                            durationMs = block.durationMs,
+                                            seekToRequestMs = pendingAudioSeekMs,
+                                            onSeekHandled = { pendingAudioSeekMs = null },
+                                            onRecordingStarted = { _, startMs ->
+                                                viewModel.onAudioRecordingStarted(startMs)
+                                            },
+                                            onRecordingStopped = { duration ->
+                                                viewModel.onAudioRecordingStopped()
+                                                viewModel.updateBlock(block.copy(durationMs = duration))
+                                            }
+                                        )
+                                    }
+
+                                    is NoteBlock.ImageBlock -> {
+                                        ImageOcrBlock(
+                                            uriString = block.uriString,
+                                            extractedText = block.extractedOcrText,
+                                            onImagePicked = { uri: Uri ->
+                                                viewModel.updateBlock(
+                                                    block.copy(uriString = uri.toString())
+                                                )
+                                            },
+                                            onOcrResult = { text ->
+                                                viewModel.updateBlock(
+                                                    block.copy(extractedOcrText = text)
+                                                )
+                                                val current = contentField.text
+                                                val appended = if (current.isBlank()) text
                                                 else "$current\n\n--- OCR ---\n$text"
-                                            contentField = TextFieldValue(appended, TextRange(appended.length))
-                                            viewModel.updateContent(appended)
-                                        }
-                                    )
-                                }
+                                                contentField = TextFieldValue(appended, TextRange(appended.length))
+                                                viewModel.updateContent(appended)
+                                            }
+                                        )
+                                    }
 
-                                is NoteBlock.ChecklistBlock -> {
-                                    ChecklistBlockUi(
-                                        block = block,
-                                        onTitleChanged = { newTitle ->
-                                            viewModel.updateChecklistTitle(block.id, newTitle)
-                                        },
-                                        onToggleItem = { itemId ->
-                                            viewModel.toggleChecklistItem(block.id, itemId)
-                                        },
-                                        onItemTextChanged = { itemId, newText ->
-                                            viewModel.updateChecklistItemText(block.id, itemId, newText)
-                                        },
-                                        onAddItem = {
-                                            viewModel.addChecklistItem(block.id)
-                                        },
-                                        onRemoveItem = { itemId ->
-                                            viewModel.removeChecklistItem(block.id, itemId)
-                                        }
-                                    )
-                                }
+                                    is NoteBlock.ChecklistBlock -> {
+                                        ChecklistBlockUi(
+                                            block = block,
+                                            onTitleChanged = { newTitle ->
+                                                viewModel.updateChecklistTitle(block.id, newTitle)
+                                            },
+                                            onToggleItem = { itemId ->
+                                                viewModel.toggleChecklistItem(block.id, itemId)
+                                            },
+                                            onItemTextChanged = { itemId, newText ->
+                                                viewModel.updateChecklistItemText(block.id, itemId, newText)
+                                            },
+                                            onAddItem = {
+                                                viewModel.addChecklistItem(block.id)
+                                            },
+                                            onRemoveItem = { itemId ->
+                                                viewModel.removeChecklistItem(block.id, itemId)
+                                            }
+                                        )
+                                    }
 
-                                is NoteBlock.PdfBlock -> {
-                                    PdfAnnotationBlock(
-                                        block = block,
-                                        onBlockUpdated = { updatedPdf ->
-                                            viewModel.updateBlock(updatedPdf)
-                                        }
-                                    )
+                                    is NoteBlock.PdfBlock -> {
+                                        PdfAnnotationBlock(
+                                            block = block,
+                                            onBlockUpdated = { updatedPdf ->
+                                                viewModel.updateBlock(updatedPdf)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // Outgoing Wiki-Links section (Obsidian parity)
-            if (outgoingLinks.isNotEmpty()) {
-                Text("Linked Notes (${outgoingLinks.size})", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.height(6.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(outgoingLinks, key = { it.id }) { link ->
-                        InputChip(
-                            selected = link.isResolved,
-                            onClick = {
-                                viewModel.saveNow()
-                                if (link.targetNoteId != null) {
-                                    onNoteClick(link.targetNoteId)
-                                } else {
-                                    viewModel.openOrCreateNoteByTitle(link.targetNoteTitle) { targetId ->
-                                        onNoteClick(targetId)
+                // Outgoing Wiki-Links section
+                if (outgoingLinks.isNotEmpty()) {
+                    Text(
+                        text = "Linked Notes (${outgoingLinks.size})",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(outgoingLinks, key = { it.id }) { link ->
+                            InputChip(
+                                selected = link.isResolved,
+                                onClick = {
+                                    viewModel.saveNow()
+                                    if (link.targetNoteId != null) {
+                                        onNoteClick(link.targetNoteId)
+                                    } else {
+                                        viewModel.openOrCreateNoteByTitle(link.targetNoteTitle) { targetId ->
+                                            onNoteClick(targetId)
+                                        }
                                     }
+                                },
+                                label = {
+                                    Text(
+                                        if (link.isResolved) "[[${link.targetNoteTitle}]]"
+                                        else "[[${link.targetNoteTitle}]] (+ Create)"
+                                    )
                                 }
-                            },
-                            label = {
-                                Text(
-                                    if (link.isResolved) "[[${link.targetNoteTitle}]]"
-                                    else "[[${link.targetNoteTitle}]] (+ Create)"
-                                )
-                            }
-                        )
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-            }
 
-            // Backlinks section
-            Text("Backlinks (${backlinks.size})", style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            if (backlinks.isEmpty()) {
-                Text(
-                    "No backlinks found. Mention this note's title in other notes to connect them.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            } else {
-                Text(
-                    "Referenced by:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                // Backlinks section
+                Text("Backlinks (${backlinks.size})", style = MaterialTheme.typography.titleSmall)
                 Spacer(modifier = Modifier.height(6.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(backlinks) { item ->
-                        InputChip(
-                            selected = false,
-                            onClick = {
-                                viewModel.saveNow()
-                                onNoteClick(item.sourceNoteId)
-                            },
-                            label = { Text(item.sourceNoteTitle) },
-                            leadingIcon = {
-                                Text("🔗", fontSize = 12.sp)
-                            }
-                        )
+                if (backlinks.isEmpty()) {
+                    Text(
+                        text = "No backlinks yet. Reference this note with [[Title]] elsewhere to connect.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                    )
+                } else {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(backlinks) { item ->
+                            InputChip(
+                                selected = false,
+                                onClick = {
+                                    viewModel.saveNow()
+                                    onNoteClick(item.sourceNoteId)
+                                },
+                                label = { Text(item.sourceNoteTitle) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Rounded.Link,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.height(92.dp))
+            }
         }
     }
 
-    // Searchable [[Wiki-Link]] Picker Dialog
     if (showLinkPickerDialog) {
         var linkQuery by remember { mutableStateOf("") }
         val filtered = remember(allNotes, note?.id, linkQuery) {
@@ -740,6 +816,7 @@ fun EditorScreen(
         }
         AlertDialog(
             onDismissRequest = { showLinkPickerDialog = false },
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
             title = { Text("Insert [[Wiki-Link]]") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -757,6 +834,7 @@ fun EditorScreen(
                                 supportingContent = if (target.content.isNotBlank()) {
                                     { Text(target.content.take(60), maxLines = 1) }
                                 } else null,
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                 modifier = Modifier.clickable {
                                     val insert = "[[${target.title.ifBlank { "Untitled" }}]] "
                                     val cursor = contentField.selection.start.coerceIn(0, contentField.text.length)
@@ -790,7 +868,6 @@ fun EditorScreen(
         )
     }
 
-    // First-time Vault PIN setup dialog when locking a note
     if (showPinSetupDialog) {
         VaultPinDialog(
             isSettingNewPin = true,
@@ -805,5 +882,81 @@ fun EditorScreen(
                 Toast.makeText(context, "PIN saved & note locked", Toast.LENGTH_SHORT).show()
             }
         )
+    }
+}
+
+@Composable
+private fun EditorToolButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    val activePreset = ThemeManager.currentGradient
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = activePreset.accentStart,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ExportOptionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    val activePreset = ThemeManager.currentGradient
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(activePreset.accentStart.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = activePreset.accentStart,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }

@@ -153,25 +153,26 @@ fun PdfAnnotationBlock(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    "📄 PDF Document & Markup",
+                    "PDF Document & Markup",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     "Open a PDF file to write, highlight, or draw directly above every page.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Button(
                     onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) },
-                    enabled = !isImporting
+                    enabled = !isImporting,
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(if (isImporting) "Importing PDF…" else "📄 Select PDF from Device")
+                    Text(if (isImporting) "Importing PDF…" else "Select PDF from Device")
                 }
                 importError?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
@@ -448,13 +449,13 @@ private fun PdfMarkupSurface(
             FilterChip(
                 selected = block.invertDark,
                 onClick = { onBlockUpdated(block.copy(invertDark = !block.invertDark)) },
-                label = { Text(if (block.invertDark) "🌙 Night PDF" else "☀ Light PDF", fontSize = 11.sp) }
+                label = { Text(if (block.invertDark) "Night PDF" else "Light PDF", fontSize = 11.sp) }
             )
 
             FilterChip(
                 selected = stylusOnlyMode,
                 onClick = { stylusOnlyMode = !stylusOnlyMode },
-                label = { Text(if (stylusOnlyMode) "🖊 S-Pen Only" else "👆 Finger Ink", fontSize = 11.sp) }
+                label = { Text(if (stylusOnlyMode) "Stylus Only" else "Touch Ink", fontSize = 11.sp) }
             )
 
             if (zoomScale > 1.02f) {
@@ -485,7 +486,7 @@ private fun PdfMarkupSurface(
                     toolMode = PdfToolMode.PEN
                     if (selectedColorIdx == 4) selectedColorIdx = 1
                 },
-                label = { Text("✏️ Pen") }
+                label = { Text("Pen") }
             )
             FilterChip(
                 selected = toolMode == PdfToolMode.HIGHLIGHTER,
@@ -493,27 +494,27 @@ private fun PdfMarkupSurface(
                     toolMode = PdfToolMode.HIGHLIGHTER
                     selectedColorIdx = 4
                 },
-                label = { Text("🖍 Highlight") }
+                label = { Text("Highlight") }
             )
             FilterChip(
                 selected = toolMode == PdfToolMode.ERASER,
                 onClick = { toolMode = PdfToolMode.ERASER },
-                label = { Text("🧽 Eraser") }
+                label = { Text("Eraser") }
             )
             FilterChip(
                 selected = toolMode == PdfToolMode.VANISHING,
                 onClick = { toolMode = PdfToolMode.VANISHING },
-                label = { Text("✨ Laser") }
+                label = { Text("Laser") }
             )
             FilterChip(
                 selected = toolMode == PdfToolMode.PAN,
                 onClick = { toolMode = PdfToolMode.PAN },
-                label = { Text("🖐 Pan") }
+                label = { Text("Pan") }
             )
             FilterChip(
                 selected = shapeSnapEnabled,
                 onClick = { shapeSnapEnabled = !shapeSnapEnabled },
-                label = { Text(if (shapeSnapEnabled) "📐 Snap ON" else "📐 Snap") }
+                label = { Text(if (shapeSnapEnabled) "Snap ON" else "Snap") }
             )
         }
 

@@ -3,26 +3,41 @@ package com.notegraph.app.ui.settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LaptopMac
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.theme.AppThemeMode
-import com.notegraph.app.ui.theme.NoteGraphColors
+import com.notegraph.app.ui.theme.GradientSwatchRow
+import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -42,6 +57,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val selectedTheme = ThemeManager.currentTheme
+    val activePreset = ThemeManager.currentGradient
+    val gradientsOn = ThemeManager.gradientsEnabled
     var isBackingUp by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
 
@@ -117,222 +134,375 @@ fun SettingsScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings & Vault") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+    MinimalistBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Appearance & Vault",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    )
+                )
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                // ─── Live Interactive Theme + Gradient Preview ───
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(ThemeManager.activeCardBrush(highlighted = true))
+                        .border(0.75.dp, ThemeManager.cardBorderColor, RoundedCornerShape(20.dp))
+                        .padding(18.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = selectedTheme.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = activePreset.accentStart,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (gradientsOn) activePreset.name else "${activePreset.name} · Flat",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(ThemeManager.activeAccentBrush),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Palette,
+                                    contentDescription = null,
+                                    tint = activePreset.onAccent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        // Mini mock note card preview
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = activePreset.cardSurface,
+                            border = BorderStroke(0.75.dp, activePreset.borderColor)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Lecture Summary",
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = "Clean contrast · distraction-free focus",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(ThemeManager.activeAccentBrush)
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "New",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = activePreset.onAccent,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            Spacer(Modifier.height(12.dp))
 
-            // ─── Theme Section (3 Luxury Themes) ───
-            Text(
-                text = "Color Theme System",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Choose your reading and editing aesthetic:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
-            )
-            Spacer(Modifier.height(12.dp))
-
-            // 1. Deep Purple AMOLED
-            ThemeOptionCard(
-                title = "Deep Purple AMOLED",
-                description = "True OLED Black (#000000), Royal Night surface (#150A26), Electric Violet accent (#A855F7), Stark White typography.",
-                previewBg = NoteGraphColors.DeepPurpleAmoledBackground,
-                previewAccent = NoteGraphColors.DeepPurpleAmoledAccent,
-                previewBorder = NoteGraphColors.DeepPurpleAmoledCardBorder,
-                previewText = NoteGraphColors.DeepPurpleAmoledText,
-                isSelected = selectedTheme == AppThemeMode.DEEP_PURPLE_AMOLED,
-                onClick = {
-                    ThemeManager.setTheme(AppThemeMode.DEEP_PURPLE_AMOLED)
-                }
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // 2. Kindle Parchment
-            ThemeOptionCard(
-                title = "Kindle Parchment",
-                description = "Warm Paper (#F4F1EA), Soft Linen surface (#EAE4D7), Charcoal Ink text (#2C2C2C), Warm Sepia accent (#B45309).",
-                previewBg = NoteGraphColors.KindleParchmentBackground,
-                previewAccent = NoteGraphColors.KindleParchmentAccent,
-                previewBorder = NoteGraphColors.KindleParchmentSepiaDivider,
-                previewText = NoteGraphColors.KindleParchmentCharcoalText,
-                isSelected = selectedTheme == AppThemeMode.KINDLE_PARCHMENT,
-                onClick = {
-                    ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
-                }
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            // 3. Matte Studio
-            ThemeOptionCard(
-                title = "Matte Studio",
-                description = "Slate Matte (#1E2229), Graphite Box (#262B35), Crisp Silver text (#E2E8F0), Studio Cyan accent (#38BDF8).",
-                previewBg = NoteGraphColors.MatteStudioBackground,
-                previewAccent = NoteGraphColors.MatteStudioAccent,
-                previewBorder = NoteGraphColors.MatteStudioGridBorder,
-                previewText = NoteGraphColors.MatteStudioText,
-                isSelected = selectedTheme == AppThemeMode.MATTE_STUDIO,
-                onClick = {
-                    ThemeManager.setTheme(AppThemeMode.MATTE_STUDIO)
-                }
-            )
-
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(16.dp))
-
-            // ─── Vault Backup & Restore Section ───
-            Text(
-                text = "Backup & Restore Vault",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(8.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                // ─── Theme Mode Matrix (AMOLED, Kindle, Matte / Mac) ───
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Export all notes, block structures, ink strokes, and OCR content into an open, portable .zip archive.",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Theme Surface",
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.height(14.dp))
 
-                    Button(
-                        onClick = { backupLauncher.launch("NoteGraph_Vault_Backup.zip") },
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isBackingUp
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(if (isBackingUp) "Archiving Notes…" else "📦 Backup All Notes to .zip")
-                    }
+                        AppThemeMode.values().forEach { mode ->
+                            val isSelected = selectedTheme == mode
+                            val modePreset = ThemeManager.presetFor(mode)
+                            val icon = when (mode) {
+                                AppThemeMode.DEEP_PURPLE_AMOLED -> Icons.Rounded.DarkMode
+                                AppThemeMode.KINDLE_PARCHMENT -> Icons.Rounded.MenuBook
+                                AppThemeMode.MATTE_STUDIO -> Icons.Rounded.LaptopMac
+                            }
+                            val subtitle = when (mode) {
+                                AppThemeMode.DEEP_PURPLE_AMOLED -> "True Black"
+                                AppThemeMode.KINDLE_PARCHMENT -> "E-Ink Paper"
+                                AppThemeMode.MATTE_STUDIO -> "Slate Studio"
+                            }
 
-                    Spacer(Modifier.height(8.dp))
-
-                    OutlinedButton(
-                        onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isRestoring
-                    ) {
-                        Text(if (isRestoring) "Restoring Notes…" else "📥 Restore / Import .zip Backup")
+                            Surface(
+                                onClick = { ThemeManager.setTheme(mode) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (isSelected) modePreset.cardTint else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 0.75.dp,
+                                    color = if (isSelected) modePreset.accentStart else ThemeManager.cardBorderColor
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 14.dp, horizontal = 10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(modePreset.accentStart, modePreset.accentEnd)
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isSelected) Icons.Rounded.Check else icon,
+                                            contentDescription = mode.displayName,
+                                            tint = modePreset.onAccent,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = mode.shortLabel,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(16.dp))
-
-            // ─── About Section ───
-            Text(
-                text = "About",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(6.dp))
-            Text("NoteGraph Luxury Edition", style = MaterialTheme.typography.bodyMedium)
-            Text("Version 2.0 • Tri-Theme Matrix • Interactive Checklists • Drag & Drop Folders", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-            Spacer(Modifier.height(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun ThemeOptionCard(
-    title: String,
-    description: String,
-    previewBg: Color,
-    previewAccent: Color,
-    previewBorder: Color,
-    previewText: Color,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .then(
-                if (isSelected) Modifier.border(2.dp, previewAccent, RoundedCornerShape(12.dp))
-                else Modifier.border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-            ),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Palette swatch preview circle
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .border(2.dp, previewBorder, RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
-            ) {
+                // ─── Choosable Gradient Colors (Per Theme) ───
                 Surface(
-                    color = previewBg,
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.fillMaxSize()
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Surface(
-                            color = previewAccent,
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier.size(16.dp)
-                        ) {}
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${selectedTheme.shortLabel} Gradient Palette",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = "Each theme remembers its own gradient color",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    ThemeManager.resetVisualsToDefault()
+                                    Toast.makeText(context, "Visuals reset to default", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = "Reset Gradients",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        GradientSwatchRow(
+                            mode = selectedTheme,
+                            selectedId = ThemeManager.selectedGradientIdFor(selectedTheme),
+                            onSelect = { chosen ->
+                                ThemeManager.setGradient(selectedTheme, chosen.id)
+                            }
+                        )
+
+                        HorizontalDivider(color = ThemeManager.cardBorderColor)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { ThemeManager.setGradientsEnabledState(!gradientsOn) }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Ambient Gradient Finish",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = if (gradientsOn) "Multi-stop accent & card sheen active" else "Minimal classic flat surfaces",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = gradientsOn,
+                                onCheckedChange = { ThemeManager.setGradientsEnabledState(it) }
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.width(14.dp))
+                // ─── Vault Backup & Restore ───
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Vault Backup & Sync",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Export notes, blocks, ink strokes, and PDFs into a portable .zip archive for desktop or backup.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
+                        Spacer(Modifier.height(2.dp))
 
-            if (isSelected) {
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    Icons.Default.CheckCircle,
-                    contentDescription = "Selected",
-                    tint = previewAccent,
-                    modifier = Modifier.size(24.dp)
-                )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(ThemeManager.activeAccentBrush)
+                                .clickable(enabled = !isBackingUp) {
+                                    backupLauncher.launch("NoteGraph_Vault_Backup.zip")
+                                }
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Backup,
+                                    contentDescription = null,
+                                    tint = activePreset.onAccent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = if (isBackingUp) "Archiving Vault…" else "Backup Vault (.zip)",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = activePreset.onAccent
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isRestoring,
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Restore,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (isRestoring) "Restoring Vault…" else "Restore from .zip")
+                        }
+                    }
+                }
+
+                // ─── Minimalist Footer ───
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "NoteGraph 2.0",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Offline-first notes, PDFs, ink & knowledge graph",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
             }
         }
     }

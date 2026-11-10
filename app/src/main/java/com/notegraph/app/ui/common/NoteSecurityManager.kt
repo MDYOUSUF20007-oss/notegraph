@@ -2,6 +2,7 @@ package com.notegraph.app.ui.common
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,6 +54,7 @@ fun VaultPinDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -65,8 +67,9 @@ fun VaultPinDialog(
                             errorMsg = null
                         }
                     },
-                    label = { Text(if (isSettingNewPin) "Enter 4–8 digit PIN" else "Enter Vault PIN") },
+                    label = { Text(if (isSettingNewPin) "Enter 4-8 digit PIN" else "Enter Vault PIN") },
                     singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     modifier = Modifier.fillMaxWidth()

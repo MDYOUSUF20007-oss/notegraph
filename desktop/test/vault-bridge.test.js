@@ -124,5 +124,14 @@ test('importAndroidNotesArray converts Android PdfBlock annotations into summary
   const pdfCard = cards.find((c) => c.title.includes('Thermo_Ch3.pdf'));
   assert.ok(pdfCard);
   assert.ok(pdfCard.content.includes('14 pages'));
-  assert.ok(pdfCard.content.includes('Page 3: Key entropy formula'));
+  assert.equal(pdfCard.content.includes('Page 3: Key entropy formula'), true);
+});
+
+test('createStarterVault includes per-theme choosable gradient defaults', () => {
+  const vault = VaultBridge.createStarterVault();
+  assert.equal(vault.gradientsEnabled, true);
+  assert.equal(vault.themeGradients.DEEP_PURPLE_AMOLED, 'obsidian_violet');
+  assert.equal(vault.themeGradients.KINDLE_PARCHMENT, 'warm_sepia');
+  assert.equal(vault.themeGradients.MATTE_STUDIO, 'studio_cyan');
+  assert.equal(vault.themeGradients.BLACKBOARD_GREEN, 'emerald_chalk');
 });

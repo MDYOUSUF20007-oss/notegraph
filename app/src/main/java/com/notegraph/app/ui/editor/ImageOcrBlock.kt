@@ -4,24 +4,25 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.notegraph.app.ui.theme.ThemeManager
 
 /**
- * Composable that shows an image from a URI, lets the user pick from gallery,
- * and provides an "Extract Text (OCR)" button using ML Kit.
- *
- * @param uriString         current image URI string (may be empty).
- * @param extractedText     previously extracted OCR text (if any).
- * @param onImagePicked     callback when a new image is selected from gallery.
- * @param onOcrResult       callback when OCR completes with recognised text.
+ * Minimalist Image + ML Kit offline OCR block.
  */
 @Composable
 fun ImageOcrBlock(
@@ -43,26 +44,44 @@ fun ImageOcrBlock(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("🖼 Image Block", style = MaterialTheme.typography.titleSmall)
-        Spacer(Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Image,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text("Image & OCR", style = MaterialTheme.typography.titleSmall)
+        }
 
         if (uriString.isBlank()) {
-            Button(onClick = { imagePickerLauncher.launch("image/*") }) {
-                Text("Pick Image from Gallery")
+            OutlinedButton(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+            ) {
+                Text("Select Image from Gallery")
             }
         } else {
             Text(
-                "Image: ${uriString.substringAfterLast('/')}",
+                text = uriString.substringAfterLast('/'),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(4.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { imagePickerLauncher.launch("image/*") }) {
-                    Text("Change Image")
+                OutlinedButton(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                ) {
+                    Text("Change")
                 }
                 Button(
                     onClick = {
@@ -74,30 +93,40 @@ fun ImageOcrBlock(
                             result.onFailure { e -> ocrError = e.localizedMessage ?: "OCR failed" }
                         }
                     },
-                    enabled = !ocrInProgress
+                    enabled = !ocrInProgress,
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(if (ocrInProgress) "Recognising…" else "Extract Text (OCR)")
+                    Icon(Icons.Rounded.TextFields, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (ocrInProgress) "Scanning…" else "Extract Text")
                 }
             }
 
             ocrError?.let {
-                Spacer(Modifier.height(4.dp))
-                Text("Error: $it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
 
             if (!extractedText.isNullOrBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text("Extracted Text:", style = MaterialTheme.typography.labelMedium)
-                Text(extractedText, style = MaterialTheme.typography.bodySmall)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.4f),
+                    border = BorderStroke(0.5.dp, ThemeManager.cardBorderColor)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Extracted Text",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(extractedText, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
     }
 }
 
-/**
- * Runs ML Kit text recognition on an image URI and returns the result
- * via [onResult] callback.
- */
 private fun runOcr(
     context: Context,
     uriString: String,

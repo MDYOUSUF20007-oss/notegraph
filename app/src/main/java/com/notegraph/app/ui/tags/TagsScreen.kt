@@ -1,24 +1,33 @@
 package com.notegraph.app.ui.tags
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.theme.MinimalistBackground
+import com.notegraph.app.ui.theme.ThemeManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -41,11 +50,10 @@ fun TagsScreen(
     val notes by viewModel.notes.collectAsState()
     var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
 
-    // Build the hierarchical tag tree from notes
     val tagTree = remember(notes) { buildTagTree(notes) }
     var selectedTag by remember { mutableStateOf<String?>(null) }
+    val activePreset = ThemeManager.currentGradient
 
-    // Filter notes matching selected tag
     val filteredNotes = remember(selectedTag, notes) {
         if (selectedTag == null) emptyList()
         else {
@@ -57,127 +65,151 @@ fun TagsScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Nested Tags Browser") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+    MinimalistBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    title = { Text("Tags", style = MaterialTheme.typography.titleLarge) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                contentDescription = "Back"
+                            )
+                        }
                     }
-                }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            if (tagTree.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No tags discovered.\nAdd tags like #project, #work/notes, or #todo/urgent in your notes to browse them here.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(12.dp)
-                ) {
-                    item {
+                )
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                if (tagTree.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
-                            "Tag Hierarchy",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            text = "No tags yet. Use #study, #work/notes, or #todo/urgent inside any note to organize here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
-                    items(tagTree.values.toList()) { rootNode ->
-                        TagNodeRow(
-                            node = rootNode,
-                            depth = 0,
-                            selectedTag = selectedTag,
-                            onTagSelected = { tag ->
-                                selectedTag = if (selectedTag == tag) null else tag
-                            }
-                        )
-                    }
-
-                    // Display filtered notes section when a tag is selected
-                    if (selectedTag != null) {
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         item {
-                            Spacer(Modifier.height(16.dp))
-                            HorizontalDivider()
-                            Spacer(Modifier.height(8.dp))
                             Text(
-                                "Notes tagged #${selectedTag} (${filteredNotes.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(vertical = 4.dp)
+                                text = "Hierarchy",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 6.dp)
                             )
                         }
 
-                        if (filteredNotes.isEmpty()) {
+                        items(tagTree.values.toList()) { rootNode ->
+                            TagNodeRow(
+                                node = rootNode,
+                                depth = 0,
+                                selectedTag = selectedTag,
+                                onTagSelected = { tag ->
+                                    selectedTag = if (selectedTag == tag) null else tag
+                                }
+                            )
+                        }
+
+                        if (selectedTag != null) {
                             item {
+                                Spacer(Modifier.height(16.dp))
+                                HorizontalDivider(color = ThemeManager.cardBorderColor)
+                                Spacer(Modifier.height(12.dp))
                                 Text(
-                                    "No active notes found for this tag.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(vertical = 8.dp)
+                                    text = "#${selectedTag} · ${filteredNotes.size}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = activePreset.accentStart,
+                                    modifier = Modifier.padding(bottom = 6.dp)
                                 )
                             }
-                        } else {
-                            items(filteredNotes) { note ->
-                                val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
-                                Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .clickable {
-                                            if (note.isLocked && NoteSecurityManager.hasPin(context)) {
-                                                pendingUnlockNote = note
-                                            } else {
-                                                onNoteClick(note.id)
-                                            }
-                                        },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+
+                            if (filteredNotes.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = "No notes found for this tag.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(vertical = 8.dp)
                                     )
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            if (note.isLocked) "🔒 ${note.title.ifBlank { "Untitled" }}" else note.title.ifBlank { "Untitled" },
-                                            style = MaterialTheme.typography.titleSmall
-                                        )
-                                        if (note.isLocked) {
-                                            Spacer(Modifier.height(4.dp))
+                                }
+                            } else {
+                                items(filteredNotes, key = { it.id }) { note ->
+                                    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+                                    val cardShape = RoundedCornerShape(16.dp)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .clip(cardShape)
+                                            .background(ThemeManager.activeCardBrush(highlighted = false))
+                                            .border(0.75.dp, ThemeManager.cardBorderColor, cardShape)
+                                            .clickable {
+                                                if (note.isLocked && NoteSecurityManager.hasPin(context)) {
+                                                    pendingUnlockNote = note
+                                                } else {
+                                                    onNoteClick(note.id)
+                                                }
+                                            }
+                                            .padding(14.dp)
+                                    ) {
+                                        Column {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                if (note.isLocked) {
+                                                    Icon(
+                                                        imageVector = Icons.Rounded.Lock,
+                                                        contentDescription = "Locked",
+                                                        tint = activePreset.accentEnd,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = note.title.ifBlank { "Untitled" },
+                                                    style = MaterialTheme.typography.titleSmall
+                                                )
+                                            }
+                                            if (note.isLocked) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Locked with Vault PIN",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = activePreset.accentEnd
+                                                )
+                                            } else if (note.content.isNotBlank()) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = note.content.take(120),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 2,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Spacer(Modifier.height(6.dp))
                                             Text(
-                                                "Locked note — tap & enter PIN to open",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.secondary
-                                            )
-                                        } else if (note.content.isNotBlank()) {
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                note.content.take(120),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                maxLines = 2,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                text = dateFormat.format(Date(note.updatedAt)),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                             )
                                         }
-                                        Spacer(Modifier.height(6.dp))
-                                        Text(
-                                            dateFormat.format(Date(note.updatedAt)),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
                                     }
                                 }
                             }
@@ -213,10 +245,15 @@ fun TagNodeRow(
     var isExpanded by remember { mutableStateOf(true) }
     val hasChildren = node.children.isNotEmpty()
     val isSelected = selectedTag == node.fullPath
+    val activePreset = ThemeManager.currentGradient
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (isSelected) activePreset.accentStart.copy(alpha = 0.13f) else Color.Transparent
+            )
             .clickable {
                 if (hasChildren) {
                     isExpanded = !isExpanded
@@ -224,42 +261,44 @@ fun TagNodeRow(
                 onTagSelected(node.fullPath)
             }
             .padding(
-                start = (12 + depth * 20).dp,
-                top = 6.dp,
-                bottom = 6.dp,
-                end = 8.dp
+                start = (10 + depth * 18).dp,
+                top = 8.dp,
+                bottom = 8.dp,
+                end = 10.dp
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (hasChildren) {
             Icon(
-                if (isExpanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                imageVector = if (isExpanded) Icons.Rounded.KeyboardArrowDown else Icons.Rounded.KeyboardArrowRight,
                 contentDescription = if (isExpanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
         } else {
             Spacer(Modifier.width(18.dp))
         }
 
-        Spacer(Modifier.width(4.dp))
+        Spacer(Modifier.width(6.dp))
 
         Text(
             text = "#${node.name}",
             style = MaterialTheme.typography.bodyMedium,
-            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isSelected) activePreset.accentStart else MaterialTheme.colorScheme.onSurface
         )
 
         Spacer(Modifier.weight(1f))
 
         Surface(
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.primaryContainer
+            shape = RoundedCornerShape(10.dp),
+            color = activePreset.accentStart.copy(alpha = 0.14f)
         ) {
             Text(
                 text = "${node.noteIds.size}",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                color = activePreset.accentStart,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
             )
         }
     }
@@ -280,7 +319,6 @@ fun TagNodeRow(
 
 private fun buildTagTree(notes: List<NoteEntity>): Map<String, TagTreeNode> {
     val roots = mutableMapOf<String, TagTreeNode>()
-    // Match #tag or #folder/subfolder/tag
     val tagRegex = Regex("""#([a-zA-Z0-9_\-]+(?:/[a-zA-Z0-9_\-]+)*)""")
 
     for (note in notes) {

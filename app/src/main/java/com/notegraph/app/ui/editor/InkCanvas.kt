@@ -220,16 +220,16 @@ private fun InkCanvasContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+            .border(0.75.dp, ThemeManager.cardBorderColor, RoundedCornerShape(12.dp))
     ) {
-        // ─── Toolbar Row 1: Mode chips, S-Pen Palm Rejection, Paper Template & Expand ───
+        // ─── Minimalist Toolbar Row 1: Mode chips, S-Pen Palm Rejection, Paper Template & Expand ───
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             FilterChip(
                 selected = mode == InkMode.PEN,
@@ -239,7 +239,7 @@ private fun InkCanvasContent(
             FilterChip(
                 selected = mode == InkMode.HIGHLIGHTER,
                 onClick = { mode = InkMode.HIGHLIGHTER },
-                label = { Text("Hi-lite") }
+                label = { Text("Highlight") }
             )
             FilterChip(
                 selected = mode == InkMode.ERASER,
@@ -252,17 +252,17 @@ private fun InkCanvasContent(
                     mode = InkMode.VANISHING_PEN
                     selectedStrokeIndices = emptySet()
                 },
-                label = { Text("✨ Vanish") }
+                label = { Text("Laser") }
             )
             FilterChip(
                 selected = mode == InkMode.LASSO,
                 onClick = { mode = InkMode.LASSO },
-                label = { Text("⬡ Lasso") }
+                label = { Text("Lasso") }
             )
             FilterChip(
                 selected = shapeSnapEnabled,
                 onClick = { shapeSnapEnabled = !shapeSnapEnabled },
-                label = { Text(if (shapeSnapEnabled) "📐 Snap: ON" else "📐 Snap") },
+                label = { Text(if (shapeSnapEnabled) "Snap ON" else "Snap") },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
                 )
@@ -270,7 +270,7 @@ private fun InkCanvasContent(
             FilterChip(
                 selected = stylusOnlyMode,
                 onClick = { stylusOnlyMode = !stylusOnlyMode },
-                label = { Text(if (stylusOnlyMode) "🖊 S-Pen Only" else "👆 Finger", fontSize = 11.sp) }
+                label = { Text(if (stylusOnlyMode) "Stylus Only" else "Touch", fontSize = 11.sp) }
             )
             if (onTemplateChanged != null) {
                 val curIdx = PAPER_TEMPLATE_OPTIONS.indexOfFirst { it.first == paperTemplate }.coerceAtLeast(0)
@@ -280,7 +280,7 @@ private fun InkCanvasContent(
                         val next = PAPER_TEMPLATE_OPTIONS[(curIdx + 1) % PAPER_TEMPLATE_OPTIONS.size].first
                         onTemplateChanged(next)
                     },
-                    label = { Text("📄 $curLabel", fontSize = 11.sp) }
+                    label = { Text("Paper: $curLabel", fontSize = 11.sp) }
                 )
             }
             if (!isFullscreen) {

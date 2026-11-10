@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="DEEP_PURPLE_AMOLED">
+<html lang="en" data-theme="DEEP_PURPLE_AMOLED" data-gradients="on">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,30 +9,39 @@
 </head>
 <body>
   <div id="appShell" class="app-shell">
-    <!-- Top Header Bar -->
+    <!-- Minimalist Top Header Bar -->
     <header id="topBar" class="top-bar">
       <div class="top-left">
-        <button id="toggleSidebarBtn" class="icon-btn" title="Toggle Sidebar (Ctrl+B)">☰</button>
+        <button id="toggleSidebarBtn" class="icon-btn" title="Toggle Sidebar (Ctrl+B)" aria-label="Toggle Sidebar">
+          <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+        </button>
+
         <div class="brand-pill" title="NoteGraph Board">
-          <span class="brand-ng">NG</span>
-          <span class="brand-sub">BOARD</span>
+          <span class="brand-ng">N</span>
+          <span class="brand-sub">NoteGraph</span>
         </div>
-        <input id="activeTitleInput" class="title-input" type="text" placeholder="Board / Note Title..." />
-        <button id="pinNoteBtn" class="pill-btn" title="Pin / Unpin">📌</button>
+
+        <input id="activeTitleInput" class="title-input" type="text" placeholder="Untitled Board..." />
+
+        <button id="pinNoteBtn" class="icon-btn" title="Pin / Unpin Board" aria-label="Pin Note">
+          <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>
+        </button>
+
         <div class="followup-wrap">
-          <button id="followUpBtn" class="pill-btn" title="Set Follow-Up Check-In Date (CRM Reminder)">
-            🔔 <span id="followUpLabel">Follow-Up</span>
+          <button id="followUpBtn" class="pill-btn" title="Set Follow-Up Check-In Date">
+            <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span id="followUpLabel">Follow-Up</span>
           </button>
           <div id="followUpPopover" class="dropdown-menu hidden">
-            <div style="padding:4px 6px; font-weight:700; font-size:11px; color:var(--text-secondary);">Follow-Up Reminder</div>
-            <button class="menu-item" data-followup-offset="0">📅 Today</button>
-            <button class="menu-item" data-followup-offset="1">☀️ Tomorrow</button>
-            <button class="menu-item" data-followup-offset="3">📆 In 3 Days</button>
-            <button class="menu-item" data-followup-offset="7">🗓️ Next Week</button>
-            <div style="padding:4px 6px; display:flex; gap:6px; align-items:center;">
-              <input id="followUpDateInput" class="field-input" type="date" style="padding:4px 6px; font-size:12px;" />
+            <div class="menu-caption">Follow-Up Reminder</div>
+            <button class="menu-item" data-followup-offset="0">Today</button>
+            <button class="menu-item" data-followup-offset="1">Tomorrow</button>
+            <button class="menu-item" data-followup-offset="3">In 3 Days</button>
+            <button class="menu-item" data-followup-offset="7">Next Week</button>
+            <div class="menu-date-row">
+              <input id="followUpDateInput" class="field-input field-input-sm" type="date" />
             </div>
-            <button id="clearFollowUpBtn" class="menu-item danger-text">✕ Clear Reminder</button>
+            <button id="clearFollowUpBtn" class="menu-item danger-text">Clear Reminder</button>
           </div>
         </div>
       </div>
@@ -40,41 +49,79 @@
       <div class="top-right">
         <!-- Classroom Live Stopwatch / Pomodoro -->
         <div class="timer-pill" id="classTimerGroup" title="Classroom Stopwatch / Pomodoro">
-          <button id="classTimerBtn" class="timer-main-btn">⏱ <span id="classTimerDisplay">00:00</span></button>
-          <button id="classTimerModeBtn" class="timer-mode-btn" title="Switch Stopwatch / 25m Focus">↻</button>
-          <button id="classTimerResetBtn" class="timer-mode-btn" title="Reset Timer">⟲</button>
+          <button id="classTimerBtn" class="timer-main-btn">
+            <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+            <span id="classTimerDisplay">00:00</span>
+          </button>
+          <button id="classTimerModeBtn" class="timer-mode-btn" title="Switch Stopwatch / 25m Focus">
+            <svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
+          <button id="classTimerResetBtn" class="timer-mode-btn" title="Reset Timer">
+            <svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+          </button>
         </div>
 
-        <!-- Theme Switcher (One App, 3 Android Themes + Classroom Blackboard) -->
+        <!-- Theme Switcher (AMOLED · Kindle · Matte / Mac · Board) -->
         <div class="theme-switcher" role="group" aria-label="Theme">
           <button class="theme-chip active" data-theme-choice="DEEP_PURPLE_AMOLED" title="AMOLED Obsidian">AMOLED</button>
           <button class="theme-chip" data-theme-choice="KINDLE_PARCHMENT" title="Kindle Paper E-Ink">Kindle</button>
-          <button class="theme-chip" data-theme-choice="MATTE_STUDIO" title="Matte Graphite">Matte</button>
+          <button class="theme-chip" data-theme-choice="MATTE_STUDIO" title="Matte Graphite / Mac Studio">Matte / Mac</button>
           <button class="theme-chip" data-theme-choice="BLACKBOARD_GREEN" title="Classroom Blackboard">Board</button>
         </div>
 
-        <button id="zenModeBtn" class="pill-btn accent-outline" title="Fullscreen Classroom Zen Mode (F11)">⛶ Class Zen</button>
+        <!-- Choosable Per-Theme Gradient Studio -->
+        <div id="gradientStudioWrap" class="dropdown-wrap">
+          <button id="gradientBtn" class="pill-btn gradient-studio-btn" title="Choose Gradient Colors for Active Theme" type="button">
+            <span id="gradientBtnOrb" class="gradient-btn-orb"></span>
+            <span id="gradientBtnLabel">Gradient</span>
+            <svg class="ui-svg ui-svg-xs" viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="gradientPopover" class="dropdown-menu dropdown-right gradient-popover hidden">
+            <div class="gradient-pop-head">
+              <div>
+                <div class="gradient-pop-title" id="gradientPopThemeTitle">AMOLED Gradients</div>
+                <div class="gradient-pop-sub">Choosable palette per theme</div>
+              </div>
+              <button id="gradientToggleBtn" class="mini-pill-toggle active" type="button" title="Toggle Ambient Gradient Finish">Ambient On</button>
+            </div>
+            <div id="gradientOrbsGrid" class="gradient-orbs-grid"></div>
+            <div class="gradient-pop-foot">
+              <button id="gradientResetBtn" class="mini-text-btn" type="button">Reset Default Gradient</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="zenModeBtn" class="pill-btn" title="Fullscreen Classroom Zen Mode (F11)">
+          <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          <span>Zen</span>
+        </button>
 
         <!-- Import Dropdown -->
         <div class="dropdown-wrap">
-          <button id="importMenuBtn" class="pill-btn">↓ Import</button>
-          <div id="importMenu" class="dropdown-menu hidden">
-            <button class="menu-item" id="actionImportPdf">📄 Import PDF Slides / Worksheet...</button>
-            <button class="menu-item" id="actionImportImage">🖼️ Insert Image onto Board...</button>
+          <button id="importMenuBtn" class="pill-btn">
+            <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Import</span>
+          </button>
+          <div id="importMenu" class="dropdown-menu dropdown-right hidden">
+            <button class="menu-item" id="actionImportPdf">Import PDF Slides / Worksheet...</button>
+            <button class="menu-item" id="actionImportImage">Insert Image onto Board...</button>
             <hr class="menu-sep" />
-            <button class="menu-item" id="actionImportZip">📦 Import Android Vault (.zip)...</button>
+            <button class="menu-item" id="actionImportZip">Import Android Vault (.zip)...</button>
           </div>
         </div>
 
         <!-- Export Dropdown -->
         <div class="dropdown-wrap">
-          <button id="exportMenuBtn" class="pill-btn primary-pill">↑ Export / Sync</button>
+          <button id="exportMenuBtn" class="pill-btn primary-pill">
+            <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Export</span>
+          </button>
           <div id="exportMenu" class="dropdown-menu dropdown-right hidden">
-            <button class="menu-item" id="actionExportPng">🖼️ Export Current Slide (PNG)...</button>
-            <button class="menu-item" id="actionExportPdf">📑 Export All Slides (Multi-Page PDF)...</button>
-            <button class="menu-item" id="actionExportMd">📝 Export Note &amp; Checklists (.md)...</button>
+            <button class="menu-item" id="actionExportPng">Export Current Slide (PNG)...</button>
+            <button class="menu-item" id="actionExportPdf">Export All Slides (Multi-Page PDF)...</button>
+            <button class="menu-item" id="actionExportMd">Export Note &amp; Checklists (.md)...</button>
             <hr class="menu-sep" />
-            <button class="menu-item" id="actionExportZip">📱 Sync Vault to Android (.zip)...</button>
+            <button class="menu-item" id="actionExportZip">Sync Vault to Android (.zip)...</button>
           </div>
         </div>
       </div>
@@ -86,20 +133,23 @@
       <aside id="sidebar" class="sidebar">
         <div class="sidebar-top">
           <div class="search-row">
-            <span class="search-icon">🔍</span>
-            <input id="sidebarSearchInput" type="search" placeholder="Search boards, checklists, #tags..." />
-            <button id="cmdPaletteBtn" class="kbd-btn" title="Quick Switcher & Commands (Ctrl+K)">⌘K</button>
+            <svg class="ui-svg search-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="sidebarSearchInput" type="search" placeholder="Search boards, tasks, #tags..." />
+            <button id="cmdPaletteBtn" class="kbd-btn" title="Quick Switcher &amp; Commands (Ctrl+K)">⌘K</button>
           </div>
 
           <div class="sidebar-cta-row">
             <button id="newBoardBtn" class="btn-primary flex-1">+ New Board</button>
-            <button id="todayJournalBtn" class="btn-ghost" title="Open or Create Today's Daily Board">📅 Today</button>
+            <button id="todayJournalBtn" class="btn-ghost" title="Open or Create Today's Daily Board">
+              <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span>Today</span>
+            </button>
           </div>
 
           <!-- View Mode Switcher -->
           <div class="view-tabs" role="tablist">
-            <button class="view-tab active" data-view-target="board" title="Infinite Classroom & Freeform Board (Ctrl+1)">Board</button>
-            <button class="view-tab" data-view-target="notes" title="Clean Note & Checklist Editor (Ctrl+2)">Notes</button>
+            <button class="view-tab active" data-view-target="board" title="Infinite Classroom &amp; Freeform Board (Ctrl+1)">Board</button>
+            <button class="view-tab" data-view-target="notes" title="Clean Note &amp; Checklist Editor (Ctrl+2)">Notes</button>
             <button class="view-tab" data-view-target="graph" title="2D Knowledge Graph (Ctrl+3)">Graph</button>
           </div>
         </div>
@@ -107,8 +157,8 @@
         <!-- Customizable Drag & Drop Folders -->
         <div class="sidebar-section">
           <div class="section-header">
-            <span>FOLDERS (DRAG NOTES HERE)</span>
-            <button id="newFolderBtn" class="mini-text-btn">+ Folder</button>
+            <span>FOLDERS</span>
+            <button id="newFolderBtn" class="mini-text-btn">+ New</button>
           </div>
           <div id="folderList" class="folder-list"></div>
         </div>
@@ -123,6 +173,7 @@
         </div>
 
         <div class="sidebar-footer">
+          <span class="status-dot"></span>
           <span id="saveStatusLabel">All changes saved offline</span>
         </div>
       </aside>
@@ -131,28 +182,58 @@
       <main id="workspaceMain" class="workspace-main">
         <!-- VIEW 1: INFINITE BOARD -->
         <section id="boardView" class="view-pane active">
-          <!-- Floating Classroom Tool Dock -->
+          <!-- Floating Minimalist Tool Dock -->
           <div id="boardToolbar" class="board-toolbar">
             <div class="tool-group">
-              <button id="addNoteCardBtn" class="dock-btn" title="Add Sticky Note Card (N)">📝 Note</button>
-              <button id="addChecklistCardBtn" class="dock-btn" title="Add Interactive Checklist Card (T)">☑️ Tasks</button>
-              <button id="quickPdfBtn" class="dock-btn" title="Import PDF Slides & Annotate">📄 PDF</button>
+              <button id="addNoteCardBtn" class="dock-btn" title="Add Sticky Note Card (N)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/></svg>
+                <span>Note</span>
+              </button>
+              <button id="addChecklistCardBtn" class="dock-btn" title="Add Interactive Checklist Card (T)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span>Tasks</span>
+              </button>
+              <button id="quickPdfBtn" class="dock-btn" title="Import PDF Slides &amp; Annotate">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+                <span>PDF</span>
+              </button>
             </div>
             <div class="dock-sep"></div>
             <div class="tool-group" id="toolButtonsGroup">
-              <button class="tool-btn" data-tool="select" title="Select, Move & Edit Cards (V)">👆</button>
-              <button class="tool-btn" data-tool="pan" title="Pan Infinite Canvas (H or Space+Drag)">✋</button>
-              <button class="tool-btn active" data-tool="pen" title="Zero-Lag Pen (P)">✒️</button>
-              <button class="tool-btn" data-tool="highlighter" title="Translucent Highlighter (M)">🖍️</button>
-              <button class="tool-btn" data-tool="arrow" title="Vector Arrow (A)">↗️</button>
-              <button class="tool-btn" data-tool="laser" title="Rainbow Vanishing Lecture Laser (L)">✨</button>
-              <button class="tool-btn" data-tool="eraser" title="Stroke Eraser (E)">🧹</button>
-              <button class="tool-btn" data-tool="lasso" title="Lasso Select Ink (S)">⭕</button>
-              <button class="tool-btn" data-tool="connect" title="Connect Cards with Curved Arrow (C)">🔗</button>
+              <button class="tool-btn" data-tool="select" title="Select, Move &amp; Edit Cards (V)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-6.5 1.8L9 20z"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="pan" title="Pan Infinite Canvas (H or Space+Drag)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v4"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8l-1.6-1.6a2 2 0 0 0-2.8 2.8l4.9 4.9A5 5 0 0 0 10 22h3a7 7 0 0 0 7-7v-4a2 2 0 0 0-2-2z"/></svg>
+              </button>
+              <button class="tool-btn active" data-tool="pen" title="Zero-Lag Pen (P)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="highlighter" title="Translucent Highlighter (M)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="arrow" title="Vector Arrow (A)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="9 5 19 5 19 15"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="laser" title="Rainbow Vanishing Lecture Laser (L)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="eraser" title="Stroke Eraser (E)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20H7L3 16a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L12 20"/><path d="M6.5 10.5l7 7"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="lasso" title="Lasso Select Ink (S)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="11" rx="8" ry="6" stroke-dasharray="3 2"/><path d="M12 17v4"/></svg>
+              </button>
+              <button class="tool-btn" data-tool="connect" title="Connect Cards with Curved Arrow (C)">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.2 16.2C10.5 11.5 13.5 12.5 15.8 7.8"/></svg>
+              </button>
             </div>
             <div class="dock-sep"></div>
             <div class="tool-group">
-              <button id="shapeSnapBtn" class="dock-btn toggle-btn" title="Snap Freehand Lines, Circles & Rectangles">📐 Snap</button>
+              <button id="shapeSnapBtn" class="dock-btn toggle-btn" title="Snap Freehand Lines, Circles &amp; Rectangles">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                <span>Snap</span>
+              </button>
               <div id="inkSwatches" class="ink-swatches">
                 <button class="swatch-btn active" data-color="#A855F7" style="background:#A855F7" title="Violet"></button>
                 <button class="swatch-btn" data-color="#FFFFFF" style="background:#FFFFFF" title="Adaptive White/Ink"></button>
@@ -166,24 +247,28 @@
             </div>
             <div class="dock-sep"></div>
             <div class="tool-group">
-              <button id="gridCycleBtn" class="dock-btn" title="Switch Background Grid (Dots / Cornell Ruled / XY Graph / Blank)">⊞ Dots</button>
-              <button id="undoBtn" class="dock-btn" title="Undo Ink (Ctrl+Z)">↶</button>
-              <button id="redoBtn" class="dock-btn" title="Redo Ink (Ctrl+Y)">↷</button>
+              <button id="gridCycleBtn" class="dock-btn" title="Switch Background Grid (Dots / Cornell / XY Graph / Blank)">Dots</button>
+              <button id="undoBtn" class="dock-btn icon-only-dock" title="Undo Ink (Ctrl+Z)" aria-label="Undo">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+              </button>
+              <button id="redoBtn" class="dock-btn icon-only-dock" title="Redo Ink (Ctrl+Y)" aria-label="Redo">
+                <svg class="ui-svg" viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 14 20 9 15 4"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+              </button>
             </div>
           </div>
 
           <!-- Floating Zen Exit Button (visible only in Classroom Zen mode) -->
-          <button id="exitZenFloatingBtn" class="exit-zen-pill hidden">✕ Exit Class Zen (F11)</button>
+          <button id="exitZenFloatingBtn" class="exit-zen-pill hidden">Exit Zen (F11)</button>
 
           <!-- Floating Lasso Selection Bar -->
           <div id="lassoBar" class="lasso-bar hidden">
             <span id="lassoCountLabel">0 strokes selected</span>
-            <button id="nudgeLeftBtn" class="dock-btn">←</button>
-            <button id="nudgeUpBtn" class="dock-btn">↑</button>
-            <button id="nudgeDownBtn" class="dock-btn">↓</button>
-            <button id="nudgeRightBtn" class="dock-btn">→</button>
-            <button id="deleteLassoBtn" class="dock-btn danger-text">🗑️ Delete Selected</button>
-            <button id="clearSlideInkBtn" class="dock-btn">Clear Slide Ink</button>
+            <button id="nudgeLeftBtn" class="dock-btn" title="Move Left">←</button>
+            <button id="nudgeUpBtn" class="dock-btn" title="Move Up">↑</button>
+            <button id="nudgeDownBtn" class="dock-btn" title="Move Down">↓</button>
+            <button id="nudgeRightBtn" class="dock-btn" title="Move Right">→</button>
+            <button id="deleteLassoBtn" class="dock-btn danger-text">Delete</button>
+            <button id="clearSlideInkBtn" class="dock-btn">Clear Ink</button>
           </div>
 
           <!-- Connect Mode Status Hint -->
@@ -217,7 +302,7 @@
               <select id="notesFolderSelect" class="meta-select" title="Assign Folder"></select>
               <button id="insertWikiLinkBtn" class="pill-btn">[[ Link Note</button>
               <button id="insertTagBtn" class="pill-btn"># Tag</button>
-              <button id="addNoteChecklistBtn" class="pill-btn accent-outline">☑️ Add Checklist Below Note</button>
+              <button id="addNoteChecklistBtn" class="pill-btn accent-outline">+ Add Checklist Below</button>
             </div>
 
             <input id="noteViewTitleInput" class="note-hero-title" type="text" placeholder="Note / Class Title..." />
@@ -226,11 +311,11 @@
             <!-- Wiki-Links & Backlinks Panel -->
             <div class="links-panel" id="noteLinksPanel">
               <div class="links-group">
-                <span class="links-label">Outgoing Links:</span>
+                <span class="links-label">Outgoing Links</span>
                 <div id="outgoingLinksRow" class="link-chips"></div>
               </div>
               <div class="links-group">
-                <span class="links-label">Backlinks:</span>
+                <span class="links-label">Backlinks</span>
                 <div id="backlinksRow" class="link-chips"></div>
               </div>
             </div>
@@ -238,7 +323,7 @@
             <!-- Interactive Checklists Directly Underneath Note -->
             <div class="note-checklists-section">
               <div class="section-header">
-                <span>ACTIONABLE CHECKLISTS (SYNCED WITH BOARD &amp; ANDROID)</span>
+                <span>CHECKLISTS (SYNCED WITH BOARD &amp; ANDROID)</span>
                 <button id="addChecklistUnderNoteBtn" class="mini-text-btn">+ New Checklist</button>
               </div>
               <div id="noteViewChecklists" class="note-checklists-grid"></div>
@@ -250,8 +335,8 @@
         <section id="graphView" class="view-pane">
           <div class="graph-hud">
             <input id="graphFilterInput" type="search" placeholder="Highlight node by title..." />
-            <button id="graphResetLayoutBtn" class="pill-btn">↻ Re-Layout Graph</button>
-            <span class="graph-hint">Drag nodes · Scroll to zoom · Click any node to open Board/Note</span>
+            <button id="graphResetLayoutBtn" class="pill-btn">Re-Layout</button>
+            <span class="graph-hint">Drag nodes · Scroll to zoom · Click any node to open</span>
           </div>
           <canvas id="graphCanvas" class="graph-canvas"></canvas>
         </section>
@@ -264,7 +349,7 @@
   <div id="cmdPaletteModal" class="modal-backdrop hidden">
     <div class="modal-card modal-wide">
       <div class="palette-input-wrap">
-        <span>🔍</span>
+        <svg class="ui-svg search-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input id="cmdPaletteInput" type="text" placeholder="Jump to any board, note, checklist, or command..." />
         <button class="modal-close-x" data-close-modal="cmdPaletteModal">Esc</button>
       </div>
@@ -328,11 +413,11 @@
         <p id="pdfImportSummary" class="modal-desc"></p>
         <div class="pdf-mode-choices">
           <button id="pdfImportAsSlidesBtn" class="mode-card-btn">
-            <strong>📑 One Board Slide per PDF Page (Best for Lectures)</strong>
+            <strong>One Board Slide per PDF Page (Best for Lectures)</strong>
             <span>Creates clean slides ready for PageUp/PageDown &amp; live annotation.</span>
           </button>
           <button id="pdfImportOntoCanvasBtn" class="mode-card-btn">
-            <strong>🧩 Lay Out Pages on Current Infinite Canvas (Best for Mind Maps)</strong>
+            <strong>Lay Out Pages on Current Infinite Canvas (Mind Maps)</strong>
             <span>Places pages side-by-side on this board so you can draw connectors between them.</span>
           </button>
         </div>
