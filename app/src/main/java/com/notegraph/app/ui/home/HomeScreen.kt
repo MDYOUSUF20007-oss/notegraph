@@ -74,6 +74,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +87,11 @@ import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.components.ObsidianCard
+import com.notegraph.app.ui.components.ObsidianIconTile
+import com.notegraph.app.ui.components.ObsidianMetallicBadge
+import com.notegraph.app.ui.components.ObsidianStatTile
+import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.editor.ExportManager
 import com.notegraph.app.ui.theme.AppThemeMode
 import com.notegraph.app.ui.theme.GradientFloatingActionButton
@@ -479,42 +485,71 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(32.dp),
+                            .padding(horizontal = 20.dp, vertical = 28.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val activeFolder = selectedFolderId?.let { foldersById[it] }
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(activePreset.accentStart.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (activeFolder != null) Icons.Rounded.Folder else Icons.Rounded.Description,
-                                    contentDescription = null,
-                                    tint = activePreset.accentStart,
-                                    modifier = Modifier.size(22.dp)
+                        val activeFolder = selectedFolderId?.let { foldersById[it] }
+                        val emptyAccent = activeFolder?.let {
+                            ObsidianTokens.resolveAccent(parseColorSafe(it.colorHex, activePreset.accentStart))
+                        } ?: ObsidianTokens.resolveAccent(activePreset.accentStart)
+
+                        ObsidianCard(
+                            accentColor = emptyAccent,
+                            headerContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ObsidianIconTile(
+                                        icon = if (activeFolder != null) Icons.Rounded.Folder else Icons.Rounded.Description,
+                                        accentColor = emptyAccent
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = when {
+                                                    activeFolder != null -> activeFolder.name
+                                                    selectedFolderId == HomeViewModel.UNFILED_FOLDER_ID -> "Unfiled Notes"
+                                                    else -> "Clean Slate"
+                                                },
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            ObsidianMetallicBadge(
+                                                text = "READY",
+                                                accentColor = emptyAccent
+                                            )
+                                        }
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(
+                                            text = "@vault • ${activePreset.name}",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                    ObsidianStatTile(
+                                        value = "0 notes",
+                                        label = "VAULT",
+                                        accentColor = emptyAccent
+                                    )
+                                }
+                            },
+                            footerContent = {
+                                Text(
+                                    text = "Tap + New below to write, or long-press a note card to drag it into a folder chip above. All notes remain offline in local Room storage.",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = ObsidianTokens.FooterText
                                 )
                             }
-                            Text(
-                                text = when {
-                                    activeFolder != null -> "No notes in ${activeFolder.name}"
-                                    selectedFolderId == HomeViewModel.UNFILED_FOLDER_ID -> "No unfiled notes"
-                                    else -> "Clean slate"
-                                },
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "Tap New below to write, or long-press a note to drag it into a folder.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-                            )
-                        }
+                        )
                     }
                 } else {
                     LazyVerticalStaggeredGrid(
@@ -522,7 +557,7 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 96.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalItemSpacing = 10.dp
+                        verticalItemSpacing = 2.dp
                     ) {
                         items(filteredNotes, key = { it.id }) { note ->
                             val noteFolder = note.folderId?.let { foldersById[it] }
@@ -600,7 +635,7 @@ fun HomeScreen(
                     ?: activePreset.accentStart
             }
 
-            Surface(
+            ObsidianCard(
                 modifier = Modifier
                     .offset {
                         IntOffset(
@@ -608,35 +643,34 @@ fun HomeScreen(
                             ghostOffset.y.roundToInt()
                         )
                     }
-                    .width(185.dp)
-                    .shadow(16.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
-                border = BorderStroke(1.5.dp, highlightColor)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                    .width(205.dp),
+                accentColor = highlightColor,
+                verticalPadding = 0.dp,
+                headerPadding = 12.dp,
+                headerContent = {
                     Text(
                         text = activeDragNote.title.ifBlank { "Untitled" },
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
+                        color = ObsidianTokens.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.height(4.dp))
+                },
+                footerContent = {
                     Text(
                         text = when (hoveredDropTargetId) {
-                            null -> "Drag onto folder…"
-                            HomeViewModel.UNFILED_FOLDER_ID -> "Release -> Unfiled"
-                            else -> "Release -> ${targetFolder?.name ?: "Folder"}"
+                            null -> "Drag onto folder chip…"
+                            HomeViewModel.UNFILED_FOLDER_ID -> "Release -> Move to Unfiled"
+                            else -> "Release -> Move to ${targetFolder?.name ?: "Folder"}"
                         },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = highlightColor,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = ObsidianTokens.readableAccentInk(ObsidianTokens.resolveAccent(highlightColor))
                     )
                 }
-            }
+            )
         }
     }
 
@@ -1406,32 +1440,42 @@ fun NoteCard(
         }
     }
 
-    val dateFormat = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
     val activePreset = ThemeManager.currentGradient
-    val folderColor = folder?.let { parseColorSafe(it.colorHex, activePreset.accentStart) }
+    val themeAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+    val folderColor = folder?.let { ObsidianTokens.resolveAccent(parseColorSafe(it.colorHex, themeAccent)) }
+    val cardAccent = themeAccent
+    val badgeColor = folderColor ?: themeAccent
+    val accentInk = ObsidianTokens.readableAccentInk(cardAccent)
+    val folderInk = ObsidianTokens.readableAccentInk(badgeColor)
     val themeMode = ThemeManager.currentTheme
 
-    val cardShape = RoundedCornerShape(18.dp)
-    val borderColor = if (note.isPinned) {
-        activePreset.accentStart.copy(alpha = 0.6f)
-    } else {
-        ThemeManager.cardBorderColor
+    val primaryIcon = when {
+        latestNote.isLocked -> Icons.Rounded.Lock
+        hasPdf -> Icons.Rounded.PictureAsPdf
+        previewStrokes.isNotEmpty() -> Icons.Rounded.Brush
+        hasAudio -> Icons.Rounded.Mic
+        checklistBlocks.isNotEmpty() -> Icons.Rounded.CheckBox
+        else -> Icons.Rounded.Description
     }
 
-    Box(
+    val mediaSummaryParts = remember(hasPdf, previewStrokes, hasAudio, hasImage, checklistBlocks, latestNote.isLocked) {
+        buildList {
+            if (hasPdf) add("${pdfBlocks.size} PDF")
+            if (previewStrokes.isNotEmpty()) add("Ink")
+            if (hasAudio) add("Voice")
+            if (hasImage) add("OCR")
+            if (checklistBlocks.isNotEmpty()) add("$doneTasks/$totalTasks tasks")
+            if (latestNote.isLocked) add("PIN locked")
+        }
+    }
+
+    ObsidianCard(
         modifier = Modifier
-            .fillMaxWidth()
             .alpha(if (isBeingDragged) 0.3f else 1f)
             .onGloballyPositioned { coords ->
                 cardBoundsRoot = coords.boundsInRoot()
             }
-            .clip(cardShape)
-            .background(ThemeManager.activeCardBrush(highlighted = note.isPinned))
-            .border(
-                width = if (note.isPinned) 1.25.dp else 0.75.dp,
-                color = borderColor,
-                shape = cardShape
-            )
             .pointerInput(note.id) {
                 var totalDelta = Offset.Zero
                 var movedFar = false
@@ -1456,11 +1500,12 @@ fun NoteCard(
                         currentOnDragCancel()
                     }
                 )
-            }
-            .clickable(onClick = onClick)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            // Top subtle indicator strip + More button
+            },
+        accentColor = themeAccent,
+        onClick = onClick,
+        verticalPadding = 4.dp,
+        headerContent = {
+            // Tier 1 Header: Icon Frame + Status/Folder Pill + Overflow Menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1468,40 +1513,43 @@ fun NoteCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    if (note.isLocked) {
-                        Icon(
-                            imageVector = Icons.Rounded.Lock,
-                            contentDescription = "Locked",
-                            tint = activePreset.accentEnd,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
+                    ObsidianIconTile(
+                        icon = primaryIcon,
+                        accentColor = badgeColor,
+                        size = 30.dp,
+                        iconSize = 15.dp
+                    )
+
                     if (note.isPinned) {
-                        Icon(
-                            imageVector = Icons.Rounded.Star,
-                            contentDescription = "Pinned",
-                            tint = activePreset.accentStart,
-                            modifier = Modifier.size(13.dp)
+                        ObsidianMetallicBadge(
+                            text = "PIN",
+                            accentColor = themeAccent
+                        )
+                    } else if (note.isLocked) {
+                        ObsidianMetallicBadge(
+                            text = "LOCKED",
+                            accentColor = themeAccent
                         )
                     }
-                    if (folder != null && folderColor != null) {
+
+                    if (folder != null) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(7.dp)
+                                    .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(folderColor)
+                                    .background(folderInk)
                             )
                             Text(
                                 text = folder.name,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = folderColor,
+                                color = folderInk,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1518,29 +1566,31 @@ fun NoteCard(
                         imageVector = Icons.Rounded.MoreVert,
                         contentDescription = "Note Options",
                         modifier = Modifier.size(15.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        tint = ObsidianTokens.TextMuted
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Note Title
             Text(
                 text = latestNote.title.ifEmpty { "Untitled" },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
+                color = ObsidianTokens.TextPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Note Body Snippet
+            // Note Body Snippet / Security Notice
             if (latestNote.isLocked) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Locked with Vault PIN",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = activePreset.accentEnd
+                    text = "Protected by Vault PIN",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.5.sp,
+                    color = ObsidianTokens.readableAccentInk(themeAccent)
                 )
             } else {
                 if (latestNote.content.isNotBlank()) {
@@ -1548,26 +1598,28 @@ fun NoteCard(
                     Text(
                         text = latestNote.content,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.84f),
+                        color = ObsidianTokens.TextSecondary,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
                 } else if (previewStrokes.isEmpty() && checklistBlocks.isEmpty() && !hasPdf) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Empty note",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        text = "Empty canvas",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        color = ObsidianTokens.TextMuted.copy(alpha = 0.72f)
                     )
                 }
 
-                // PDF Attachment Badge
+                // PDF Attachment Indicator
                 if (hasPdf) {
                     val firstPdf = pdfBlocks.first()
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = activePreset.accentStart.copy(alpha = 0.12f),
+                        color = ObsidianTokens.StatTileSurface,
+                        border = BorderStroke(0.75.dp, cardAccent.copy(alpha = 0.42f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1578,13 +1630,13 @@ fun NoteCard(
                             Icon(
                                 imageVector = Icons.Rounded.PictureAsPdf,
                                 contentDescription = null,
-                                tint = activePreset.accentStart,
+                                tint = accentInk,
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
                                 text = "${firstPdf.fileName.ifBlank { "PDF" }} (${firstPdf.pageCount}p)",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = ObsidianTokens.TextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1597,7 +1649,8 @@ fun NoteCard(
                     Spacer(modifier = Modifier.height(8.dp))
                     MiniInkPreviewCanvas(
                         strokes = previewStrokes,
-                        themeMode = themeMode
+                        themeMode = themeMode,
+                        accentColor = cardAccent
                     )
                 }
 
@@ -1606,8 +1659,8 @@ fun NoteCard(
                     Spacer(modifier = Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.background.copy(alpha = 0.35f),
-                        border = BorderStroke(0.5.dp, ThemeManager.cardBorderColor),
+                        color = ObsidianTokens.StatTileSurface,
+                        border = BorderStroke(0.75.dp, ObsidianTokens.DividerRule),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
@@ -1621,8 +1674,9 @@ fun NoteCard(
                             ) {
                                 Text(
                                     text = "$doneTasks / $totalTasks done",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = activePreset.accentStart,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    color = accentInk,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -1633,7 +1687,7 @@ fun NoteCard(
                                         .fillMaxWidth()
                                         .height(3.dp)
                                         .clip(CircleShape)
-                                        .background(ThemeManager.cardBorderColor)
+                                        .background(Color.White.copy(alpha = 0.10f))
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -1650,7 +1704,7 @@ fun NoteCard(
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
                                     ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = if (item.isChecked) ObsidianTokens.TextMuted else ObsidianTokens.TextSecondary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1659,75 +1713,86 @@ fun NoteCard(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Footer Date + Clean Vector Media Badges
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = dateFormat.format(Date(latestNote.updatedAt)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                )
-
-                if (hasAudio || hasImage || hasPdf) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (hasPdf) {
-                            Icon(
-                                imageVector = Icons.Rounded.PictureAsPdf,
-                                contentDescription = "Has PDF",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                        if (hasAudio) {
-                            Icon(
-                                imageVector = Icons.Rounded.Mic,
-                                contentDescription = "Has Audio",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                        if (hasImage) {
-                            Icon(
-                                imageVector = Icons.Rounded.Image,
-                                contentDescription = "Has Image",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                modifier = Modifier.size(12.dp)
-                            )
+        },
+        footerContent = {
+            // Tier 2 Footer Bar: Last-modified timestamp, sync & vector storage status without truncation
+            val statusSummary = if (mediaSummaryParts.isNotEmpty()) {
+                mediaSummaryParts.joinToString(" • ") + " • Local Room DB"
+            } else {
+                "Local Room storage • Saved"
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = dateFormat.format(Date(latestNote.updatedAt)),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        lineHeight = 14.sp,
+                        color = ObsidianTokens.FooterText,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (hasPdf || hasAudio || hasImage) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (hasPdf) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PictureAsPdf,
+                                    contentDescription = "Has PDF",
+                                    tint = accentInk,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            if (hasAudio) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Mic,
+                                    contentDescription = "Has Audio",
+                                    tint = accentInk,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                            if (hasImage) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Image,
+                                    contentDescription = "Has Image",
+                                    tint = accentInk,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
                         }
                     }
                 }
+                Text(
+                    text = statusSummary,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.5.sp,
+                    lineHeight = 13.5.sp,
+                    color = ObsidianTokens.TextMuted
+                )
             }
         }
-    }
+    )
 }
 
 @Composable
 private fun MiniInkPreviewCanvas(
     strokes: List<InkStroke>,
-    themeMode: AppThemeMode
+    themeMode: AppThemeMode,
+    accentColor: Color
 ) {
-    val bgColor = when (themeMode) {
-        AppThemeMode.DEEP_PURPLE_AMOLED -> Color(0xFF06030C)
-        AppThemeMode.KINDLE_PARCHMENT -> NoteGraphColors.KindleParchmentBackground
-        AppThemeMode.MATTE_STUDIO -> NoteGraphColors.MatteStudioBackground
-    }
-
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(bgColor)
-            .border(0.5.dp, ThemeManager.cardBorderColor, RoundedCornerShape(10.dp))
+            .background(Color(0xFF07070A))
+            .border(0.75.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
             .clipToBounds()
     ) {
         val allPts = strokes.flatMap { it.points }
@@ -1751,13 +1816,14 @@ private fun MiniInkPreviewCanvas(
             if (stroke.points.size < 2) continue
             val rawHex = stroke.colorHex
             val adaptedHex = when {
-                themeMode == AppThemeMode.KINDLE_PARCHMENT && rawHex.equals("#FFFFFF", ignoreCase = true) -> "#2C2C2C"
-                themeMode != AppThemeMode.KINDLE_PARCHMENT && rawHex.equals("#2C2C2C", ignoreCase = true) -> "#FFFFFF"
+                rawHex.equals("#2C2C2C", ignoreCase = true) ||
+                    rawHex.equals("#22201B", ignoreCase = true) ||
+                    rawHex.equals("#000000", ignoreCase = true) -> "#FFFFFF"
                 else -> rawHex
             }
             val baseColor = parseColorSafe(
                 adaptedHex,
-                if (themeMode == AppThemeMode.KINDLE_PARCHMENT) NoteGraphColors.KindleParchmentCharcoalText else Color.White
+                if (themeMode == AppThemeMode.KINDLE_PARCHMENT) Color(0xFFF8FAFC) else Color.White
             )
             val color = baseColor.copy(alpha = if (stroke.isHighlighter) 0.45f else 0.95f)
 

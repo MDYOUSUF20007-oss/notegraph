@@ -30,11 +30,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
+import com.notegraph.app.ui.components.ObsidianCard
+import com.notegraph.app.ui.components.ObsidianIconTile
+import com.notegraph.app.ui.components.ObsidianMetallicBadge
+import com.notegraph.app.ui.components.ObsidianStatTile
+import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.AppThemeMode
 import com.notegraph.app.ui.theme.GradientSwatchRow
 import com.notegraph.app.ui.theme.MinimalistBackground
@@ -159,63 +165,69 @@ fun SettingsScreen(
                 )
             }
         ) { padding ->
+            val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+            val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(horizontal = 16.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // ─── Live Interactive Theme + Gradient Preview ───
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(ThemeManager.activeCardBrush(highlighted = true))
-                        .border(0.75.dp, ThemeManager.cardBorderColor, RoundedCornerShape(20.dp))
-                        .padding(18.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // ─── Live Interactive Theme + Gradient Preview (ObsidianCard) ───
+                ObsidianCard(
+                    accentColor = obsidianAccent,
+                    verticalPadding = 2.dp,
+                    headerContent = {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Column {
+                            ObsidianIconTile(
+                                icon = Icons.Rounded.Palette,
+                                accentColor = obsidianAccent
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = if (gradientsOn) activePreset.name else "${activePreset.name} · Flat",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    ObsidianMetallicBadge(
+                                        text = selectedTheme.shortLabel,
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
                                 Text(
-                                    text = selectedTheme.displayName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = activePreset.accentStart,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = if (gradientsOn) activePreset.name else "${activePreset.name} · Flat",
-                                    style = MaterialTheme.typography.titleLarge
+                                    text = "${selectedTheme.displayName} • Obsidian Card System",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    color = ObsidianTokens.TextMuted
                                 )
                             }
-
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(ThemeManager.activeAccentBrush),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Palette,
-                                    contentDescription = null,
-                                    tint = activePreset.onAccent,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            ObsidianStatTile(
+                                value = if (gradientsOn) "GRAD" else "FLAT",
+                                label = "FINISH",
+                                accentColor = obsidianAccent
+                            )
                         }
 
-                        // Mini mock note card preview
+                        Spacer(Modifier.height(14.dp))
+
+                        // Mini mock note card preview inside Tier 1
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = activePreset.cardSurface,
-                            border = BorderStroke(0.75.dp, activePreset.borderColor)
+                            shape = RoundedCornerShape(12.dp),
+                            color = ObsidianTokens.StatTileSurface,
+                            border = BorderStroke(0.75.dp, obsidianAccent.copy(alpha = 0.45f))
                         ) {
                             Row(
                                 modifier = Modifier
@@ -227,15 +239,17 @@ fun SettingsScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "Lecture Summary",
-                                        style = MaterialTheme.typography.titleSmall
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = ObsidianTokens.TextPrimary
                                     )
                                     Spacer(Modifier.height(2.dp))
                                     Text(
-                                        text = "Clean contrast · distraction-free focus",
+                                        text = "Frosted two-tier contrast · specular edge glow",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = ObsidianTokens.TextMuted
                                     )
                                 }
+                                Spacer(Modifier.width(8.dp))
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(20.dp))
@@ -251,8 +265,17 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    },
+                    footerContent = {
+                        Text(
+                            text = "Active preset: ${activePreset.name} (${selectedTheme.displayName}) • Persisted locally via SharedPreferences • Dynamic accent synced to cards & graph nodes",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.5.sp,
+                            lineHeight = 15.sp,
+                            color = ObsidianTokens.FooterText
+                        )
                     }
-                }
+                )
 
                 // ─── Theme Mode Matrix (AMOLED, Kindle, Matte / Mac) ───
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -331,17 +354,10 @@ fun SettingsScreen(
                 }
 
                 // ─── Choosable Gradient Colors (Per Theme) ───
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
-                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
+                ObsidianCard(
+                    accentColor = obsidianAccent,
+                    verticalPadding = 2.dp,
+                    headerContent = {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -350,12 +366,14 @@ fun SettingsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "${selectedTheme.shortLabel} Gradient Palette",
-                                    style = MaterialTheme.typography.titleSmall
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ObsidianTokens.TextPrimary
                                 )
                                 Text(
                                     text = "Each theme remembers its own gradient color",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = ObsidianTokens.TextMuted
                                 )
                             }
                             IconButton(
@@ -367,20 +385,26 @@ fun SettingsScreen(
                                 Icon(
                                     imageVector = Icons.Rounded.Refresh,
                                     contentDescription = "Reset Gradients",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = accentInk
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(12.dp))
 
                         GradientSwatchRow(
                             mode = selectedTheme,
                             selectedId = ThemeManager.selectedGradientIdFor(selectedTheme),
                             onSelect = { chosen ->
                                 ThemeManager.setGradient(selectedTheme, chosen.id)
-                            }
+                            },
+                            labelColor = ObsidianTokens.TextPrimary,
+                            secondaryLabelColor = ObsidianTokens.TextMuted
                         )
 
-                        HorizontalDivider(color = ThemeManager.cardBorderColor)
+                        Spacer(Modifier.height(12.dp))
+                        HorizontalDivider(color = ObsidianTokens.DividerRule)
+                        Spacer(Modifier.height(10.dp))
 
                         Row(
                             modifier = Modifier
@@ -393,45 +417,78 @@ fun SettingsScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Ambient Gradient Finish",
-                                    style = MaterialTheme.typography.titleSmall
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = ObsidianTokens.TextPrimary
                                 )
                                 Text(
                                     text = if (gradientsOn) "Multi-stop accent & card sheen active" else "Minimal classic flat surfaces",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = ObsidianTokens.TextMuted
                                 )
                             }
                             Switch(
                                 checked = gradientsOn,
-                                onCheckedChange = { ThemeManager.setGradientsEnabledState(it) }
+                                onCheckedChange = { ThemeManager.setGradientsEnabledState(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = activePreset.onAccent,
+                                    checkedTrackColor = obsidianAccent
+                                )
                             )
                         }
+                    },
+                    footerContent = {
+                        Text(
+                            text = "AMOLED, Kindle Paper, and Matte Studio each keep independent accent presets offline on this device.",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.5.sp,
+                            lineHeight = 15.sp,
+                            color = ObsidianTokens.FooterText
+                        )
                     }
-                }
+                )
 
-                // ─── Vault Backup & Restore ───
-                Surface(
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
-                    border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "Vault Backup & Sync",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "Export notes, blocks, ink strokes, and PDFs into a portable .zip archive for desktop or backup.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                // ─── Vault Backup & Restore (ObsidianCard) ───
+                ObsidianCard(
+                    accentColor = obsidianAccent,
+                    verticalPadding = 2.dp,
+                    headerContent = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ObsidianIconTile(
+                                icon = Icons.Rounded.Backup,
+                                accentColor = obsidianAccent,
+                                size = 40.dp,
+                                iconSize = 19.dp
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Vault Backup & Sync",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    ObsidianMetallicBadge(
+                                        text = "ZIP",
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "Export notes, blocks, ink strokes, and PDFs into a portable .zip archive for desktop or backup.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ObsidianTokens.TextSecondary
+                                )
+                            }
+                        }
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(Modifier.height(12.dp))
 
                         Box(
                             modifier = Modifier
@@ -463,6 +520,8 @@ fun SettingsScreen(
                             }
                         }
 
+                        Spacer(Modifier.height(8.dp))
+
                         OutlinedButton(
                             onClick = {
                                 restoreLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
@@ -470,18 +529,31 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !isRestoring,
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = ObsidianTokens.TextPrimary
+                            ),
+                            border = BorderStroke(1.dp, obsidianAccent.copy(alpha = 0.45f))
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Restore,
                                 contentDescription = null,
+                                tint = accentInk,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(if (isRestoring) "Restoring Vault…" else "Restore from .zip")
                         }
+                    },
+                    footerContent = {
+                        Text(
+                            text = "Local storage: Room SQLite database • Zero cloud telemetry • Portable archive restores all notes, folders, sketches & PDF markups.",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.5.sp,
+                            lineHeight = 15.sp,
+                            color = ObsidianTokens.FooterText
+                        )
                     }
-                }
+                )
 
                 // ─── Minimalist Footer ───
                 Column(

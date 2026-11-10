@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -56,6 +57,11 @@ import com.notegraph.app.data.local.entity.InkStroke
 import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.components.ObsidianCard
+import com.notegraph.app.ui.components.ObsidianIconTile
+import com.notegraph.app.ui.components.ObsidianMetallicBadge
+import com.notegraph.app.ui.components.ObsidianStatTile
+import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +69,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -758,75 +767,177 @@ fun EditorScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Outgoing Wiki-Links section
-                if (outgoingLinks.isNotEmpty()) {
-                    Text(
-                        text = "Linked Notes (${outgoingLinks.size})",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(outgoingLinks, key = { it.id }) { link ->
-                            InputChip(
-                                selected = link.isResolved,
-                                onClick = {
-                                    viewModel.saveNow()
-                                    if (link.targetNoteId != null) {
-                                        onNoteClick(link.targetNoteId)
-                                    } else {
-                                        viewModel.openOrCreateNoteByTitle(link.targetNoteTitle) { targetId ->
-                                            onNoteClick(targetId)
-                                        }
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        if (link.isResolved) "[[${link.targetNoteTitle}]]"
-                                        else "[[${link.targetNoteTitle}]] (+ Create)"
-                                    )
-                                }
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
+                // Graph Connections & Note Metadata Panel (ObsidianCard)
+                val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+                val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
+                val totalLinksCount = outgoingLinks.size + backlinks.size
+                val wordCount = remember(contentField.text) {
+                    contentField.text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size
+                }
+                val editorDateFormat = remember {
+                    SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault())
                 }
 
-                // Backlinks section
-                Text("Backlinks (${backlinks.size})", style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(6.dp))
-                if (backlinks.isEmpty()) {
-                    Text(
-                        text = "No backlinks yet. Reference this note with [[Title]] elsewhere to connect.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
-                    )
-                } else {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(backlinks) { item ->
-                            InputChip(
-                                selected = false,
-                                onClick = {
-                                    viewModel.saveNow()
-                                    onNoteClick(item.sourceNoteId)
-                                },
-                                label = { Text(item.sourceNoteTitle) },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Link,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
+                ObsidianCard(
+                    accentColor = obsidianAccent,
+                    headerContent = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ObsidianIconTile(
+                                icon = Icons.Rounded.Link,
+                                accentColor = obsidianAccent,
+                                size = 40.dp,
+                                iconSize = 19.dp
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Graph & Metadata",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ObsidianTokens.TextPrimary
+                                    )
+                                    ObsidianMetallicBadge(
+                                        text = if (note?.isLocked == true) "LOCKED" else "ACTIVE",
+                                        accentColor = obsidianAccent
                                     )
                                 }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "$wordCount words • ${blocks.size} blocks",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    color = ObsidianTokens.TextMuted
+                                )
+                            }
+                            ObsidianStatTile(
+                                value = "$totalLinksCount",
+                                label = "LINKS",
+                                accentColor = obsidianAccent
                             )
                         }
+
+                        if (outgoingLinks.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "LINKED NOTES (${outgoingLinks.size})",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                letterSpacing = 0.8.sp,
+                                color = accentInk
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(outgoingLinks, key = { it.id }) { link ->
+                                    val chipShape = RoundedCornerShape(10.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(chipShape)
+                                            .background(ObsidianTokens.StatTileSurface)
+                                            .border(
+                                                width = 0.75.dp,
+                                                color = if (link.isResolved) obsidianAccent.copy(alpha = 0.6f)
+                                                else ObsidianTokens.DividerRule,
+                                                shape = chipShape
+                                            )
+                                            .clickable {
+                                                viewModel.saveNow()
+                                                if (link.targetNoteId != null) {
+                                                    onNoteClick(link.targetNoteId)
+                                                } else {
+                                                    viewModel.openOrCreateNoteByTitle(link.targetNoteTitle) { targetId ->
+                                                        onNoteClick(targetId)
+                                                    }
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Text(
+                                            text = if (link.isResolved) "[[${link.targetNoteTitle}]]"
+                                            else "[[${link.targetNoteTitle}]] (+ Create)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = if (link.isResolved) ObsidianTokens.TextPrimary else accentInk
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "BACKLINKS (${backlinks.size})",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            letterSpacing = 0.8.sp,
+                            color = ObsidianTokens.TextMuted
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        if (backlinks.isEmpty()) {
+                            Text(
+                                text = "No backlinks yet. Reference this note with [[Title]] elsewhere to connect.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = ObsidianTokens.TextMuted
+                            )
+                        } else {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(backlinks) { item ->
+                                    val chipShape = RoundedCornerShape(10.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(chipShape)
+                                            .background(ObsidianTokens.StatTileSurface)
+                                            .border(0.75.dp, obsidianAccent.copy(alpha = 0.45f), chipShape)
+                                            .clickable {
+                                                viewModel.saveNow()
+                                                onNoteClick(item.sourceNoteId)
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Link,
+                                            contentDescription = null,
+                                            tint = accentInk,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = item.sourceNoteTitle,
+                                            fontSize = 12.sp,
+                                            color = ObsidianTokens.TextPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    footerContent = {
+                        val updatedTs = note?.updatedAt ?: System.currentTimeMillis()
+                        val securityStatus = if (note?.isLocked == true) "Vault PIN protected" else "Unlocked"
+                        Text(
+                            text = "Modified ${editorDateFormat.format(Date(updatedTs))} • $securityStatus • Synced locally via Room Database",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.5.sp,
+                            lineHeight = 15.sp,
+                            color = ObsidianTokens.FooterText
+                        )
                     }
-                }
+                )
 
                 Spacer(modifier = Modifier.height(92.dp))
             }

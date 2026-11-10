@@ -24,7 +24,8 @@ Prebuilt installers and APKs are on the [Releases page](https://github.com/MDYOU
 
 ### Clean UI + Themes & Choosable Gradients
 - **One app, multiple themes:** Switch anytime between **AMOLED** (true black), **Kindle** (warm e-ink paper), **Matte / Mac** (graphite slate), and **Board** (desktop blackboard).
-- **Choosable gradients per theme:** Each theme lets you pick its own accent and background gradient (for example Obsidian Violet, Aurora Cyan, Emerald Flux, Warm Sepia, Sage Folio, Studio Cyan, Nord Indigo), or turn gradients off for flat solid colors.
+- **Frosted two-tier obsidian cards (Android):** Note list cards, the graph node inspector, search/tag cards, and vault metadata panels now use two-tier frosted obsidian cards (`#1A1A1E -> #0C0C0E`) with a specular top accent edge and an untruncated dark footer bar for timestamps, local Room DB status, and attachment badges, synced live to whichever theme accent you pick (including Obsidian Violet `#8B5CF6` and Obsidian Gold).
+- **Choosable gradients per theme:** Each theme lets you pick its own accent and background gradient (for example Obsidian Violet, Obsidian Gold, Aurora Cyan, Emerald Flux, Warm Sepia, Sage Folio, Studio Cyan, Nord Indigo), or turn gradients off for flat solid colors.
 - **Quieter interface:** Cleaned up toolbar clutter, borderless note writing on Android, translucent toolbars on PC/Mac, and a quick theme switcher on Home and the top bar.
 
 ### Desktop & Mac - NoteGraph Board (`desktop/`)

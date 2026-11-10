@@ -12,22 +12,31 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.components.ObsidianCard
+import com.notegraph.app.ui.components.ObsidianIconTile
+import com.notegraph.app.ui.components.ObsidianMetallicBadge
+import com.notegraph.app.ui.components.ObsidianStatTile
+import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
 import java.text.SimpleDateFormat
@@ -126,36 +135,111 @@ fun SearchScreen(
 
                 Spacer(Modifier.height(14.dp))
 
+                val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+                val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
+
                 if (query.isBlank()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.padding(horizontal = 24.dp)
-                        ) {
-                            Text(
-                                text = "Instant Offline Search",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "Finds matches across titles, note bodies, [[wiki-links]], #tags, and extracted OCR text.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        ObsidianCard(
+                            accentColor = obsidianAccent,
+                            headerContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ObsidianIconTile(
+                                        icon = Icons.Rounded.Search,
+                                        accentColor = obsidianAccent
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Instant Offline Search",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            ObsidianMetallicBadge(
+                                                text = "INDEXED",
+                                                accentColor = obsidianAccent
+                                            )
+                                        }
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(
+                                            text = "@vault • #tags • [[links]] • OCR",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                    ObsidianStatTile(
+                                        value = "Local",
+                                        label = "ENGINE",
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                            },
+                            footerContent = {
+                                Text(
+                                    text = "Scans titles, Markdown bodies, [[wiki-links]], nested #tags, and extracted PDF OCR text directly in local Room DB.",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = ObsidianTokens.FooterText
+                                )
+                            }
+                        )
                     }
                 } else if (searchResults.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "No results for \"$query\"",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ObsidianCard(
+                            accentColor = obsidianAccent,
+                            headerContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ObsidianIconTile(
+                                        icon = Icons.Rounded.Search,
+                                        accentColor = obsidianAccent
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "No results for \"$query\"",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = ObsidianTokens.TextPrimary
+                                        )
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = "0 matches in offline vault",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                }
+                            },
+                            footerContent = {
+                                Text(
+                                    text = "Try searching another keyword, #tag, [[link]] title, or OCR phrase stored on device.",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = ObsidianTokens.FooterText
+                                )
+                            }
                         )
                     }
                 } else {
@@ -164,85 +248,105 @@ fun SearchScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = activePreset.accentStart,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(bottom = 10.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
 
                     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
 
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                         contentPadding = PaddingValues(bottom = 24.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(searchResults, key = { it.id }) { note ->
-                            val cardShape = RoundedCornerShape(16.dp)
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(cardShape)
-                                    .background(ThemeManager.activeCardBrush(highlighted = false))
-                                    .border(0.75.dp, ThemeManager.cardBorderColor, cardShape)
-                                    .clickable {
-                                        if (note.isLocked && NoteSecurityManager.hasPin(context)) {
-                                            pendingUnlockNote = note
-                                        } else {
-                                            onNoteClick(note.id)
-                                        }
-                                    }
-                                    .padding(14.dp)
-                            ) {
-                                Column {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        if (note.isLocked) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Lock,
-                                                contentDescription = "Locked",
-                                                tint = activePreset.accentEnd,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                        Text(
-                                            text = note.title.ifBlank { "Untitled" },
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                    }
-                                    if (note.isLocked) {
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = "Protected by Vault PIN",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = activePreset.accentEnd
-                                        )
+                            val hasRichBlocks = note.blocksJson.length > 2
+                            val hasPdfBlock = note.blocksJson.contains("PdfBlock", ignoreCase = true) ||
+                                note.blocksJson.contains("\"pdf\"", ignoreCase = true)
+
+                            ObsidianCard(
+                                accentColor = obsidianAccent,
+                                onClick = {
+                                    if (note.isLocked && NoteSecurityManager.hasPin(context)) {
+                                        pendingUnlockNote = note
                                     } else {
-                                        if (note.content.isNotBlank()) {
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                text = note.content.take(160),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                maxLines = 3,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        if (note.blocksJson.length > 2) {
-                                            Spacer(Modifier.height(6.dp))
-                                            Text(
-                                                text = "Includes media / PDF / OCR blocks",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = activePreset.accentEnd
-                                            )
+                                        onNoteClick(note.id)
+                                    }
+                                },
+                                headerContent = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        ObsidianIconTile(
+                                            icon = when {
+                                                note.isLocked -> Icons.Rounded.Lock
+                                                hasPdfBlock -> Icons.Rounded.PictureAsPdf
+                                                else -> Icons.Rounded.Description
+                                            },
+                                            accentColor = obsidianAccent,
+                                            size = 38.dp,
+                                            iconSize = 18.dp
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = note.title.ifBlank { "Untitled" },
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = ObsidianTokens.TextPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f, fill = false)
+                                                )
+                                                ObsidianMetallicBadge(
+                                                    text = when {
+                                                        note.isLocked -> "LOCKED"
+                                                        hasRichBlocks -> "MEDIA"
+                                                        else -> "MATCH"
+                                                    },
+                                                    accentColor = obsidianAccent
+                                                )
+                                            }
+                                            if (note.isLocked) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Protected by Vault PIN",
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontSize = 11.5.sp,
+                                                    color = accentInk
+                                                )
+                                            } else if (note.content.isNotBlank()) {
+                                                Spacer(Modifier.height(4.dp))
+                                                Text(
+                                                    text = note.content.take(180),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    color = ObsidianTokens.TextSecondary
+                                                )
+                                            }
                                         }
                                     }
-                                    Spacer(Modifier.height(8.dp))
+                                },
+                                footerContent = {
+                                    val blockInfo = if (hasRichBlocks) {
+                                        "Rich media / PDF / OCR blocks indexed"
+                                    } else {
+                                        "Markdown text note"
+                                    }
                                     Text(
-                                        text = dateFormat.format(Date(note.updatedAt)),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        text = "Modified ${dateFormat.format(Date(note.updatedAt))} • $blockInfo • Local Room DB",
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 15.sp,
+                                        color = ObsidianTokens.FooterText
                                     )
                                 }
-                            }
+                            )
                         }
                     }
                 }

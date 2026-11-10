@@ -2,7 +2,6 @@ package com.notegraph.app.ui.tags
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Label
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,12 +20,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.components.ObsidianCard
+import com.notegraph.app.ui.components.ObsidianIconTile
+import com.notegraph.app.ui.components.ObsidianMetallicBadge
+import com.notegraph.app.ui.components.ObsidianStatTile
+import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
 import java.text.SimpleDateFormat
@@ -83,6 +91,9 @@ fun TagsScreen(
                 )
             }
         ) { padding ->
+            val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+            val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -92,13 +103,61 @@ fun TagsScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(28.dp),
+                            .padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "No tags yet. Use #study, #work/notes, or #todo/urgent inside any note to organize here.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ObsidianCard(
+                            accentColor = obsidianAccent,
+                            headerContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ObsidianIconTile(
+                                        icon = Icons.Rounded.Label,
+                                        accentColor = obsidianAccent
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Tag Taxonomy",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            ObsidianMetallicBadge(
+                                                text = "EMPTY",
+                                                accentColor = obsidianAccent
+                                            )
+                                        }
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(
+                                            text = "@vault • #study • #work/notes",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                    ObsidianStatTile(
+                                        value = "0 tags",
+                                        label = "INDEX",
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                            },
+                            footerContent = {
+                                Text(
+                                    text = "Add #study, #work/notes, or #todo/urgent inside any note body to build an offline tag tree stored in Room DB.",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = ObsidianTokens.FooterText
+                                )
+                            }
                         )
                     }
                 } else {
@@ -108,12 +167,63 @@ fun TagsScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         item {
-                            Text(
-                                text = "Hierarchy",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 6.dp)
+                            ObsidianCard(
+                                accentColor = obsidianAccent,
+                                verticalPadding = 4.dp,
+                                headerContent = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        ObsidianIconTile(
+                                            icon = Icons.Rounded.Label,
+                                            accentColor = obsidianAccent,
+                                            size = 40.dp,
+                                            iconSize = 19.dp
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Tag Hierarchy",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = ObsidianTokens.TextPrimary
+                                                )
+                                                ObsidianMetallicBadge(
+                                                    text = "ACTIVE",
+                                                    accentColor = obsidianAccent
+                                                )
+                                            }
+                                            Spacer(Modifier.height(2.dp))
+                                            Text(
+                                                text = if (selectedTag != null) "Inspecting #$selectedTag" else "Select any #tag branch below",
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 11.sp,
+                                                color = ObsidianTokens.TextMuted
+                                            )
+                                        }
+                                        ObsidianStatTile(
+                                            value = "${tagTree.size}",
+                                            label = "ROOTS",
+                                            accentColor = obsidianAccent
+                                        )
+                                    }
+                                },
+                                footerContent = {
+                                    Text(
+                                        text = "${notes.size} notes indexed across nested #parent/child tags • Offline local Room storage",
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 10.5.sp,
+                                        lineHeight = 15.sp,
+                                        color = ObsidianTokens.FooterText
+                                    )
+                                }
                             )
+                            Spacer(Modifier.height(8.dp))
                         }
 
                         items(tagTree.values.toList()) { rootNode ->
@@ -129,7 +239,7 @@ fun TagsScreen(
 
                         if (selectedTag != null) {
                             item {
-                                Spacer(Modifier.height(16.dp))
+                                Spacer(Modifier.height(14.dp))
                                 HorizontalDivider(color = ThemeManager.cardBorderColor)
                                 Spacer(Modifier.height(12.dp))
                                 Text(
@@ -151,66 +261,79 @@ fun TagsScreen(
                                 }
                             } else {
                                 items(filteredNotes, key = { it.id }) { note ->
-                                    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
-                                    val cardShape = RoundedCornerShape(16.dp)
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .clip(cardShape)
-                                            .background(ThemeManager.activeCardBrush(highlighted = false))
-                                            .border(0.75.dp, ThemeManager.cardBorderColor, cardShape)
-                                            .clickable {
-                                                if (note.isLocked && NoteSecurityManager.hasPin(context)) {
-                                                    pendingUnlockNote = note
-                                                } else {
-                                                    onNoteClick(note.id)
-                                                }
+                                    val dateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
+
+                                    ObsidianCard(
+                                        accentColor = obsidianAccent,
+                                        onClick = {
+                                            if (note.isLocked && NoteSecurityManager.hasPin(context)) {
+                                                pendingUnlockNote = note
+                                            } else {
+                                                onNoteClick(note.id)
                                             }
-                                            .padding(14.dp)
-                                    ) {
-                                        Column {
+                                        },
+                                        headerContent = {
                                             Row(
+                                                modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
-                                                if (note.isLocked) {
-                                                    Icon(
-                                                        imageVector = Icons.Rounded.Lock,
-                                                        contentDescription = "Locked",
-                                                        tint = activePreset.accentEnd,
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
+                                                ObsidianIconTile(
+                                                    icon = if (note.isLocked) Icons.Rounded.Lock else Icons.Rounded.Label,
+                                                    accentColor = obsidianAccent,
+                                                    size = 38.dp,
+                                                    iconSize = 18.dp
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = note.title.ifBlank { "Untitled" },
+                                                            style = MaterialTheme.typography.titleMedium,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = ObsidianTokens.TextPrimary,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.weight(1f, fill = false)
+                                                        )
+                                                        ObsidianMetallicBadge(
+                                                            text = if (note.isLocked) "LOCKED" else "#${selectedTag}",
+                                                            accentColor = obsidianAccent
+                                                        )
+                                                    }
+                                                    if (note.isLocked) {
+                                                        Spacer(Modifier.height(4.dp))
+                                                        Text(
+                                                            text = "Locked with Vault PIN",
+                                                            fontFamily = FontFamily.Monospace,
+                                                            fontSize = 11.5.sp,
+                                                            color = accentInk
+                                                        )
+                                                    } else if (note.content.isNotBlank()) {
+                                                        Spacer(Modifier.height(4.dp))
+                                                        Text(
+                                                            text = note.content.take(150),
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            maxLines = 2,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            color = ObsidianTokens.TextSecondary
+                                                        )
+                                                    }
                                                 }
-                                                Text(
-                                                    text = note.title.ifBlank { "Untitled" },
-                                                    style = MaterialTheme.typography.titleSmall
-                                                )
                                             }
-                                            if (note.isLocked) {
-                                                Spacer(Modifier.height(4.dp))
-                                                Text(
-                                                    text = "Locked with Vault PIN",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = activePreset.accentEnd
-                                                )
-                                            } else if (note.content.isNotBlank()) {
-                                                Spacer(Modifier.height(4.dp))
-                                                Text(
-                                                    text = note.content.take(120),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    maxLines = 2,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            Spacer(Modifier.height(6.dp))
+                                        },
+                                        footerContent = {
                                             Text(
-                                                text = dateFormat.format(Date(note.updatedAt)),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                                text = "Updated ${dateFormat.format(Date(note.updatedAt))} • Matched #${selectedTag} • Local Room storage",
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 10.5.sp,
+                                                lineHeight = 15.sp,
+                                                color = ObsidianTokens.FooterText
                                             )
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }

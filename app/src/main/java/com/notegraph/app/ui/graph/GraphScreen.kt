@@ -2,6 +2,9 @@ package com.notegraph.app.ui.graph
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -22,10 +25,12 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -35,17 +40,27 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.common.NoteSecurityManager
 import com.notegraph.app.ui.common.VaultPinDialog
+import com.notegraph.app.ui.components.ObsidianCard
+import com.notegraph.app.ui.components.ObsidianIconTile
+import com.notegraph.app.ui.components.ObsidianMetallicBadge
+import com.notegraph.app.ui.components.ObsidianStatTile
+import com.notegraph.app.ui.components.ObsidianTokens
 import com.notegraph.app.ui.theme.MinimalistBackground
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -76,9 +91,14 @@ fun GraphScreen(
     var offset by remember { mutableStateOf(Offset.Zero) }
     var searchQuery by remember { mutableStateOf("") }
     var hideOrphans by remember { mutableStateOf(false) }
+    var inspectedNodeId by remember { mutableStateOf<String?>(null) }
     var pendingUnlockNote by remember { mutableStateOf<NoteEntity?>(null) }
     val notesById = remember(notes) { notes.associateBy { it.id } }
+    val foldersById = remember(folders) { folders.associateBy { it.id } }
     val activePreset = ThemeManager.currentGradient
+    val obsidianAccent = ObsidianTokens.resolveAccent(activePreset.accentStart)
+    val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
+    val inspectorDateFormat = remember { SimpleDateFormat("MMM d, yyyy · HH:mm", Locale.getDefault()) }
 
     fun handleNodeOpen(noteId: String) {
         val target = notesById[noteId]
@@ -289,8 +309,16 @@ fun GraphScreen(
 
                                     if (activePointers.isEmpty()) {
                                         val duration = System.currentTimeMillis() - downTime
-                                        if (!isTransforming && duration < 350 && grabbedNode != null) {
-                                            handleNodeOpen(grabbedNode.noteId)
+                                        if (!isTransforming && duration < 350) {
+                                            if (grabbedNode != null) {
+                                                if (inspectedNodeId == grabbedNode.noteId) {
+                                                    handleNodeOpen(grabbedNode.noteId)
+                                                } else {
+                                                    inspectedNodeId = grabbedNode.noteId
+                                                }
+                                            } else {
+                                                inspectedNodeId = null
+                                            }
                                         }
                                         break
                                     }
@@ -347,24 +375,37 @@ fun GraphScreen(
                             if (hideOrphans && (src.noteId !in connectedNodeIds || dst.noteId !in connectedNodeIds)) continue
                             val edgeMatchesSearch = qTrim.isNotEmpty() &&
                                 (src.title.lowercase().contains(qTrim) || dst.title.lowercase().contains(qTrim))
+                            val edgeTouchesInspected = inspectedNodeId != null &&
+                                (src.noteId == inspectedNodeId || dst.noteId == inspectedNodeId)
                             drawLine(
-                                color = if (edgeMatchesSearch) activePreset.accentEnd.copy(alpha = 0.9f)
-                                else activePreset.accentStart.copy(alpha = if (qTrim.isEmpty()) 0.55f else 0.18f),
+                                color = when {
+                                    edgeTouchesInspected -> activePreset.accentEnd.copy(alpha = 0.95f)
+                                    edgeMatchesSearch -> activePreset.accentEnd.copy(alpha = 0.9f)
+                                    else -> activePreset.accentStart.copy(alpha = if (qTrim.isEmpty()) 0.55f else 0.18f)
+                                },
                                 start = Offset(src.x, src.y),
                                 end = Offset(dst.x, dst.y),
-                                strokeWidth = if (edgeMatchesSearch) 3.5f else 2f
+                                strokeWidth = if (edgeTouchesInspected || edgeMatchesSearch) 3.5f else 2f
                             )
                         }
 
                         for (node in visibleNodes) {
                             val isConnected = connectedNodeIds.contains(node.noteId)
                             val isSearchMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
+                            val isInspected = inspectedNodeId == node.noteId
                             val dimAlpha = if (qTrim.isNotEmpty() && !isSearchMatch) 0.25f else 1f
                             val nodeColor = (node.folderColor ?: if (isConnected) activePreset.accentStart else activePreset.accentEnd)
                                 .copy(alpha = dimAlpha)
                             val haloColor = nodeColor.copy(alpha = 0.2f * dimAlpha)
 
-                            if (isSearchMatch) {
+                            if (isInspected) {
+                                drawCircle(
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    radius = 38f,
+                                    center = Offset(node.x, node.y),
+                                    style = Stroke(width = 3f)
+                                )
+                            } else if (isSearchMatch) {
                                 drawCircle(
                                     color = activePreset.accentEnd,
                                     radius = 36f,
@@ -510,77 +551,204 @@ fun GraphScreen(
 
                 if (notes.isEmpty()) {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Create notes and link them with [[Title]] to explore your graph.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        ObsidianCard(
+                            accentColor = obsidianAccent,
+                            headerContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ObsidianIconTile(
+                                        icon = Icons.Rounded.Share,
+                                        accentColor = obsidianAccent
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Knowledge Graph",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            ObsidianMetallicBadge(
+                                                text = "EMPTY",
+                                                accentColor = obsidianAccent
+                                            )
+                                        }
+                                        Spacer(Modifier.height(3.dp))
+                                        Text(
+                                            text = "@vault • [[Wiki-Links]] Graph",
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                    ObsidianStatTile(
+                                        value = "0 nodes",
+                                        label = "GRAPH",
+                                        accentColor = obsidianAccent
+                                    )
+                                }
+                            },
+                            footerContent = {
+                                Text(
+                                    text = "Create notes and link them with [[Title]] to visualize nodes and backlinks. Stored locally in Room Database.",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp,
+                                    color = ObsidianTokens.FooterText
+                                )
+                            }
                         )
                     }
                 } else {
-                    Surface(
+                    val inspectedNote = (inspectedNodeId?.let { notesById[it] })
+                        ?: visibleNodes.firstOrNull { connectedNodeIds.contains(it.noteId) }?.let { notesById[it.noteId] }
+                        ?: visibleNodes.firstOrNull()?.let { notesById[it.noteId] }
+                        ?: notes.first()
+                    val selectedId = inspectedNote.id
+                    val nodeConnections = edges.count { it.first.noteId == selectedId || it.second.noteId == selectedId }
+                    val nodeFolder = inspectedNote.folderId?.let { foldersById[it] }
+                    val firstTag = Regex("#([a-zA-Z0-9_\\-/]+)").find("${inspectedNote.content} ${inspectedNote.blocksJson}")?.value ?: "#node"
+                    val inspectorIcon = when {
+                        inspectedNote.isLocked -> Icons.Rounded.Lock
+                        nodeConnections > 0 -> Icons.Rounded.Share
+                        else -> Icons.Rounded.Description
+                    }
+
+                    ObsidianCard(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
                             .padding(14.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
-                        border = BorderStroke(0.75.dp, ThemeManager.cardBorderColor)
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                        accentColor = obsidianAccent,
+                        onClick = { handleNodeOpen(selectedId) },
+                        verticalPadding = 0.dp,
+                        headerContent = {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(
-                                    text = "Quick Open",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ObsidianIconTile(
+                                    icon = inspectorIcon,
+                                    accentColor = obsidianAccent
                                 )
-                                Text(
-                                    text = "${edges.size} link${if (edges.size == 1) "" else "s"}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = activePreset.accentStart,
-                                    fontWeight = FontWeight.SemiBold
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = inspectedNote.title.ifBlank { "Untitled" },
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = ObsidianTokens.TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        ObsidianMetallicBadge(
+                                            text = when {
+                                                inspectedNote.isLocked -> "LOCKED"
+                                                nodeConnections > 0 -> "HUB"
+                                                else -> "NODE"
+                                            },
+                                            accentColor = obsidianAccent
+                                        )
+                                    }
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        text = "@${nodeFolder?.name?.lowercase()?.replace(' ', '_') ?: "vault"} • $firstTag",
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 11.sp,
+                                        color = ObsidianTokens.TextMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                ObsidianStatTile(
+                                    value = "$nodeConnections link${if (nodeConnections == 1) "" else "s"}",
+                                    label = "EDGES",
+                                    accentColor = obsidianAccent
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
+
+                            Spacer(Modifier.height(10.dp))
+
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(notes) { note ->
+                                items(notes, key = { it.id }) { note ->
                                     val connectionCount = edges.count { it.first.noteId == note.id || it.second.noteId == note.id }
-                                    InputChip(
-                                        selected = false,
-                                        onClick = { handleNodeOpen(note.id) },
-                                        label = {
-                                            Text(
-                                                if (connectionCount > 0)
-                                                    "${note.title.ifBlank { "Untitled" }} ($connectionCount)"
-                                                else
-                                                    note.title.ifBlank { "Untitled" }
+                                    val isNodeSelected = note.id == selectedId
+                                    val chipShape = RoundedCornerShape(10.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(chipShape)
+                                            .background(
+                                                if (isNodeSelected) obsidianAccent.copy(alpha = 0.20f)
+                                                else ObsidianTokens.StatTileSurface
                                             )
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = when {
-                                                    note.isLocked -> Icons.Rounded.Lock
-                                                    connectionCount > 0 -> Icons.Rounded.Link
-                                                    else -> Icons.Rounded.Description
-                                                },
-                                                contentDescription = null,
-                                                modifier = Modifier.size(14.dp)
+                                            .border(
+                                                width = if (isNodeSelected) 1.dp else 0.75.dp,
+                                                color = if (isNodeSelected) obsidianAccent else ObsidianTokens.DividerRule,
+                                                shape = chipShape
                                             )
-                                        }
-                                    )
+                                            .clickable {
+                                                if (isNodeSelected) {
+                                                    handleNodeOpen(note.id)
+                                                } else {
+                                                    inspectedNodeId = note.id
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = when {
+                                                note.isLocked -> Icons.Rounded.Lock
+                                                connectionCount > 0 -> Icons.Rounded.Link
+                                                else -> Icons.Rounded.Description
+                                            },
+                                            contentDescription = null,
+                                            tint = if (isNodeSelected) accentInk else ObsidianTokens.TextMuted,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = if (connectionCount > 0) {
+                                                "${note.title.ifBlank { "Untitled" }} ($connectionCount)"
+                                            } else {
+                                                note.title.ifBlank { "Untitled" }
+                                            },
+                                            fontSize = 12.sp,
+                                            fontWeight = if (isNodeSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                            color = if (isNodeSelected) ObsidianTokens.TextPrimary else ObsidianTokens.TextSecondary
+                                        )
+                                    }
                                 }
                             }
+                        },
+                        footerContent = {
+                            Text(
+                                text = "Modified ${inspectorDateFormat.format(Date(inspectedNote.updatedAt))} • ${visibleNodes.size} nodes / ${edges.size} canvas edges indexed locally in Room DB • Tap card or selected chip to open",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.5.sp,
+                                lineHeight = 15.sp,
+                                color = ObsidianTokens.FooterText
+                            )
                         }
-                    }
+                    )
                 }
             }
         }

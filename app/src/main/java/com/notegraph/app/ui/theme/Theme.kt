@@ -87,13 +87,24 @@ object NoteGraphGradients {
         ThemeGradientPreset(
             id = "obsidian_violet",
             name = "Obsidian Violet",
-            accentStart = Color(0xFFA855F7),
-            accentEnd = Color(0xFF6366F1),
+            accentStart = Color(0xFF8B5CF6),
+            accentEnd = Color(0xFFA855F7),
             onAccent = Color.White,
             backgroundColors = listOf(Color(0xFF140726), Color(0xFF05010A), Color(0xFF000000)),
-            cardSurface = Color(0xFF0E0819),
-            cardTint = Color(0xFF1B0F30),
+            cardSurface = Color(0xFF0C0C0E),
+            cardTint = Color(0xFF1A1A1E),
             borderColor = Color(0xFF2B1C45)
+        ),
+        ThemeGradientPreset(
+            id = "obsidian_gold",
+            name = "Obsidian Gold",
+            accentStart = Color(0xFFF59E0B),
+            accentEnd = Color(0xFFD97706),
+            onAccent = Color(0xFF140D02),
+            backgroundColors = listOf(Color(0xFF191206), Color(0xFF070502), Color(0xFF000000)),
+            cardSurface = Color(0xFF0C0C0E),
+            cardTint = Color(0xFF1A1A1E),
+            borderColor = Color(0xFF423112)
         ),
         ThemeGradientPreset(
             id = "aurora_cyan",

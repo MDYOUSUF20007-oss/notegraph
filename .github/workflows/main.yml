@@ -151,6 +151,7 @@ jobs:
             Automated cross-platform builds from the latest `main` commit.
 
             ### What's New
+            - **Frosted Two-Tier Obsidian Card System (Android):** Upgraded note list cards, Search & Tag cards, Canvas Graph Node Inspector, Appearance/Vault panels, and Note Graph Metadata views with `ObsidianCard` — deep `#1A1A1E -> #0C0C0E` surfaces, dynamic active accent borders & specular edge highlights (`#8B5CF6` purple / Obsidian Gold / active palette), illuminated icon badges & stat tiles, and untruncated Tier 2 sync/timestamp/storage footers.
             - **Offline PDF OCR Window (Android):** Extract text from imported PDFs in a dedicated window — scan the current page, a custom page range, or all pages (`Extract All`), pick individual text blocks or edit/trim before copying or inserting straight into your note.
             - **Reader Upward Throw-Away Page Gesture:** Turn horizontally/diagonally from any corner like a book (`Corner Fold`, `3D Curl`, `Slide Stack`) OR swipe up to physically toss the page away and advance to the next note.
             - **Theme-Matched Voice Visualizer:** Live microphone level bars and interactive waveform playback scrubbing synced dynamically to your active **AMOLED**, **Kindle Paper**, or **Matte / Mac** gradient palette.

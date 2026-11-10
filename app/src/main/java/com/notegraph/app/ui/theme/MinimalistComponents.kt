@@ -74,7 +74,9 @@ fun GradientSwatchRow(
     mode: AppThemeMode,
     selectedId: String,
     onSelect: (ThemeGradientPreset) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    labelColor: Color = MaterialTheme.colorScheme.onSurface,
+    secondaryLabelColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     val presets = ThemeManager.presetsFor(mode)
 
@@ -88,7 +90,7 @@ fun GradientSwatchRow(
         presets.forEach { preset ->
             val isSelected = preset.id == selectedId
             val ringColor by animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                targetValue = if (isSelected) labelColor else Color.Transparent,
                 label = "swatchRing"
             )
 
@@ -124,7 +126,7 @@ fun GradientSwatchRow(
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) labelColor else secondaryLabelColor,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
