@@ -1,0 +1,51 @@
+appId: com.notegraph.board
+productName: NoteGraph Board
+copyright: Copyright © 2026 MDYOUSUF
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - main.js
+  - preload.js
+  - pdf-writer.js
+  - package.json
+  - assets/**/*
+  - renderer/**/*
+  - "!node_modules/pdfjs-dist/**/*"
+  - "!node_modules/@napi-rs/**/*"
+  - "!scripts/**/*"
+  - "!test/**/*"
+asar: true
+win:
+  icon: assets/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: NoteGraph-Board-${version}-Windows-${arch}-Setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+portable:
+  artifactName: NoteGraph-Board-${version}-Windows-${arch}-Portable.${ext}
+mac:
+  icon: assets/icon.png
+  category: public.app-category.productivity
+  identity: null
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  artifactName: NoteGraph-Board-${version}-macOS-${arch}.${ext}
+dmg:
+  title: NoteGraph Board

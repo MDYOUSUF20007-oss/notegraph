@@ -1,51 +1,142 @@
-name: Android CI
+name: Build & Release NoteGraph (Android, Windows, macOS)
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.7'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
 
-    - name: Build with Gradle
-      run: gradle assembleDebug --stacktrace
+      - name: Build Android APK
+        run: gradle assembleDebug --stacktrace
 
-    - name: Rename APK to notegraph.apk
-      run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/notegraph.apk
+      - name: Rename APK to notegraph.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/notegraph.apk
 
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: NoteGraph-APK
-        path: app/build/outputs/apk/debug/notegraph.apk
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoteGraph-APK
+          path: app/build/outputs/apk/debug/notegraph.apk
 
-    - name: Publish to GitHub Releases
-      if: github.event_name == 'push'
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: latest
-        name: "NoteGraph Latest"
-        body: "Automated build of notegraph.apk from the latest commit."
-        files: app/build/outputs/apk/debug/notegraph.apk
-        prerelease: false
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Desktop Dependencies & Prepare Vendor Assets
+        working-directory: desktop
+        run: npm ci
+
+      - name: Run Desktop Unit Tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Package Windows Installer & Portable (.exe)
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win nsis portable --x64 --publish never
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoteGraph-Windows
+          path: desktop/dist/*.exe
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Desktop Dependencies & Prepare Vendor Assets
+        working-directory: desktop
+        run: npm ci
+
+      - name: Run Desktop Unit Tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Package macOS Apple Silicon & Intel (.dmg / .zip)
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac dmg zip --arm64 --x64 --publish never
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoteGraph-macOS
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+
+  release:
+    needs: [ build-android, build-windows, build-macos ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download All Platform Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List Release Assets
+        run: ls -lh release-assets
+
+      - name: Publish Multi-Platform Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "NoteGraph v2.0 — Android, Windows & macOS"
+          make_latest: true
+          prerelease: false
+          body: |
+            Automated cross-platform builds from the latest `main` commit:
+
+            - **Android APK:** `notegraph.apk` — Tri-Theme Matrix (AMOLED, Kindle Parchment, Matte Studio), customizable drag-and-drop folders, interactive checklists, 3D book mode & ink canvas.
+            - **Windows (x64):** `NoteGraph-Board-*-Windows-x64-Setup.exe` & `NoteGraph-Board-*-Windows-x64-Portable.exe` — Low-latency Classroom Whiteboard (`F11` Zen mode, Rainbow Vanishing Laser, Cornell/XY grids, PDF slide markup, `Ctrl+V` screenshot paste, interactive checklists, Follow-Up CRM dates, `Ctrl+K` Command Palette, 2D Knowledge Graph, & Android `.zip` vault sync).
+            - **macOS (Apple Silicon arm64 & Intel x64):** `.dmg` & `.zip` builds of NoteGraph Board. *(Unsigned CI build: on macOS first launch, right-click → Open if Gatekeeper prompts.)*
+          files: release-assets/*

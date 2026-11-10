@@ -1,77 +1,66 @@
-NoteGraph
+# NoteGraph
 
-> **One-line pitch:** A premium, all-in-one Android note-taking application synthesizing the intuitive handwriting of Samsung Notes with the knowledge-management power of Obsidian.
+> **One-line pitch:** A cross-platform offline productivity suite combining an ultra-fast Classroom & Freeform Whiteboard for **Windows & macOS (`desktop/`)** with a tri-theme **Android (`app/`)** note-taking app and seamless `.zip` vault sync.
 
 ![Status](https://img.shields.io/badge/status-active%20development-purple)
-![Platform](https://img.shields.io/badge/platform-Android-green)
-![Phase](https://img.shields.io/badge/current%20phase-3%20%2B%20luxury%20extensions-blue)
+![Platforms](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20macOS-blue)
 
-NoteGraph is a high-end, distraction-free productivity app designed for students, developers, and thinkers who demand absolute visual comfort and deep connected note-taking. It bridges the gap between freeform digital ink and structured graph databases.
+NoteGraph bridges freeform digital ink, live classroom presentation tools, structured to-do checklists, and Obsidian-style `[[Wiki-Links]]` without database bloat.
+
+## Downloads (Releases)
+
+Grab prebuilt installers and packages from the [**GitHub Releases**](https://github.com/MDYOUSUF20007-oss/notegraph/releases/latest) page:
+- **Android:** `notegraph.apk`
+- **Windows (x64):** Setup Installer (`*-Setup.exe`) & standalone Portable (`*-Portable.exe`)
+- **macOS (Apple Silicon `arm64` & Intel `x64`):** `.dmg` & `.zip` bundles
+
+---
 
 ## Features
 
-- **Three Signature Visual Themes:** Instantly toggle between **Deep Purple AMOLED** (true `#000000` pitch black), **Kindle Parchment** (warm glare-free paper with Cornell ruling), and **Matte Studio** (anodized graphite architectural style).
-- **Samsung Notes Canvas Engine:** Smooth stylus/touch drawing featuring a **Rainbow Vanishing Pen** (an RGB pointer stroke that automatically fades away after 1.5s for live presentation), **Neon Lasso Selection**, and **Geometric Shape Snapping**.
-- **Obsidian Knowledge Management:** Live `[[` wiki-link popups, interactive backlinks panels, and a 2D force-directed knowledge graph to visualize note connections.
-- **Google Play Books 3D Page-Curl Mode:** Smooth 60 FPS page-turn physics with paper shadows and dog-ear corner bookmarks for immersive review.
-- **Lecture Audio & PDF Markup:** Synchronized audio waveform scrubbing linked directly to handwritten strokes, plus local ML Kit OCR text extraction.
-- **Multi-Format Export Suite:** Lossless exports to `.pdf`, `.docx`, `.pptx`, `.png`, and `.md` (Obsidian Vault zip archives).
+### NoteGraph Board (Windows & macOS Desktop App — `desktop/`)
+- **Zero-Lag Classroom Whiteboard:** Dual-layer GPU-friendly HTML5 canvas with `getCoalescedEvents()` high-frequency pointer ink, viewport culling, spatial Note/Checklist cards, Bezier flowchart connectors, geometric shape snapping (lines, circles, rectangles), and **Lasso** stroke selection/nudging.
+- **Built for Live & Online Teaching:**
+  - **Fullscreen Classroom Zen Mode (`F11`)**, integrated **Class Stopwatch / 25m Pomodoro**, and multi-slide lecture decks (`PageUp` / `PageDown`).
+  - **Rainbow Vanishing Laser Pointer** (`1.5s` glowing fade trail), Highlighter, Vector Arrows, and **Dots / Cornell Ruled / XY Coordinate Axes / Blackboard** grids.
+  - **Offline PDF Lecture Markup (`pdfjs-dist`):** Import PDFs as sequential lecture slides or canvas cards and draw/highlight directly over pages with zero interference, then export all slides back to sharp **PNG** or **Multi-Page PDF**.
+  - **`Ctrl+V` Instant Screenshot Paste** directly onto any board slide.
+- **Clutter-Free Notes, Checklists & Graph:** Clean split editor with live interactive checkboxes (`[x]`), `[[Wiki-Link]]` backlinks, `#tags`, `Ctrl+K` Searchable Command/Note Picker, Follow-Up Check-in Reminder dates (`🔔`), drag-and-drop customizable folders (`📚 Study`, `💼 Work`, `🎮 Gaming`, `🛒 Shopping`, `⏰ Reminder`), and a 2D force-directed **Knowledge Graph**.
+- **Android ↔ Desktop Sync:** One-click import/export of `NoteGraph_Vault_Backup.zip` (`notes.json`).
 
-## Screenshots
+### NoteGraph Android App (`app/`)
+- **One App, Three Signature Themes:** Toggle between **Deep Purple AMOLED** (`#000000`), **Kindle Parchment** (warm eye-care paper), and **Matte Studio** (anodized slate).
+- **Customizable Drag-and-Drop Folders & Interactive Checklists:** Organize notes via drag-and-drop with editable folder names, icons, and colors; write notes with embedded interactive to-do checklists underneath.
+- **Handwriting, 3D Page-Curl Reader, Lecture Audio & Exports:** Smooth ink canvas, Rainbow Vanishing Pen, 60 FPS book-curl reader, synchronized audio, ML Kit OCR, and multi-format exports (`.pdf`, `.docx`, `.pptx`, `.png`, `.md`, `.zip`).
 
-*Coming soon.*
+---
 
-## Roadmap & Progress
+## Development & Building Locally
 
-| Phase | Goal | Status |
-|-------|------|--------|
-| 1 | Core notes structure & wiki-links | ✅ Done |
-| 2 | Ink canvas, audio recording, & OCR | ✅ Done |
-| 3 | Advanced canvas tools & export engine | ✅ Done |
-| 4 | Luxury UI overhaul & book-mode navigation | 🚧 In progress |
-
-### Phase 3 & 4 checklist
-
-- [x] Deep Purple AMOLED, Kindle Parchment, & Matte Studio theme system
-- [x] Samsung Notes RGB vanishing presentation pen & lasso tool
-- [x] Google Play Books 3D 60 FPS page-curl reader mode
-- [x] White & Deep Purple monogram app icon with rainbow gradient
-- [ ] Automated GitHub Actions CI/CD release pipeline verification
-
-## Tech Stack
-
-- **UI & Architecture:** Jetpack Compose, Material 3, Kotlin DSL
-- **Persistence & Storage:** Room Database, local file management
-- **Graphics & Canvas:** Compose Graphics layers, custom 3D page-curl math
-- **CI/CD:** GitHub Actions (automated cloud compilation & verification)
-
-## Getting Started
-
-### Requirements
-
-- Android Studio (latest stable)
-- JDK 17+
-- Android device or emulator (API 26+)
-
-### Build & Run
-
+### Desktop App (`desktop/`)
+Requirements: Node.js 20+
 ```bash
-git clone https://github.com/MDYOUSUF20007-oss/notegraph.git
-cd notegraph
-# Note: Compilation is verified via GitHub Actions cloud runners
-./gradlew assembleDebug
+cd desktop
+npm install
+npm test
+npm start
+```
+Package installers locally:
+```bash
+# Windows (runs on Windows)
+npm run pack:win
+
+# macOS (runs on macOS)
+npm run pack:mac
 ```
 
-Or open the project directly in Android Studio and press **Run**.
-
-## Contributing
-
-The project is under active development. Suggestions and discussions are welcome—feel free to open an issue.
+### Android App (`app/`)
+Requirements: Android Studio / JDK 17+ / Android SDK 26+
+```bash
+./gradlew assembleDebug
+```
+All three platforms (Android, Windows, and macOS) are automatically built and published on every push to `main` via `.github/workflows/main.yml`.
 
 ## License
-
-This project is proprietary and built for personal productivity.
-
-## Author
 
 Built by [MDYOUSUF](https://github.com/MDYOUSUF20007-oss).

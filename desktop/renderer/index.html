@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="DEEP_PURPLE_AMOLED">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; worker-src 'self' blob:; connect-src 'self' data: blob:;" />
+  <title>NoteGraph Board</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="appShell" class="app-shell">
+    <!-- Top Header Bar -->
+    <header id="topBar" class="top-bar">
+      <div class="top-left">
+        <button id="toggleSidebarBtn" class="icon-btn" title="Toggle Sidebar (Ctrl+B)">☰</button>
+        <div class="brand-pill" title="NoteGraph Board">
+          <span class="brand-ng">NG</span>
+          <span class="brand-sub">BOARD</span>
+        </div>
+        <input id="activeTitleInput" class="title-input" type="text" placeholder="Board / Note Title..." />
+        <button id="pinNoteBtn" class="pill-btn" title="Pin / Unpin">📌</button>
+        <div class="followup-wrap">
+          <button id="followUpBtn" class="pill-btn" title="Set Follow-Up Check-In Date (CRM Reminder)">
+            🔔 <span id="followUpLabel">Follow-Up</span>
+          </button>
+          <div id="followUpPopover" class="dropdown-menu hidden">
+            <div style="padding:4px 6px; font-weight:700; font-size:11px; color:var(--text-secondary);">Follow-Up Reminder</div>
+            <button class="menu-item" data-followup-offset="0">📅 Today</button>
+            <button class="menu-item" data-followup-offset="1">☀️ Tomorrow</button>
+            <button class="menu-item" data-followup-offset="3">📆 In 3 Days</button>
+            <button class="menu-item" data-followup-offset="7">🗓️ Next Week</button>
+            <div style="padding:4px 6px; display:flex; gap:6px; align-items:center;">
+              <input id="followUpDateInput" class="field-input" type="date" style="padding:4px 6px; font-size:12px;" />
+            </div>
+            <button id="clearFollowUpBtn" class="menu-item danger-text">✕ Clear Reminder</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="top-right">
+        <!-- Classroom Live Stopwatch / Pomodoro -->
+        <div class="timer-pill" id="classTimerGroup" title="Classroom Stopwatch / Pomodoro">
+          <button id="classTimerBtn" class="timer-main-btn">⏱ <span id="classTimerDisplay">00:00</span></button>
+          <button id="classTimerModeBtn" class="timer-mode-btn" title="Switch Stopwatch / 25m Focus">↻</button>
+          <button id="classTimerResetBtn" class="timer-mode-btn" title="Reset Timer">⟲</button>
+        </div>
+
+        <!-- Theme Switcher (One App, 3 Android Themes + Classroom Blackboard) -->
+        <div class="theme-switcher" role="group" aria-label="Theme">
+          <button class="theme-chip active" data-theme-choice="DEEP_PURPLE_AMOLED" title="AMOLED Obsidian">AMOLED</button>
+          <button class="theme-chip" data-theme-choice="KINDLE_PARCHMENT" title="Kindle Paper E-Ink">Kindle</button>
+          <button class="theme-chip" data-theme-choice="MATTE_STUDIO" title="Matte Graphite">Matte</button>
+          <button class="theme-chip" data-theme-choice="BLACKBOARD_GREEN" title="Classroom Blackboard">Board</button>
+        </div>
+
+        <button id="zenModeBtn" class="pill-btn accent-outline" title="Fullscreen Classroom Zen Mode (F11)">⛶ Class Zen</button>
+
+        <!-- Import Dropdown -->
+        <div class="dropdown-wrap">
+          <button id="importMenuBtn" class="pill-btn">↓ Import</button>
+          <div id="importMenu" class="dropdown-menu hidden">
+            <button class="menu-item" id="actionImportPdf">📄 Import PDF Slides / Worksheet...</button>
+            <button class="menu-item" id="actionImportImage">🖼️ Insert Image onto Board...</button>
+            <hr class="menu-sep" />
+            <button class="menu-item" id="actionImportZip">📦 Import Android Vault (.zip)...</button>
+          </div>
+        </div>
+
+        <!-- Export Dropdown -->
+        <div class="dropdown-wrap">
+          <button id="exportMenuBtn" class="pill-btn primary-pill">↑ Export / Sync</button>
+          <div id="exportMenu" class="dropdown-menu dropdown-right hidden">
+            <button class="menu-item" id="actionExportPng">🖼️ Export Current Slide (PNG)...</button>
+            <button class="menu-item" id="actionExportPdf">📑 Export All Slides (Multi-Page PDF)...</button>
+            <button class="menu-item" id="actionExportMd">📝 Export Note &amp; Checklists (.md)...</button>
+            <hr class="menu-sep" />
+            <button class="menu-item" id="actionExportZip">📱 Sync Vault to Android (.zip)...</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Body -->
+    <div class="main-layout">
+      <!-- Collapsible Left Sidebar -->
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-top">
+          <div class="search-row">
+            <span class="search-icon">🔍</span>
+            <input id="sidebarSearchInput" type="search" placeholder="Search boards, checklists, #tags..." />
+            <button id="cmdPaletteBtn" class="kbd-btn" title="Quick Switcher & Commands (Ctrl+K)">⌘K</button>
+          </div>
+
+          <div class="sidebar-cta-row">
+            <button id="newBoardBtn" class="btn-primary flex-1">+ New Board</button>
+            <button id="todayJournalBtn" class="btn-ghost" title="Open or Create Today's Daily Board">📅 Today</button>
+          </div>
+
+          <!-- View Mode Switcher -->
+          <div class="view-tabs" role="tablist">
+            <button class="view-tab active" data-view-target="board" title="Infinite Classroom & Freeform Board (Ctrl+1)">Board</button>
+            <button class="view-tab" data-view-target="notes" title="Clean Note & Checklist Editor (Ctrl+2)">Notes</button>
+            <button class="view-tab" data-view-target="graph" title="2D Knowledge Graph (Ctrl+3)">Graph</button>
+          </div>
+        </div>
+
+        <!-- Customizable Drag & Drop Folders -->
+        <div class="sidebar-section">
+          <div class="section-header">
+            <span>FOLDERS (DRAG NOTES HERE)</span>
+            <button id="newFolderBtn" class="mini-text-btn">+ Folder</button>
+          </div>
+          <div id="folderList" class="folder-list"></div>
+        </div>
+
+        <!-- Boards / Notes List -->
+        <div class="sidebar-section notes-section">
+          <div class="section-header">
+            <span id="notesListHeading">ALL BOARDS &amp; NOTES</span>
+            <span id="notesCountBadge" class="count-pill">0</span>
+          </div>
+          <div id="notesList" class="notes-list"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <span id="saveStatusLabel">All changes saved offline</span>
+        </div>
+      </aside>
+
+      <!-- Workspace Content Area -->
+      <main id="workspaceMain" class="workspace-main">
+        <!-- VIEW 1: INFINITE BOARD -->
+        <section id="boardView" class="view-pane active">
+          <!-- Floating Classroom Tool Dock -->
+          <div id="boardToolbar" class="board-toolbar">
+            <div class="tool-group">
+              <button id="addNoteCardBtn" class="dock-btn" title="Add Sticky Note Card (N)">📝 Note</button>
+              <button id="addChecklistCardBtn" class="dock-btn" title="Add Interactive Checklist Card (T)">☑️ Tasks</button>
+              <button id="quickPdfBtn" class="dock-btn" title="Import PDF Slides & Annotate">📄 PDF</button>
+            </div>
+            <div class="dock-sep"></div>
+            <div class="tool-group" id="toolButtonsGroup">
+              <button class="tool-btn" data-tool="select" title="Select, Move & Edit Cards (V)">👆</button>
+              <button class="tool-btn" data-tool="pan" title="Pan Infinite Canvas (H or Space+Drag)">✋</button>
+              <button class="tool-btn active" data-tool="pen" title="Zero-Lag Pen (P)">✒️</button>
+              <button class="tool-btn" data-tool="highlighter" title="Translucent Highlighter (M)">🖍️</button>
+              <button class="tool-btn" data-tool="arrow" title="Vector Arrow (A)">↗️</button>
+              <button class="tool-btn" data-tool="laser" title="Rainbow Vanishing Lecture Laser (L)">✨</button>
+              <button class="tool-btn" data-tool="eraser" title="Stroke Eraser (E)">🧹</button>
+              <button class="tool-btn" data-tool="lasso" title="Lasso Select Ink (S)">⭕</button>
+              <button class="tool-btn" data-tool="connect" title="Connect Cards with Curved Arrow (C)">🔗</button>
+            </div>
+            <div class="dock-sep"></div>
+            <div class="tool-group">
+              <button id="shapeSnapBtn" class="dock-btn toggle-btn" title="Snap Freehand Lines, Circles & Rectangles">📐 Snap</button>
+              <div id="inkSwatches" class="ink-swatches">
+                <button class="swatch-btn active" data-color="#A855F7" style="background:#A855F7" title="Violet"></button>
+                <button class="swatch-btn" data-color="#FFFFFF" style="background:#FFFFFF" title="Adaptive White/Ink"></button>
+                <button class="swatch-btn" data-color="#38BDF8" style="background:#38BDF8" title="Sky Cyan"></button>
+                <button class="swatch-btn" data-color="#10B981" style="background:#10B981" title="Emerald"></button>
+                <button class="swatch-btn" data-color="#F59E0B" style="background:#F59E0B" title="Amber Chalk"></button>
+                <button class="swatch-btn" data-color="#F43F5E" style="background:#F43F5E" title="Rose Red"></button>
+                <input id="customInkColor" class="color-picker-dot" type="color" value="#A855F7" title="Custom Ink Color" />
+              </div>
+              <input id="strokeWidthSlider" class="width-slider" type="range" min="2" max="14" value="4" title="Stroke Width" />
+            </div>
+            <div class="dock-sep"></div>
+            <div class="tool-group">
+              <button id="gridCycleBtn" class="dock-btn" title="Switch Background Grid (Dots / Cornell Ruled / XY Graph / Blank)">⊞ Dots</button>
+              <button id="undoBtn" class="dock-btn" title="Undo Ink (Ctrl+Z)">↶</button>
+              <button id="redoBtn" class="dock-btn" title="Redo Ink (Ctrl+Y)">↷</button>
+            </div>
+          </div>
+
+          <!-- Floating Zen Exit Button (visible only in Classroom Zen mode) -->
+          <button id="exitZenFloatingBtn" class="exit-zen-pill hidden">✕ Exit Class Zen (F11)</button>
+
+          <!-- Floating Lasso Selection Bar -->
+          <div id="lassoBar" class="lasso-bar hidden">
+            <span id="lassoCountLabel">0 strokes selected</span>
+            <button id="nudgeLeftBtn" class="dock-btn">←</button>
+            <button id="nudgeUpBtn" class="dock-btn">↑</button>
+            <button id="nudgeDownBtn" class="dock-btn">↓</button>
+            <button id="nudgeRightBtn" class="dock-btn">→</button>
+            <button id="deleteLassoBtn" class="dock-btn danger-text">🗑️ Delete Selected</button>
+            <button id="clearSlideInkBtn" class="dock-btn">Clear Slide Ink</button>
+          </div>
+
+          <!-- Connect Mode Status Hint -->
+          <div id="connectHintPill" class="connect-hint hidden"></div>
+
+          <!-- Dual-Layer Infinite Board Stage -->
+          <div id="boardStage" class="board-stage">
+            <canvas id="gridCanvas" class="board-canvas grid-layer"></canvas>
+            <canvas id="inkStaticCanvas" class="board-canvas static-layer"></canvas>
+            <div id="cardsLayer" class="cards-layer"></div>
+            <canvas id="inkLiveCanvas" class="board-canvas live-layer"></canvas>
+          </div>
+
+          <!-- Bottom Lecture Slides Strip + Zoom Controls -->
+          <div id="slidesBar" class="slides-bar">
+            <div id="slideTabsContainer" class="slide-tabs"></div>
+            <button id="addSlideBtn" class="dock-btn">+ Slide</button>
+            <div class="zoom-pill">
+              <button id="zoomOutBtn" class="zoom-btn" title="Zoom Out">−</button>
+              <button id="zoomResetBtn" class="zoom-label-btn" title="Reset Zoom to 100%">100%</button>
+              <button id="zoomInBtn" class="zoom-btn" title="Zoom In">+</button>
+              <button id="zoomFitBtn" class="zoom-btn" title="Fit Entire Board">Fit</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: CLEAN NOTES & CHECKLIST EDITOR -->
+        <section id="notesView" class="view-pane">
+          <div class="notes-editor-shell">
+            <div class="notes-meta-bar">
+              <select id="notesFolderSelect" class="meta-select" title="Assign Folder"></select>
+              <button id="insertWikiLinkBtn" class="pill-btn">[[ Link Note</button>
+              <button id="insertTagBtn" class="pill-btn"># Tag</button>
+              <button id="addNoteChecklistBtn" class="pill-btn accent-outline">☑️ Add Checklist Below Note</button>
+            </div>
+
+            <input id="noteViewTitleInput" class="note-hero-title" type="text" placeholder="Note / Class Title..." />
+            <textarea id="noteViewBodyInput" class="note-hero-body" placeholder="Write crisp class notes, summaries, [[Wiki-Links]], or #tags here..."></textarea>
+
+            <!-- Wiki-Links & Backlinks Panel -->
+            <div class="links-panel" id="noteLinksPanel">
+              <div class="links-group">
+                <span class="links-label">Outgoing Links:</span>
+                <div id="outgoingLinksRow" class="link-chips"></div>
+              </div>
+              <div class="links-group">
+                <span class="links-label">Backlinks:</span>
+                <div id="backlinksRow" class="link-chips"></div>
+              </div>
+            </div>
+
+            <!-- Interactive Checklists Directly Underneath Note -->
+            <div class="note-checklists-section">
+              <div class="section-header">
+                <span>ACTIONABLE CHECKLISTS (SYNCED WITH BOARD &amp; ANDROID)</span>
+                <button id="addChecklistUnderNoteBtn" class="mini-text-btn">+ New Checklist</button>
+              </div>
+              <div id="noteViewChecklists" class="note-checklists-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: 2D KNOWLEDGE GRAPH -->
+        <section id="graphView" class="view-pane">
+          <div class="graph-hud">
+            <input id="graphFilterInput" type="search" placeholder="Highlight node by title..." />
+            <button id="graphResetLayoutBtn" class="pill-btn">↻ Re-Layout Graph</button>
+            <span class="graph-hint">Drag nodes · Scroll to zoom · Click any node to open Board/Note</span>
+          </div>
+          <canvas id="graphCanvas" class="graph-canvas"></canvas>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODALS (Zero blocking browser prompts) -->
+  <!-- 1. Ctrl+K Global Command & Searchable Note-Picker Palette -->
+  <div id="cmdPaletteModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-wide">
+      <div class="palette-input-wrap">
+        <span>🔍</span>
+        <input id="cmdPaletteInput" type="text" placeholder="Jump to any board, note, checklist, or command..." />
+        <button class="modal-close-x" data-close-modal="cmdPaletteModal">Esc</button>
+      </div>
+      <div id="cmdPaletteResults" class="palette-results"></div>
+    </div>
+  </div>
+
+  <!-- 2. Create / Customize Folder Modal -->
+  <div id="folderModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="folderModalTitle">Customize Folder</h3>
+        <button class="modal-close-x" data-close-modal="folderModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Folder Name
+          <input id="folderNameInput" class="field-input" type="text" placeholder="e.g., Physics Class, Projects, Work..." />
+        </label>
+        <div class="field-label">Icon Preset
+          <div id="folderIconPresets" class="chip-grid">
+            <button type="button" class="icon-choice active" data-icon="📚">📚</button>
+            <button type="button" class="icon-choice" data-icon="💼">💼</button>
+            <button type="button" class="icon-choice" data-icon="🎮">🎮</button>
+            <button type="button" class="icon-choice" data-icon="🛒">🛒</button>
+            <button type="button" class="icon-choice" data-icon="⏰">⏰</button>
+            <button type="button" class="icon-choice" data-icon="🎓">🎓</button>
+            <button type="button" class="icon-choice" data-icon="💡">💡</button>
+            <button type="button" class="icon-choice" data-icon="⚗️">⚗️</button>
+            <button type="button" class="icon-choice" data-icon="💻">💻</button>
+            <button type="button" class="icon-choice" data-icon="🗂️">🗂️</button>
+          </div>
+        </div>
+        <div class="field-label">Folder Color
+          <div id="folderColorPresets" class="chip-grid">
+            <button type="button" class="color-choice active" data-color="#6366F1" style="background:#6366F1"></button>
+            <button type="button" class="color-choice" data-color="#A855F7" style="background:#A855F7"></button>
+            <button type="button" class="color-choice" data-color="#38BDF8" style="background:#38BDF8"></button>
+            <button type="button" class="color-choice" data-color="#10B981" style="background:#10B981"></button>
+            <button type="button" class="color-choice" data-color="#F59E0B" style="background:#F59E0B"></button>
+            <button type="button" class="color-choice" data-color="#F43F5E" style="background:#F43F5E"></button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="deleteFolderBtn" class="btn-danger hidden">Delete Folder</button>
+        <div class="spacer"></div>
+        <button class="btn-ghost" data-close-modal="folderModal">Cancel</button>
+        <button id="saveFolderBtn" class="btn-primary">Save Folder</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. PDF Import Mode Modal -->
+  <div id="pdfImportModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Import PDF for Board Annotation</h3>
+        <button class="modal-close-x" data-close-modal="pdfImportModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="pdfImportSummary" class="modal-desc"></p>
+        <div class="pdf-mode-choices">
+          <button id="pdfImportAsSlidesBtn" class="mode-card-btn">
+            <strong>📑 One Board Slide per PDF Page (Best for Lectures)</strong>
+            <span>Creates clean slides ready for PageUp/PageDown &amp; live annotation.</span>
+          </button>
+          <button id="pdfImportOntoCanvasBtn" class="mode-card-btn">
+            <strong>🧩 Lay Out Pages on Current Infinite Canvas (Best for Mind Maps)</strong>
+            <span>Places pages side-by-side on this board so you can draw connectors between them.</span>
+          </button>
+        </div>
+        <div id="pdfProgressWrap" class="progress-wrap hidden">
+          <div class="progress-bar"><div id="pdfProgressFill" class="progress-fill"></div></div>
+          <span id="pdfProgressText">Rendering pages...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Searchable Wiki-Link Note Picker Modal -->
+  <div id="linkPickerModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-wide">
+      <div class="modal-header">
+        <h3>Link to Note / Board</h3>
+        <button class="modal-close-x" data-close-modal="linkPickerModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input id="linkPickerSearch" class="field-input" type="search" placeholder="Search notes &amp; boards to link..." />
+        <div id="linkPickerResults" class="palette-results"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Card Connector Label Modal -->
+  <div id="connectLabelModal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Connect Cards</h3>
+        <button class="modal-close-x" data-close-modal="connectLabelModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label">Optional Arrow Label
+          <input id="connectLabelInput" class="field-input" type="text" placeholder="e.g., Next Step, Proof, Leads to..." />
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" data-close-modal="connectLabelModal">Cancel</button>
+        <button id="confirmConnectBtn" class="btn-primary">Create Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="./vault-bridge.js"></script>
+  <script src="./board-engine.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

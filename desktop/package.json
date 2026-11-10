@@ -1,0 +1,24 @@
+{
+  "name": "notegraph-board",
+  "version": "2.0.0",
+  "description": "NoteGraph Board — Ultra-fast Offline Classroom Whiteboard, Infinite Freeform Canvas, PDF Markup, Notes & Knowledge Graph for Windows & macOS",
+  "main": "main.js",
+  "author": "MDYOUSUF",
+  "license": "Proprietary",
+  "scripts": {
+    "prepare-vendor": "node scripts/prepare-vendor.js",
+    "postinstall": "node scripts/prepare-vendor.js",
+    "start": "electron .",
+    "test": "node --test test/vault-bridge.test.js",
+    "pack:win": "electron-builder --win nsis portable --x64 --publish never",
+    "pack:mac": "electron-builder --mac dmg zip --arm64 --x64 --publish never"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "pdfjs-dist": "^4.8.69"
+  },
+  "devDependencies": {
+    "electron": "^32.2.7",
+    "electron-builder": "^25.1.8"
+  }
+}
