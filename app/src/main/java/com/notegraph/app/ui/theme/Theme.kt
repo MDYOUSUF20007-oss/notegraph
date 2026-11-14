@@ -511,8 +511,9 @@ object ThemeManager {
     val isClassicUi: Boolean
         get() = _uiEngine == UiEngineMode.CLASSIC
 
-    var dynamicColorEnabled by mutableStateOf(true)
-        private set
+    private var _dynamicColorEnabled by mutableStateOf(true)
+    val dynamicColorEnabled: Boolean
+        get() = _dynamicColorEnabled
 
     var currentTheme by mutableStateOf(AppThemeMode.DEEP_PURPLE_AMOLED)
         private set
@@ -533,7 +534,7 @@ object ThemeManager {
         val sp = context.getSharedPreferences("notegraph_prefs", Context.MODE_PRIVATE)
         prefs = sp
         _uiEngine = UiEngineMode.fromIdOrDefault(sp.getString("ui_engine", UiEngineMode.MATERIAL_YOU.id))
-        dynamicColorEnabled = sp.getBoolean("dynamic_color_enabled", true)
+        _dynamicColorEnabled = sp.getBoolean("dynamic_color_enabled", true)
         val savedName = sp.getString("app_theme", AppThemeMode.DEEP_PURPLE_AMOLED.name)
         currentTheme = try {
             AppThemeMode.valueOf(savedName ?: AppThemeMode.DEEP_PURPLE_AMOLED.name)
@@ -555,7 +556,7 @@ object ThemeManager {
     }
 
     fun setDynamicColorEnabled(enabled: Boolean) {
-        dynamicColorEnabled = enabled
+        _dynamicColorEnabled = enabled
         prefs?.edit()?.putBoolean("dynamic_color_enabled", enabled)?.apply()
     }
 
