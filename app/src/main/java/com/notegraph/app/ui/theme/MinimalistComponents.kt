@@ -42,8 +42,9 @@ fun MinimalistBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val isLuxury = ThemeManager.isLuxuryUi
+    val isMaterialYou = ThemeManager.isMaterialYou
     val preset = ThemeManager.currentGradient
-    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
+    val gradientsOn = !isLuxury && !isMaterialYou && ThemeManager.gradientsEnabled
 
     Box(
         modifier = modifier
@@ -147,8 +148,9 @@ fun ThemeStudioSheetContent(
 ) {
     val activeTheme = ThemeManager.currentTheme
     val activePreset = ThemeManager.currentGradient
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
-    val gradientsOn = !isLuxury && ThemeManager.gradientsEnabled
+    val gradientsOn = !isLuxury && !isMaterialYou && ThemeManager.gradientsEnabled
     val lux = ThemeManager.luxuryTokens
 
     Column(
@@ -408,6 +410,37 @@ fun GradientFloatingActionButton(
     label: String? = null,
     modifier: Modifier = Modifier
 ) {
+    if (ThemeManager.isMaterialYou) {
+        val shape = if (label != null) RoundedCornerShape(100.dp) else RoundedCornerShape(16.dp)
+        Surface(
+            onClick = onClick,
+            shape = shape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            shadowElevation = 3.dp,
+            modifier = modifier
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = if (label != null) 20.dp else 16.dp,
+                    vertical = 16.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                icon()
+                if (label != null) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+        return
+    }
+
     val isLuxury = ThemeManager.isLuxuryUi
     if (isLuxury) {
         val t = ThemeManager.luxuryTokens

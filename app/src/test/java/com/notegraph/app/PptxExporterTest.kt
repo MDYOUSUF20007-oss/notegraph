@@ -159,7 +159,22 @@ class PptxExporterTest {
         try {
             val note = NoteEntity(id = "k", title = "Kindle Deck", content = "Paper tone check", folderId = null)
 
-            // 1. Bespoke Luxury engine curated palette
+            // 1. Material You (Default) engine curated M3 palette
+            ThemeManager.setUiEngine(UiEngineMode.MATERIAL_YOU)
+            ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
+            val myKindleOut = ByteArrayOutputStream()
+            ExportManager.exportPptx(note, myKindleOut)
+            val myKindleSlide = String(unzipEntries(myKindleOut.toByteArray()).getValue("ppt/slides/slide1.xml"), Charsets.UTF_8)
+            assertTrue(myKindleSlide.contains("FFF8F4"))
+
+            ThemeManager.setTheme(AppThemeMode.DEEP_PURPLE_AMOLED)
+            val myAmoledOut = ByteArrayOutputStream()
+            ExportManager.exportPptx(note, myAmoledOut)
+            val myAmoledSlide = String(unzipEntries(myAmoledOut.toByteArray()).getValue("ppt/slides/slide1.xml"), Charsets.UTF_8)
+            assertTrue(myAmoledSlide.contains("0F0E13"))
+            assertTrue(myAmoledSlide.contains("D0BCFF"))
+
+            // 2. Bespoke Luxury engine curated palette
             ThemeManager.setUiEngine(UiEngineMode.BESPOKE_LUXURY)
             ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
             val luxKindleOut = ByteArrayOutputStream()
@@ -174,7 +189,7 @@ class PptxExporterTest {
             assertTrue(luxAmoledSlide.contains("000000"))
             assertTrue(luxAmoledSlide.contains("8B5CF6"))
 
-            // 2. Classic UI engine gradient palette
+            // 3. Classic UI engine gradient palette
             ThemeManager.setUiEngine(UiEngineMode.CLASSIC)
             ThemeManager.setTheme(AppThemeMode.KINDLE_PARCHMENT)
             val kindleOut = ByteArrayOutputStream()

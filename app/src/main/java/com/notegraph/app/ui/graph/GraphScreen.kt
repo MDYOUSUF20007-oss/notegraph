@@ -104,9 +104,14 @@ fun GraphScreen(
     val notesById = remember(notes) { notes.associateBy { it.id } }
     val foldersById = remember(folders) { folders.associateBy { it.id } }
     val activePreset = ThemeManager.currentGradient
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
-    val obsidianAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
+    val obsidianAccent = when {
+        isMaterialYou -> MaterialTheme.colorScheme.primary
+        isLuxury -> lux.accent
+        else -> ObsidianTokens.resolveAccent(activePreset.accentStart)
+    }
     val accentInk = ObsidianTokens.readableAccentInk(obsidianAccent)
 
     fun handleNodeOpen(noteId: String) {
@@ -354,22 +359,28 @@ fun GraphScreen(
                 val visibleNodes = remember(nodes, connectedNodeIds, hideOrphans) {
                     if (hideOrphans) nodes.filter { it.noteId in connectedNodeIds } else nodes
                 }
-                val labelLayouts: Map<String, TextLayoutResult> = remember(visibleNodes, labelColor, qTrim, isLuxury) {
+                val labelLayouts: Map<String, TextLayoutResult> = remember(visibleNodes, labelColor, qTrim, isLuxury, isMaterialYou) {
                     visibleNodes.associate { node ->
                         val label = if (node.title.length > 15) node.title.take(14) + "…" else node.title
                         val isMatch = qTrim.isNotEmpty() && node.title.lowercase().contains(qTrim)
                         node.noteId to textMeasurer.measure(
                             text = label,
-                            style = if (isLuxury) {
-                                TextStyle(
+                            style = when {
+                                isMaterialYou -> TextStyle(
+                                    color = labelColor,
+                                    fontFamily = FontFamily.SansSerif,
+                                    fontSize = 11.5.sp,
+                                    letterSpacing = 0.15.sp,
+                                    fontWeight = if (isMatch) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                                isLuxury -> TextStyle(
                                     color = labelColor,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 10.5.sp,
                                     letterSpacing = 0.35.sp,
                                     fontWeight = if (isMatch) FontWeight.SemiBold else FontWeight.Medium
                                 )
-                            } else {
-                                TextStyle(
+                                else -> TextStyle(
                                     color = labelColor,
                                     fontSize = 12.sp,
                                     fontWeight = if (isMatch) FontWeight.SemiBold else FontWeight.Medium
@@ -384,10 +395,11 @@ fun GraphScreen(
                     nodeDegreeMap,
                     simTick,
                     isLuxury,
+                    isMaterialYou,
                     coordLabelColor,
                     qTrim
                 ) {
-                    if (!isLuxury) {
+                    if (!isLuxury && !isMaterialYou) {
                         emptyMap()
                     } else {
                         visibleNodes
@@ -399,11 +411,17 @@ fun GraphScreen(
                             }
                             .take(16)
                             .associate { node ->
+                                val degree = nodeDegreeMap[node.noteId] ?: 0
+                                val tag = if (isMaterialYou) {
+                                    if (degree >= GraphBlueprintSpec.HUB_DEGREE_THRESHOLD) "HUB • $degree" else "$degree LINKS"
+                                } else {
+                                    GraphBlueprintSpec.formatCoordinateTag(node.x, node.y)
+                                }
                                 node.noteId to textMeasurer.measure(
-                                    text = GraphBlueprintSpec.formatCoordinateTag(node.x, node.y),
+                                    text = tag,
                                     style = TextStyle(
                                         color = coordLabelColor,
-                                        fontFamily = FontFamily.Monospace,
+                                        fontFamily = if (isMaterialYou) FontFamily.SansSerif else FontFamily.Monospace,
                                         fontSize = 8.5.sp,
                                         letterSpacing = 0.3.sp
                                     )
@@ -511,11 +529,15 @@ fun GraphScreen(
                         translate(offset.x, offset.y)
                         scale(scale, scale, Offset.Zero)
                     }) {
-                        if (isLuxury) {
+                        if (isLuxury || isMaterialYou) {
                             // Subtle architectural blueprint drafting grid (razor-thin 1px)
                             val gridStep = 120f
                             val onePxStroke = 1f / safeScale
-                            val gridColor = lux.textMuted.copy(alpha = 0.06f)
+                            val gridColor = if (isMaterialYou) {
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.08f)
+                            } else {
+                                lux.textMuted.copy(alpha = 0.06f)
+                            }
                             val startX = floor(viewLeft / gridStep) * gridStep
                             val startY = floor(viewTop / gridStep) * gridStep
                             var gx = startX
@@ -565,15 +587,23 @@ fun GraphScreen(
                                 drawPath(
                                     path = edgePath,
                                     color = if (highlighted) {
-                                        GraphBlueprintSpec.SignatureAccent.copy(alpha = GraphBlueprintSpec.ACTIVE_EDGE_ALPHA)
+                                        if (isMaterialYou) MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)
+                                        else GraphBlueprintSpec.SignatureAccent.copy(alpha = GraphBlueprintSpec.ACTIVE_EDGE_ALPHA)
                                     } else {
-                                        lux.textMuted.copy(
+                                        if (isMaterialYou) MaterialTheme.colorScheme.outlineVariant.copy(
+                                            alpha = if (qTrim.isEmpty()) 0.40f else 0.15f
+                                        )
+                                        else lux.textMuted.copy(
                                             alpha = GraphBlueprintSpec.UNSELECTED_EDGE_ALPHA *
                                                 (if (qTrim.isEmpty()) 1f else 0.35f)
                                         )
                                     },
                                     style = Stroke(
-                                        width = (if (highlighted) GraphBlueprintSpec.ACTIVE_EDGE_STROKE_PX else GraphBlueprintSpec.BASE_EDGE_STROKE_PX) / safeScale,
+                                        width = (if (highlighted) {
+                                            if (isMaterialYou) 2.2f else GraphBlueprintSpec.ACTIVE_EDGE_STROKE_PX
+                                        } else {
+                                            if (isMaterialYou) 1.2f else GraphBlueprintSpec.BASE_EDGE_STROKE_PX
+                                        }) / safeScale,
                                         cap = StrokeCap.Round
                                     )
                                 )
@@ -602,11 +632,19 @@ fun GraphScreen(
                                 val dimAlpha = if (qTrim.isNotEmpty() && !isSearchMatch && !isInspected) 0.25f else 1f
 
                                 val strokeColor = when {
+                                    isMaterialYou -> when {
+                                        isInspected || isSearchMatch -> MaterialTheme.colorScheme.primary
+                                        isCoreHub -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f * dimAlpha)
+                                    }
                                     isInspected || isSearchMatch -> GraphBlueprintSpec.SignatureAccent
                                     isCoreHub -> GraphBlueprintSpec.SignatureAccent.copy(alpha = 0.78f * dimAlpha)
                                     else -> lux.textMuted.copy(alpha = 0.65f * dimAlpha)
                                 }
-                                val fillColor = lux.elevatedSurface.copy(alpha = dimAlpha)
+                                val fillColor = when {
+                                    isMaterialYou -> (node.folderColor ?: MaterialTheme.colorScheme.surfaceVariant).copy(alpha = dimAlpha)
+                                    else -> lux.elevatedSurface.copy(alpha = dimAlpha)
+                                }
 
                                 if (isCoreHub) {
                                     val w = 38f
@@ -1198,15 +1236,29 @@ private fun SmallCircleControlButton(
     contentDescription: String,
     onClick: () -> Unit
 ) {
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
+    val shape = when {
+        isMaterialYou -> RoundedCornerShape(12.dp)
+        isLuxury -> RoundedCornerShape(8.dp)
+        else -> CircleShape
+    }
     Surface(
         onClick = onClick,
-        shape = if (isLuxury) RoundedCornerShape(8.dp) else CircleShape,
-        color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+        shape = shape,
+        color = when {
+            isMaterialYou -> MaterialTheme.colorScheme.surfaceVariant
+            isLuxury -> lux.elevatedSurface
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
+        },
         border = BorderStroke(
             width = if (isLuxury) 1.dp else 0.75.dp,
-            color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+            color = when {
+                isMaterialYou -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                isLuxury -> lux.borderHairline
+                else -> ThemeManager.cardBorderColor
+            }
         ),
         shadowElevation = 0.dp,
         modifier = Modifier.size(if (isLuxury) 36.dp else 38.dp)
@@ -1215,7 +1267,11 @@ private fun SmallCircleControlButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface,
+                tint = when {
+                    isMaterialYou -> MaterialTheme.colorScheme.onSurfaceVariant
+                    isLuxury -> lux.textPrimary
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
                 modifier = Modifier.size(17.dp)
             )
         }

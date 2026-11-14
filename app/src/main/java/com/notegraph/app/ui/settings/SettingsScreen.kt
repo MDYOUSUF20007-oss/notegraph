@@ -2,6 +2,7 @@ package com.notegraph.app.ui.settings
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -648,25 +649,36 @@ fun SettingsScreen(
 
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(
-                                UiEngineMode.CLASSIC,
-                                UiEngineMode.BESPOKE_LUXURY
+                                UiEngineMode.MATERIAL_YOU,
+                                UiEngineMode.BESPOKE_LUXURY,
+                                UiEngineMode.CLASSIC
                             ).forEach { option ->
                                 val isActive = uiEngine == option
                                 val optionBorder = when {
+                                    isActive && ThemeManager.isMaterialYou -> MaterialTheme.colorScheme.primary
                                     isActive && isLuxury -> lux.accent
                                     isActive -> obsidianAccent
+                                    ThemeManager.isMaterialYou -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
                                     isLuxury -> lux.borderHairline
                                     else -> ObsidianTokens.DividerRule
                                 }
                                 val optionFill = when {
+                                    isActive && ThemeManager.isMaterialYou -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                                     isActive && isLuxury -> lux.accent.copy(alpha = 0.10f)
                                     isActive -> obsidianAccent.copy(alpha = 0.14f)
+                                    ThemeManager.isMaterialYou -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                                     else -> ObsidianTokens.StatTileSurface
                                 }
 
                                 Surface(
                                     onClick = { ThemeManager.setUiEngine(option) },
-                                    shape = RoundedCornerShape(if (isLuxury) 6.dp else 12.dp),
+                                    shape = RoundedCornerShape(
+                                        when {
+                                            ThemeManager.isMaterialYou -> 16.dp
+                                            isLuxury -> 6.dp
+                                            else -> 12.dp
+                                        }
+                                    ),
                                     color = optionFill,
                                     border = BorderStroke(
                                         width = if (isActive) 1.25.dp else 1.dp,
@@ -704,6 +716,61 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        if (uiEngine == UiEngineMode.MATERIAL_YOU) {
+                            Spacer(Modifier.height(10.dp))
+                            val isAndroid12Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Dynamic System Colors",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = ObsidianTokens.TextPrimary
+                                            )
+                                            ObsidianMetallicBadge(
+                                                text = if (isAndroid12Plus) "ANDROID 12+" else "M3 BASELINE",
+                                                accentColor = obsidianAccent
+                                            )
+                                        }
+                                        Spacer(Modifier.height(2.dp))
+                                        Text(
+                                            text = if (isAndroid12Plus) {
+                                                "Samples dynamic Monet accent palette from your system wallpaper"
+                                            } else {
+                                                "Using curated Material 3 tonal palette (Dynamic wallpaper requires Android 12+)"
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = ObsidianTokens.TextMuted
+                                        )
+                                    }
+                                    Switch(
+                                        checked = ThemeManager.dynamicColorEnabled,
+                                        onCheckedChange = { ThemeManager.setDynamicColorEnabled(it) },
+                                        enabled = isAndroid12Plus
+                                    )
                                 }
                             }
                         }

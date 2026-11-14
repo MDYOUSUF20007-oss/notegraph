@@ -13,6 +13,7 @@ import com.notegraph.app.data.local.entity.NoteBlock
 import com.notegraph.app.data.local.entity.NoteEntity
 import com.notegraph.app.ui.theme.AppThemeMode
 import com.notegraph.app.ui.theme.LuxuryTokens
+import com.notegraph.app.ui.theme.MaterialYouTokens
 import com.notegraph.app.ui.theme.ThemeManager
 import kotlinx.serialization.json.Json
 import java.io.ByteArrayOutputStream
@@ -146,6 +147,21 @@ object PptxExporter {
 
     private fun resolvePalette(): DeckPalette {
         val mode = ThemeManager.currentTheme
+        if (ThemeManager.isMaterialYou) {
+            val my = MaterialYouTokens.forMode(mode)
+            val accent = colorToHex6(my.accent)
+            val container = colorToHex6(my.containerAccent)
+            return DeckPalette(
+                bgHex = colorToHex6(my.canvasBackground),
+                surfaceHex = colorToHex6(my.elevatedSurface),
+                borderHex = colorToHex6(my.borderHairline),
+                titleHex = colorToHex6(my.textPrimary),
+                bodyHex = colorToHex6(my.textSecondary),
+                mutedHex = colorToHex6(my.textMuted),
+                accentStartHex = accent,
+                accentEndHex = container
+            )
+        }
         if (ThemeManager.isLuxuryUi) {
             val lux = LuxuryTokens.forMode(mode)
             val accent = colorToHex6(lux.accent)

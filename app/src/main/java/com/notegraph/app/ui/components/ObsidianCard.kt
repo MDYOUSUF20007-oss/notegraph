@@ -56,25 +56,53 @@ object ObsidianTokens {
     val FooterSurface = Color(0xFF050507).copy(alpha = 0.85f)
 
     val IconTileSurface: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.recessedSurface else Color(0xFF0A0A0D)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.containerAccent
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.recessedSurface
+            else -> Color(0xFF0A0A0D)
+        }
 
     val StatTileSurface: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.recessedSurface else Color(0xFF0E0E13)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.recessedSurface
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.recessedSurface
+            else -> Color(0xFF0E0E13)
+        }
 
     val DividerRule: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.dividerRule else Color.White.copy(alpha = 0.08f)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.dividerRule
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.dividerRule
+            else -> Color.White.copy(alpha = 0.08f)
+        }
 
     val TextPrimary: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.textPrimary else Color(0xFFF8FAFC)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.textPrimary
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.textPrimary
+            else -> Color(0xFFF8FAFC)
+        }
 
     val TextSecondary: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.textSecondary else Color(0xFFCBD5E1)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.textSecondary
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.textSecondary
+            else -> Color(0xFFCBD5E1)
+        }
 
     val TextMuted: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.textMuted else Color(0xFF94A3B8)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.textMuted
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.textMuted
+            else -> Color(0xFF94A3B8)
+        }
 
     val FooterText: Color
-        get() = if (ThemeManager.isLuxuryUi) ThemeManager.luxuryTokens.footerText else Color(0xFFA1A1AA)
+        get() = when {
+            ThemeManager.isMaterialYou -> ThemeManager.materialYouTokens.footerText
+            ThemeManager.isLuxuryUi -> ThemeManager.luxuryTokens.footerText
+            else -> Color(0xFFA1A1AA)
+        }
 
     /**
      * Ensures ultra-dark accents (such as dark charcoal paper presets) remain luminous
@@ -109,7 +137,8 @@ object ObsidianTokens {
 
 /**
  * Adaptive surface card for NoteGraph:
- * - Bespoke Luxury (Default): Zero drop shadows, flat theme surface, razor-thin 1px border, clean monospace footer.
+ * - Material You (Default): Material 3 tonal container, 18dp rounded corners, zero drop shadows & clean tonal footer.
+ * - Bespoke Luxury: Strict flat theme surface, 8dp corners, razor-thin 1px border & monospace footer.
  * - Classic UI: Legacy frosted two-tier obsidian glass with glow flare, specular highlight & floating shadow.
  */
 @Composable
@@ -122,6 +151,55 @@ fun ObsidianCard(
     headerContent: @Composable ColumnScope.() -> Unit,
     footerContent: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    if (ThemeManager.isMaterialYou) {
+        val t = ThemeManager.materialYouTokens
+        val shape = RoundedCornerShape(18.dp)
+        var myModifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = verticalPadding)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                shape = shape
+            )
+
+        if (onClick != null) {
+            myModifier = myModifier.clickable(onClick = onClick)
+        }
+
+        Column(modifier = myModifier) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(headerPadding)
+            ) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+                    headerContent()
+                }
+            }
+
+            if (footerContent != null) {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                        footerContent()
+                    }
+                }
+            }
+        }
+        return
+    }
+
     if (ThemeManager.isLuxuryUi) {
         val t = ThemeManager.luxuryTokens
         val shape = RoundedCornerShape(8.dp)
@@ -285,6 +363,30 @@ fun ObsidianIconTile(
     size: Dp = 44.dp,
     iconSize: Dp = 20.dp
 ) {
+    if (ThemeManager.isMaterialYou) {
+        val tileShape = RoundedCornerShape(14.dp)
+        Box(
+            modifier = modifier
+                .size(size)
+                .clip(tileShape)
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                    shape = tileShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(iconSize)
+            )
+        }
+        return
+    }
+
     if (ThemeManager.isLuxuryUi) {
         val t = ThemeManager.luxuryTokens
         val tileShape = RoundedCornerShape(6.dp)
@@ -359,6 +461,34 @@ fun ObsidianMetallicBadge(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    if (ThemeManager.isMaterialYou) {
+        val pillShape = RoundedCornerShape(100.dp)
+        val upper = text.uppercase()
+        val isAccentState = upper == "ACTIVE" || upper == "DEFAULT" || upper == "PIN" || upper == "HUB" || upper == "M3 YOU" || upper == "LUXURY"
+        val bgColor = if (isAccentState) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
+        val textColor = if (isAccentState) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
+
+        Box(
+            modifier = modifier
+                .clip(pillShape)
+                .background(bgColor)
+                .padding(horizontal = 8.dp, vertical = 2.5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = upper,
+                color = textColor,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
+                letterSpacing = 0.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+        }
+        return
+    }
+
     if (ThemeManager.isLuxuryUi) {
         val t = ThemeManager.luxuryTokens
         val pillShape = RoundedCornerShape(4.dp)
@@ -434,6 +564,42 @@ fun ObsidianStatTile(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
+    if (ThemeManager.isMaterialYou) {
+        val tileShape = RoundedCornerShape(12.dp)
+        Column(
+            modifier = modifier
+                .clip(tileShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f))
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                    shape = tileShape
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = value,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleSmall,
+                fontSize = 12.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = label.uppercase(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 8.sp,
+                lineHeight = 10.sp,
+                letterSpacing = 0.6.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        return
+    }
+
     if (ThemeManager.isLuxuryUi) {
         val t = ThemeManager.luxuryTokens
         val tileShape = RoundedCornerShape(6.dp)

@@ -49,15 +49,17 @@ class LuxuryDesignSystemTest {
     }
 
     @Test
-    fun `ui engine mode defaults to bespoke luxury and parses saved ids`() {
-        assertEquals(UiEngineMode.BESPOKE_LUXURY, UiEngineMode.fromIdOrDefault(null))
-        assertEquals(UiEngineMode.BESPOKE_LUXURY, UiEngineMode.fromIdOrDefault(""))
+    fun `ui engine mode defaults to material you and parses saved ids`() {
+        assertEquals(UiEngineMode.MATERIAL_YOU, UiEngineMode.fromIdOrDefault(null))
+        assertEquals(UiEngineMode.MATERIAL_YOU, UiEngineMode.fromIdOrDefault(""))
+        assertEquals(UiEngineMode.MATERIAL_YOU, UiEngineMode.fromIdOrDefault("material_you"))
         assertEquals(UiEngineMode.BESPOKE_LUXURY, UiEngineMode.fromIdOrDefault("bespoke_luxury"))
         assertEquals(UiEngineMode.CLASSIC, UiEngineMode.fromIdOrDefault("classic"))
         assertEquals(UiEngineMode.CLASSIC, UiEngineMode.fromIdOrDefault("CLASSIC"))
 
+        assertEquals("Material You (Default)", UiEngineMode.MATERIAL_YOU.displayName)
+        assertEquals("Bespoke Luxury", UiEngineMode.BESPOKE_LUXURY.displayName)
         assertEquals("Classic UI", UiEngineMode.CLASSIC.displayName)
-        assertEquals("Bespoke Luxury (Default)", UiEngineMode.BESPOKE_LUXURY.displayName)
     }
 
     @Test

@@ -226,46 +226,74 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            if (isLuxury) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(lux.elevatedSurface)
-                                        .border(1.dp, lux.accent, RoundedCornerShape(6.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "N",
-                                        fontFamily = FontFamily.Serif,
-                                        color = lux.textPrimary,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                            when {
+                                ThemeManager.isMaterialYou -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(MaterialTheme.colorScheme.primaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "N",
+                                            fontFamily = FontFamily.SansSerif,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(ThemeManager.activeAccentBrush),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "N",
-                                        color = activePreset.onAccent,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                isLuxury -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(lux.elevatedSurface)
+                                            .border(1.dp, lux.accent, RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "N",
+                                            fontFamily = FontFamily.Serif,
+                                            color = lux.textPrimary,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(ThemeManager.activeAccentBrush),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "N",
+                                            color = activePreset.onAccent,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                             Column {
                                 Text(
                                     text = "NoteGraph",
-                                    fontFamily = if (isLuxury) FontFamily.Serif else null,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    fontFamily = when {
+                                        ThemeManager.isMaterialYou -> FontFamily.SansSerif
+                                        isLuxury -> FontFamily.Serif
+                                        else -> null
+                                    },
+                                    style = if (ThemeManager.isMaterialYou) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isLuxury) lux.textPrimary else MaterialTheme.colorScheme.onSurface
+                                    color = when {
+                                        ThemeManager.isMaterialYou -> MaterialTheme.colorScheme.onSurface
+                                        isLuxury -> lux.textPrimary
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    }
                                 )
                                 Text(
                                     text = if (isLuxury) {
@@ -1216,10 +1244,42 @@ private fun QuickActionPill(
     onClick: () -> Unit
 ) {
     val activePreset = ThemeManager.currentGradient
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
-    val shape = RoundedCornerShape(if (isLuxury) 100.dp else 20.dp)
-    if (isLuxury) {
+    val shape = RoundedCornerShape(if (isLuxury || isMaterialYou) 100.dp else 20.dp)
+    if (isMaterialYou) {
+        Surface(
+            onClick = onClick,
+            shape = shape,
+            color = if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            ),
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = if (highlighted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
+                    fontWeight = if (highlighted) FontWeight.SemiBold else FontWeight.Medium,
+                    color = if (highlighted) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    } else if (isLuxury) {
         Surface(
             onClick = onClick,
             shape = shape,
@@ -1428,10 +1488,18 @@ private fun FolderChip(
     onLongClick: () -> Unit,
     onEditClick: () -> Unit
 ) {
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
-    val effectiveAccent = if (isLuxury) lux.accent else accentColor
+    val effectiveAccent = when {
+        isMaterialYou -> MaterialTheme.colorScheme.primary
+        isLuxury -> lux.accent
+        else -> accentColor
+    }
     val containerColor = when {
+        isMaterialYou && isDropHovered -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        isMaterialYou && isSelected -> MaterialTheme.colorScheme.primaryContainer
+        isMaterialYou -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
         isLuxury && isDropHovered -> lux.accent.copy(alpha = 0.20f)
         isLuxury && isSelected -> lux.accent.copy(alpha = 0.12f)
         isLuxury -> lux.elevatedSurface
@@ -1440,13 +1508,15 @@ private fun FolderChip(
         else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
     }
     val borderColor = when {
+        isMaterialYou && (isDropHovered || isSelected) -> MaterialTheme.colorScheme.primary
+        isMaterialYou -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         isDropHovered -> effectiveAccent
         isSelected -> effectiveAccent.copy(alpha = if (isLuxury) 0.9f else 0.75f)
         isLuxury -> lux.borderHairline
         else -> ThemeManager.cardBorderColor
     }
-    val borderWidth = if (isLuxury) 1.dp else if (isDropHovered || isSelected) 1.25.dp else 0.75.dp
-    val chipShape = RoundedCornerShape(if (isLuxury) 100.dp else 18.dp)
+    val borderWidth = if (isLuxury || isMaterialYou) 1.dp else if (isDropHovered || isSelected) 1.25.dp else 0.75.dp
+    val chipShape = RoundedCornerShape(if (isLuxury || isMaterialYou) 100.dp else 18.dp)
 
     Surface(
         modifier = modifier
@@ -1509,6 +1579,7 @@ private fun BottomGlassDock(
     onNavigateReader: () -> Unit,
     onNavigateSearch: () -> Unit
 ) {
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
     Box(
@@ -1518,18 +1589,26 @@ private fun BottomGlassDock(
         contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = if (isLuxury) {
+            modifier = if (isLuxury || isMaterialYou) {
                 Modifier.fillMaxWidth()
             } else {
                 Modifier
                     .fillMaxWidth()
                     .shadow(10.dp, RoundedCornerShape(26.dp))
             },
-            shape = RoundedCornerShape(if (isLuxury) 100.dp else 26.dp),
-            color = if (isLuxury) lux.elevatedSurface else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f),
+            shape = RoundedCornerShape(if (isLuxury || isMaterialYou) 100.dp else 26.dp),
+            color = when {
+                isMaterialYou -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                isLuxury -> lux.elevatedSurface
+                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.90f)
+            },
             border = BorderStroke(
-                width = if (isLuxury) 1.dp else 0.75.dp,
-                color = if (isLuxury) lux.borderHairline else ThemeManager.cardBorderColor
+                width = if (isLuxury) 1.dp else if (isMaterialYou) 1.dp else 0.75.dp,
+                color = when {
+                    isMaterialYou -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    isLuxury -> lux.borderHairline
+                    else -> ThemeManager.cardBorderColor
+                }
             ),
             shadowElevation = 0.dp
         ) {
@@ -1537,8 +1616,8 @@ private fun BottomGlassDock(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        horizontal = if (isLuxury) 10.dp else 8.dp,
-                        vertical = if (isLuxury) 4.dp else 6.dp
+                        horizontal = if (isLuxury || isMaterialYou) 10.dp else 8.dp,
+                        vertical = if (isLuxury || isMaterialYou) 5.dp else 6.dp
                     ),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
@@ -1586,9 +1665,12 @@ private fun DockActionItem(
     onClick: () -> Unit
 ) {
     val activePreset = ThemeManager.currentGradient
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
     val contentColor = when {
+        isMaterialYou && isActive -> MaterialTheme.colorScheme.onSecondaryContainer
+        isMaterialYou -> MaterialTheme.colorScheme.onSurfaceVariant
         isLuxury && isActive -> lux.accent
         isLuxury -> lux.textMuted
         isActive -> activePreset.accentStart
@@ -1597,18 +1679,19 @@ private fun DockActionItem(
 
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(if (isLuxury) 100.dp else 16.dp))
+            .clip(RoundedCornerShape(if (isLuxury || isMaterialYou) 100.dp else 16.dp))
             .background(
                 when {
+                    isMaterialYou && isActive -> MaterialTheme.colorScheme.secondaryContainer
                     isLuxury && isActive -> lux.accent.copy(alpha = 0.12f)
-                    !isLuxury && isActive -> activePreset.accentStart.copy(alpha = 0.13f)
+                    !isLuxury && !isMaterialYou && isActive -> activePreset.accentStart.copy(alpha = 0.13f)
                     else -> Color.Transparent
                 }
             )
             .clickable(onClick = onClick)
             .padding(
-                horizontal = if (isLuxury) 12.dp else 12.dp,
-                vertical = if (isLuxury) 5.dp else 6.dp
+                horizontal = 12.dp,
+                vertical = 5.dp
             ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1672,16 +1755,23 @@ fun NoteCard(
     }
 
     val activePreset = ThemeManager.currentGradient
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
-    val themeAccent = if (isLuxury) lux.accent else ObsidianTokens.resolveAccent(activePreset.accentStart)
+    val themeAccent = when {
+        isMaterialYou -> MaterialTheme.colorScheme.primary
+        isLuxury -> lux.accent
+        else -> ObsidianTokens.resolveAccent(activePreset.accentStart)
+    }
     val folderColor = folder?.let {
-        if (isLuxury) lux.textSecondary else ObsidianTokens.resolveAccent(parseColorSafe(it.colorHex, themeAccent))
+        if (isLuxury) lux.textSecondary
+        else if (isMaterialYou) MaterialTheme.colorScheme.secondary
+        else ObsidianTokens.resolveAccent(parseColorSafe(it.colorHex, themeAccent))
     }
     val cardAccent = themeAccent
     val badgeColor = folderColor ?: themeAccent
-    val accentInk = ObsidianTokens.readableAccentInk(cardAccent)
-    val folderInk = if (isLuxury) lux.textSecondary else ObsidianTokens.readableAccentInk(badgeColor)
+    val accentInk = if (isMaterialYou) MaterialTheme.colorScheme.primary else ObsidianTokens.readableAccentInk(cardAccent)
+    val folderInk = if (isLuxury) lux.textSecondary else if (isMaterialYou) MaterialTheme.colorScheme.secondary else ObsidianTokens.readableAccentInk(badgeColor)
     val themeMode = ThemeManager.currentTheme
 
     val primaryIcon = when {
@@ -2027,13 +2117,22 @@ private fun MiniInkPreviewCanvas(
     themeMode: AppThemeMode,
     accentColor: Color
 ) {
+    val isMaterialYou = ThemeManager.isMaterialYou
     val isLuxury = ThemeManager.isLuxuryUi
     val lux = ThemeManager.luxuryTokens
-    val previewBg = if (isLuxury) lux.recessedSurface else Color(0xFF07070A)
-    val previewBorder = if (isLuxury) lux.borderHairline else accentColor.copy(alpha = 0.35f)
-    val previewCorner = if (isLuxury) 6.dp else 10.dp
-    val previewStrokeWidth = if (isLuxury) 1.dp else 0.75.dp
-    val isLightPaper = isLuxury && themeMode == AppThemeMode.KINDLE_PARCHMENT
+    val previewBg = when {
+        isMaterialYou -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        isLuxury -> lux.recessedSurface
+        else -> Color(0xFF07070A)
+    }
+    val previewBorder = when {
+        isMaterialYou -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+        isLuxury -> lux.borderHairline
+        else -> accentColor.copy(alpha = 0.35f)
+    }
+    val previewCorner = if (isMaterialYou) 12.dp else if (isLuxury) 6.dp else 10.dp
+    val previewStrokeWidth = if (isLuxury || isMaterialYou) 1.dp else 0.75.dp
+    val isLightPaper = (isLuxury || isMaterialYou) && themeMode == AppThemeMode.KINDLE_PARCHMENT
 
     val cachedPaths = remember { ArrayList<CachedPreviewPath>(strokes.size) }
     var cachedStrokesRef by remember { mutableStateOf<List<InkStroke>?>(null) }
