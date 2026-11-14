@@ -428,12 +428,13 @@ private fun PdfLuxuryPill(
     onClick: () -> Unit
 ) {
     val lux = ThemeManager.luxuryTokens
+    val pillShape = RoundedCornerShape(100.dp)
     Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(100.dp),
+        shape = pillShape,
         color = if (selected) lux.accent.copy(alpha = 0.14f) else lux.elevatedSurface,
         border = BorderStroke(1.dp, if (selected) lux.accent else lux.borderHairline),
-        shadowElevation = 0.dp
+        shadowElevation = 0.dp,
+        modifier = Modifier.clip(pillShape).clickable(onClick = onClick)
     ) {
         Text(
             text = label,
@@ -572,14 +573,20 @@ private fun PdfMarkupSurface(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (isLuxury) {
+                val prevCircleShape = CircleShape
                 Surface(
-                    onClick = { if (currentPage > 0) onBlockUpdated(block.copy(currentPage = currentPage - 1)) },
-                    enabled = currentPage > 0,
-                    shape = CircleShape,
+                    shape = prevCircleShape,
                     color = lux.elevatedSurface,
                     border = BorderStroke(1.dp, lux.borderHairline),
                     shadowElevation = 0.dp,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(prevCircleShape)
+                        .then(
+                            if (currentPage > 0) Modifier.clickable {
+                                onBlockUpdated(block.copy(currentPage = currentPage - 1))
+                            } else Modifier
+                        )
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -605,14 +612,20 @@ private fun PdfMarkupSurface(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
                 }
+                val nextCircleShape = CircleShape
                 Surface(
-                    onClick = { if (currentPage < safePageCount - 1) onBlockUpdated(block.copy(currentPage = currentPage + 1)) },
-                    enabled = currentPage < safePageCount - 1,
-                    shape = CircleShape,
+                    shape = nextCircleShape,
                     color = lux.elevatedSurface,
                     border = BorderStroke(1.dp, lux.borderHairline),
                     shadowElevation = 0.dp,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(nextCircleShape)
+                        .then(
+                            if (currentPage < safePageCount - 1) Modifier.clickable {
+                                onBlockUpdated(block.copy(currentPage = currentPage + 1))
+                            } else Modifier
+                        )
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -736,16 +749,19 @@ private fun PdfMarkupSurface(
                     )
                     toolItems.forEach { (mode, label) ->
                         val active = toolMode == mode
+                        val toolPillShape = RoundedCornerShape(100.dp)
                         Surface(
-                            onClick = {
-                                toolMode = mode
-                                if (mode == PdfToolMode.PEN && selectedColorIdx == 4) selectedColorIdx = 1
-                                if (mode == PdfToolMode.HIGHLIGHTER) selectedColorIdx = 4
-                            },
-                            shape = RoundedCornerShape(100.dp),
+                            shape = toolPillShape,
                             color = if (active) lux.accent.copy(alpha = 0.14f) else Color.Transparent,
                             border = if (active) BorderStroke(1.dp, lux.accent) else null,
-                            shadowElevation = 0.dp
+                            shadowElevation = 0.dp,
+                            modifier = Modifier
+                                .clip(toolPillShape)
+                                .clickable {
+                                    toolMode = mode
+                                    if (mode == PdfToolMode.PEN && selectedColorIdx == 4) selectedColorIdx = 1
+                                    if (mode == PdfToolMode.HIGHLIGHTER) selectedColorIdx = 4
+                                }
                         ) {
                             Text(
                                 text = label,
@@ -757,12 +773,15 @@ private fun PdfMarkupSurface(
                             )
                         }
                     }
+                    val snapPillShape = RoundedCornerShape(100.dp)
                     Surface(
-                        onClick = { shapeSnapEnabled = !shapeSnapEnabled },
-                        shape = RoundedCornerShape(100.dp),
+                        shape = snapPillShape,
                         color = if (shapeSnapEnabled) lux.accent.copy(alpha = 0.14f) else Color.Transparent,
                         border = if (shapeSnapEnabled) BorderStroke(1.dp, lux.accent) else null,
-                        shadowElevation = 0.dp
+                        shadowElevation = 0.dp,
+                        modifier = Modifier
+                            .clip(snapPillShape)
+                            .clickable { shapeSnapEnabled = !shapeSnapEnabled }
                     ) {
                         Text(
                             text = if (shapeSnapEnabled) "SNAP:ON" else "SNAP",

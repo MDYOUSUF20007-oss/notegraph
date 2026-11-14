@@ -149,6 +149,76 @@ object MaterialYouTokens {
 }
 
 /**
+ * Curated luxury surface tokens with zero generic gradient fills.
+ */
+data class LuxuryPalette(
+    val canvasBackground: Color,
+    val elevatedSurface: Color,
+    val recessedSurface: Color,
+    val borderHairline: Color,
+    val dividerRule: Color,
+    val accent: Color,
+    val onAccent: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textMuted: Color,
+    val footerText: Color
+)
+
+object LuxuryTokens {
+    val SignatureAccent = Color(0xFF8B5CF6)
+    val AmoledBorder = Color(0xFF262626)
+
+    val AmoledBlack = LuxuryPalette(
+        canvasBackground = Color(0xFF000000),
+        elevatedSurface = Color(0xFF121212),
+        recessedSurface = Color(0xFF0A0A0A),
+        borderHairline = AmoledBorder,
+        dividerRule = Color(0xFF222222),
+        accent = SignatureAccent,
+        onAccent = Color(0xFFFFFFFF),
+        textPrimary = Color(0xFFF4F4F5),
+        textSecondary = Color(0xFFA1A1AA),
+        textMuted = Color(0xFF71717A),
+        footerText = Color(0xFF8E8E93)
+    )
+
+    val KindleParchment = LuxuryPalette(
+        canvasBackground = Color(0xFFF4F1EA),
+        elevatedSurface = Color(0xFFFAF7F0),
+        recessedSurface = Color(0xFFEBE5D8),
+        borderHairline = Color(0xFFD5CEC1),
+        dividerRule = Color(0xFFDCD5C9),
+        accent = SignatureAccent,
+        onAccent = Color(0xFFFFFFFF),
+        textPrimary = Color(0xFF1E1B18),
+        textSecondary = Color(0xFF4E483F),
+        textMuted = Color(0xFF787166),
+        footerText = Color(0xFF696258)
+    )
+
+    val MatteMinimalist = LuxuryPalette(
+        canvasBackground = Color(0xFF1E2229),
+        elevatedSurface = Color(0xFF252A33),
+        recessedSurface = Color(0xFF181B21),
+        borderHairline = Color(0xFF323844),
+        dividerRule = Color(0xFF2D333E),
+        accent = SignatureAccent,
+        onAccent = Color(0xFFFFFFFF),
+        textPrimary = Color(0xFFE6EDF5),
+        textSecondary = Color(0xFFA0AAB8),
+        textMuted = Color(0xFF6F7A89),
+        footerText = Color(0xFF8C96A6)
+    )
+
+    fun forMode(mode: AppThemeMode): LuxuryPalette = when (mode) {
+        AppThemeMode.DEEP_PURPLE_AMOLED -> AmoledBlack
+        AppThemeMode.KINDLE_PARCHMENT -> KindleParchment
+        AppThemeMode.MATTE_STUDIO -> MatteMinimalist
+    }
+}
+
+/**
  * Supported minimalist theme modes for NoteGraph.
  */
 enum class AppThemeMode(
