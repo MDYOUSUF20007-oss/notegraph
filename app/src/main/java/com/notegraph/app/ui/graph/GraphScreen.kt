@@ -430,6 +430,12 @@ fun GraphScreen(
                     }
                 }
 
+                val m3ColorScheme = MaterialTheme.colorScheme
+                val m3OutlineVariant = m3ColorScheme.outlineVariant
+                val m3Primary = m3ColorScheme.primary
+                val m3Tertiary = m3ColorScheme.tertiary
+                val m3SurfaceVariant = m3ColorScheme.surfaceVariant
+
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
@@ -534,7 +540,7 @@ fun GraphScreen(
                             val gridStep = 120f
                             val onePxStroke = 1f / safeScale
                             val gridColor = if (isMaterialYou) {
-                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.08f)
+                                m3OutlineVariant.copy(alpha = 0.08f)
                             } else {
                                 lux.textMuted.copy(alpha = 0.06f)
                             }
@@ -587,10 +593,10 @@ fun GraphScreen(
                                 drawPath(
                                     path = edgePath,
                                     color = if (highlighted) {
-                                        if (isMaterialYou) MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)
+                                        if (isMaterialYou) m3Primary.copy(alpha = 0.88f)
                                         else GraphBlueprintSpec.SignatureAccent.copy(alpha = GraphBlueprintSpec.ACTIVE_EDGE_ALPHA)
                                     } else {
-                                        if (isMaterialYou) MaterialTheme.colorScheme.outlineVariant.copy(
+                                        if (isMaterialYou) m3OutlineVariant.copy(
                                             alpha = if (qTrim.isEmpty()) 0.40f else 0.15f
                                         )
                                         else lux.textMuted.copy(
@@ -633,16 +639,16 @@ fun GraphScreen(
 
                                 val strokeColor = when {
                                     isMaterialYou -> when {
-                                        isInspected || isSearchMatch -> MaterialTheme.colorScheme.primary
-                                        isCoreHub -> MaterialTheme.colorScheme.tertiary
-                                        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f * dimAlpha)
+                                        isInspected || isSearchMatch -> m3Primary
+                                        isCoreHub -> m3Tertiary
+                                        else -> m3OutlineVariant.copy(alpha = 0.70f * dimAlpha)
                                     }
                                     isInspected || isSearchMatch -> GraphBlueprintSpec.SignatureAccent
                                     isCoreHub -> GraphBlueprintSpec.SignatureAccent.copy(alpha = 0.78f * dimAlpha)
                                     else -> lux.textMuted.copy(alpha = 0.65f * dimAlpha)
                                 }
                                 val fillColor = when {
-                                    isMaterialYou -> (node.folderColor ?: MaterialTheme.colorScheme.surfaceVariant).copy(alpha = dimAlpha)
+                                    isMaterialYou -> (node.folderColor ?: m3SurfaceVariant).copy(alpha = dimAlpha)
                                     else -> lux.elevatedSurface.copy(alpha = dimAlpha)
                                 }
 
